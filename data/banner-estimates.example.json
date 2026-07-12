@@ -1,0 +1,43 @@
+{
+  "importedAt": "2026-01-01T00:00:00.000Z",
+  "note": "Example data for development and import testing.",
+  "count": 2,
+  "banners": [
+    {
+      "name": "Example New Year Summoning Campaign",
+      "startDate": "2027-01-01",
+      "endDate": "2027-01-15",
+      "status": "PROJECTED",
+      "sourceSchedule": "JP",
+      "servants": [
+        {
+          "id": 2,
+          "name": "Example Saber",
+          "class": "Saber",
+          "soloRateUp": true
+        },
+        {
+          "id": 3,
+          "name": "Example Archer",
+          "class": "Archer",
+          "soloRateUp": false
+        }
+      ]
+    },
+    {
+      "name": "Example Anniversary Summoning Campaign",
+      "startDate": "2026-07-04",
+      "endDate": "2026-07-18",
+      "status": "CONFIRMED_EN",
+      "sourceSchedule": "NA",
+      "servants": [
+        {
+          "id": 4,
+          "name": "Example Caster",
+          "class": "Caster",
+          "soloRateUp": true
+        }
+      ]
+    }
+  ]
+}

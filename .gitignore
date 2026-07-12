@@ -14,6 +14,10 @@
 /prisma/db.sqlite-journal
 db.sqlite
 
+# generated banner data (keep the example)
+/data/banner-estimates.json
+!/data/banner-estimates.example.json
+
 # next.js
 /.next/
 /out/
