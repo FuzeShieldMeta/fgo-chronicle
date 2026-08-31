@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "families": [
+    {
+      "sourceKey": "event-family:na:dancing-dragon-castle",
+      "name": "The Dancing Dragon Castle!",
+      "atlasEvents": [{ "region": "NA", "eventId": 80480 }]
+    }
+  ],
+  "atlasMasterMissions": [{ "region": "NA", "masterMissionId": 100482 }],
+  "supplementary": {
+    "sources": [
+      {
+        "sourceKey": "official:na:dancing-dragon-castle",
+        "type": "OFFICIAL_ANNOUNCEMENT",
+        "region": "NA",
+        "url": "https://fate-go.us/dancingdragoncastle/",
+        "retrievedAt": "2026-08-31T00:00:00.000Z",
+        "contentHash": null
+      },
+      {
+        "sourceKey": "wiki:na:dancing-dragon-castle-pre-release",
+        "type": "WIKI",
+        "region": "NA",
+        "url": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
+        "retrievedAt": "2026-08-31T00:00:00.000Z",
+        "contentHash": null
+      }
+    ],
+    "events": [
+      {
+        "sourceKey": "wiki:na:dancing-dragon-castle:pre-release",
+        "familySourceKey": "event-family:na:dancing-dragon-castle",
+        "evidenceSourceKey": "wiki:na:dancing-dragon-castle-pre-release",
+        "name": "The Dancing Dragon Castle! Pre-Release Campaign",
+        "type": "PRE_RELEASE_CAMPAIGN",
+        "startsAt": "2026-06-05T04:00:00.000Z",
+        "endsAt": "2026-06-19T03:59:59.000Z",
+        "status": "CURATED",
+        "sourceUrl": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
+        "sourceRegion": "NA"
+      }
+    ],
+    "rewardSources": [],
+    "issues": [
+      {
+        "sourceKey": "wiki:na:dancing-dragon-castle-pre-release:login-review",
+        "severity": "WARNING",
+        "message": "The rendered login table does not preserve enough item-icon meaning to identify every reward safely. Enter its SQ and ticket rewards only after manual verification."
+      },
+      {
+        "sourceKey": "official:na:dancing-dragon-castle:companion-review",
+        "severity": "INFO",
+        "message": "Check the official announcement for login bonuses, social rewards, limited missions, and schedule changes that are not represented by the Atlas event record."
+      }
+    ]
+  }
+}

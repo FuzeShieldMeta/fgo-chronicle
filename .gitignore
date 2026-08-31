@@ -8,6 +8,7 @@
 
 # testing
 /coverage
+/tests/
 
 # database
 /prisma/db.sqlite
@@ -17,6 +18,8 @@ db.sqlite
 # generated banner data (keep the example)
 /data/banner-estimates.json
 !/data/banner-estimates.example.json
+/data/event-sources.json
+/data/timeline-events.json
 
 # next.js
 /.next/
