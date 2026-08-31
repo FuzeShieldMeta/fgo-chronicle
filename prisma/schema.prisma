@@ -105,6 +105,16 @@ enum RewardNature {
   CURATED_ESTIMATE
 }
 
+enum ScheduleProjectionMethod {
+  TWO_CALENDAR_YEARS
+}
+
+enum SyncRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 model EventFamily {
   id                String    @id @default(cuid())
   sourceKey         String    @unique
@@ -120,22 +130,27 @@ model EventFamily {
 }
 
 model Event {
-  id                String                 @id @default(cuid())
-  sourceKey         String                 @unique
+  id                String                    @id @default(cuid())
+  sourceKey         String                    @unique
   familyId          String?
   name              String
   type              EventType
   startsAt          DateTime
-  startsAtPrecision ScheduleTimePrecision  @default(EXACT)
+  startsAtPrecision ScheduleTimePrecision     @default(EXACT)
   endsAt            DateTime?
   endsAtPrecision   ScheduleTimePrecision?
   status            ScheduleStatus
   sourceUrl         String?
   sourceRegion      String
-  family            EventFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  sourceStartsAt    DateTime?
+  sourceEndsAt      DateTime?
+  projectionMethod  ScheduleProjectionMethod?
+  lastSyncedAt      DateTime?
+  sourceContentHash String?
+  family            EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
   rewardSources     RewardSource[]
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])
@@ -170,12 +185,35 @@ model RewardDefinition {
   nature          RewardNature
   eligibility     String?
   defaultIncluded Boolean        @default(true)
+  reviewedAt      DateTime?
   rewardSource    RewardSource   @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
+}
+
+model SyncRun {
+  id                    String        @id @default(cuid())
+  source                String
+  status                SyncRunStatus
+  dryRun                Boolean       @default(false)
+  startedAt             DateTime      @default(now())
+  completedAt           DateTime?
+  contentHash           String?
+  fetchedCount          Int           @default(0)
+  selectedCount         Int           @default(0)
+  insertedCount         Int           @default(0)
+  updatedCount          Int           @default(0)
+  frozenDifferenceCount Int           @default(0)
+  rewardCount           Int           @default(0)
+  omittedRewardCount    Int           @default(0)
+  warningCount          Int           @default(0)
+  errorMessage          String?
+
+  @@index([source, startedAt])
+  @@index([status, startedAt])
 }
 
 model Banner {

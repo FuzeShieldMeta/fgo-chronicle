@@ -49,6 +49,11 @@ async function importEvent(event, familyIds) {
     status: event.status,
     sourceUrl: event.sourceUrl,
     sourceRegion: event.sourceRegion,
+    sourceStartsAt: toDate(event.sourceStartsAt),
+    sourceEndsAt: toDate(event.sourceEndsAt),
+    projectionMethod: event.projectionMethod,
+    lastSyncedAt: toDate(event.lastSyncedAt),
+    sourceContentHash: event.sourceContentHash,
     familyId: event.familySourceKey
       ? familyIds.get(event.familySourceKey)
       : null,
@@ -88,6 +93,7 @@ async function importRewardSource(source, eventIds) {
         nature: reward.nature,
         eligibility: reward.eligibility,
         defaultIncluded: reward.defaultIncluded,
+        reviewedAt: toDate(reward.reviewedAt),
       };
 
       await transaction.rewardDefinition.upsert({
