@@ -1,5 +1,7 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import type { Prisma } from "../../../../generated/prisma";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 const MAX_TIMELINE_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
@@ -47,6 +49,11 @@ const timelineRangeSchema = z
     }
   });
 
+const timelineDetailSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("EVENT"), id: z.string().trim().min(1) }),
+  z.object({ kind: z.literal("BANNER"), id: z.string().trim().min(1) }),
+]);
+
 const familySelect = {
   id: true,
   name: true,
@@ -84,6 +91,67 @@ const bannerSelect = {
   updatedAt: true,
   family: { select: familySelect },
 } as const;
+
+const relatedEventSelect = {
+  id: true,
+  name: true,
+  type: true,
+  startsAt: true,
+  startsAtPrecision: true,
+  endsAt: true,
+  endsAtPrecision: true,
+  status: true,
+  sourceUrl: true,
+  sourceRegion: true,
+  updatedAt: true,
+} as const;
+
+const relatedBannerSelect = {
+  id: true,
+  name: true,
+  startsAt: true,
+  startsAtPrecision: true,
+  endsAt: true,
+  endsAtPrecision: true,
+  status: true,
+  sourceUrl: true,
+  sourceRegion: true,
+  updatedAt: true,
+} as const;
+
+const familyDetailSelect = {
+  ...familySelect,
+  events: {
+    select: relatedEventSelect,
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+  },
+  banners: {
+    select: relatedBannerSelect,
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+  },
+} satisfies Prisma.EventFamilySelect;
+
+const rewardSourceSelect = {
+  id: true,
+  name: true,
+  type: true,
+  status: true,
+  evidenceUrl: true,
+  lastVerifiedAt: true,
+  updatedAt: true,
+  rewards: {
+    select: {
+      id: true,
+      itemType: true,
+      amount: true,
+      expectedAt: true,
+      nature: true,
+      eligibility: true,
+      defaultIncluded: true,
+    },
+    orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
+  },
+} satisfies Prisma.RewardSourceSelect;
 
 function eventCategory(eventType: string) {
   return incomeSourceEventTypes.some((type) => type === eventType)
@@ -141,6 +209,43 @@ function compareTimelineEntries(
   );
 }
 
+type RelatedScheduleEntry = {
+  id: string;
+  name: string;
+  startsAt: Date;
+  startsAtPrecision: "DATE_ONLY" | "EXACT";
+  endsAt: Date | null;
+  endsAtPrecision: "DATE_ONLY" | "EXACT" | null;
+  status: "PROJECTED" | "CURATED" | "OFFICIAL";
+  sourceUrl: string | null;
+  sourceRegion: string;
+  updatedAt: Date;
+};
+
+function relatedEntries(family: {
+  events: Array<RelatedScheduleEntry & { type: string }>;
+  banners: RelatedScheduleEntry[];
+}) {
+  return [
+    ...family.events.map((event) => ({
+      ...event,
+      key: `event:${event.id}`,
+      kind: "EVENT" as const,
+      category: eventCategory(event.type),
+      confidence: null,
+      sourceLastCheckedAt: null,
+    })),
+    ...family.banners.map((banner) => ({
+      ...banner,
+      key: `banner:${banner.id}`,
+      kind: "BANNER" as const,
+      category: "SUMMONING_CAMPAIGN" as const,
+      confidence: null,
+      sourceLastCheckedAt: null,
+    })),
+  ].sort(compareTimelineEntries);
+}
+
 export const timelineRouter = createTRPCRouter({
   list: publicProcedure
     .input(timelineRangeSchema)
@@ -194,5 +299,102 @@ export const timelineRouter = createTRPCRouter({
           confidence: null,
         })),
       ].sort(compareTimelineEntries);
+    }),
+  details: publicProcedure
+    .input(timelineDetailSchema)
+    .query(async ({ ctx, input }) => {
+      if (input.kind === "BANNER") {
+        const banner = await ctx.db.banner.findUnique({
+          where: { id: input.id },
+          select: {
+            ...relatedBannerSelect,
+            family: { select: familyDetailSelect },
+            featured: {
+              select: {
+                soloRateUp: true,
+                servant: {
+                  select: { id: true, name: true, className: true },
+                },
+              },
+              orderBy: [{ servantId: "asc" }],
+            },
+          },
+        });
+
+        if (!banner) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Timeline entry not found.",
+          });
+        }
+
+        const { family, ...schedule } = banner;
+
+        return {
+          ...schedule,
+          key: `banner:${banner.id}`,
+          kind: "BANNER" as const,
+          category: "SUMMONING_CAMPAIGN" as const,
+          confidence: null,
+          sourceLastCheckedAt: null,
+          family: family
+            ? {
+                id: family.id,
+                name: family.name,
+                artworkUrl: family.artworkUrl,
+                artworkSourceUrl: family.artworkSourceUrl,
+                artworkAlt: family.artworkAlt,
+                artworkReviewedAt: family.artworkReviewedAt,
+              }
+            : null,
+          relatedEntries: family ? relatedEntries(family) : [],
+        };
+      }
+
+      const event = await ctx.db.event.findUnique({
+        where: { id: input.id },
+        select: {
+          ...relatedEventSelect,
+          family: { select: familyDetailSelect },
+          rewardSources: {
+            select: rewardSourceSelect,
+            orderBy: [{ name: "asc" }, { id: "asc" }],
+          },
+        },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Timeline entry not found.",
+        });
+      }
+
+      const { family, rewardSources, ...schedule } = event;
+
+      return {
+        ...schedule,
+        key: `event:${event.id}`,
+        kind: "EVENT" as const,
+        category: eventCategory(event.type),
+        confidence: null,
+        sourceLastCheckedAt: null,
+        rewardDataStatus:
+          rewardSources.length > 0
+            ? ("AVAILABLE" as const)
+            : ("UNKNOWN" as const),
+        rewardSources,
+        family: family
+          ? {
+              id: family.id,
+              name: family.name,
+              artworkUrl: family.artworkUrl,
+              artworkSourceUrl: family.artworkSourceUrl,
+              artworkAlt: family.artworkAlt,
+              artworkReviewedAt: family.artworkReviewedAt,
+            }
+          : null,
+        relatedEntries: family ? relatedEntries(family) : [],
+      };
     }),
 });
