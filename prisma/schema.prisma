@@ -59,6 +59,11 @@ enum ScheduleStatus {
   OFFICIAL
 }
 
+enum ScheduleTimePrecision {
+  DATE_ONLY
+  EXACT
+}
+
 enum EventType {
   MAIN_EVENT
   PRE_RELEASE_CAMPAIGN
@@ -115,20 +120,22 @@ model EventFamily {
 }
 
 model Event {
-  id            String         @id @default(cuid())
-  sourceKey     String         @unique
-  familyId      String?
-  name          String
-  type          EventType
-  startsAt      DateTime
-  endsAt        DateTime?
-  status        ScheduleStatus
-  sourceUrl     String?
-  sourceRegion  String
-  family        EventFamily?   @relation(fields: [familyId], references: [id], onDelete: SetNull)
-  rewardSources RewardSource[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                String                 @id @default(cuid())
+  sourceKey         String                 @unique
+  familyId          String?
+  name              String
+  type              EventType
+  startsAt          DateTime
+  startsAtPrecision ScheduleTimePrecision  @default(EXACT)
+  endsAt            DateTime?
+  endsAtPrecision   ScheduleTimePrecision?
+  status            ScheduleStatus
+  sourceUrl         String?
+  sourceRegion      String
+  family            EventFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  rewardSources     RewardSource[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])
@@ -172,19 +179,21 @@ model RewardDefinition {
 }
 
 model Banner {
-  id           String          @id @default(cuid())
-  sourceKey    String          @unique
-  familyId     String?
-  name         String
-  startsAt     DateTime
-  endsAt       DateTime?
-  status       ScheduleStatus
-  sourceUrl    String?
-  sourceRegion String
-  family       EventFamily?    @relation(fields: [familyId], references: [id], onDelete: SetNull)
-  featured     BannerServant[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                String                 @id @default(cuid())
+  sourceKey         String                 @unique
+  familyId          String?
+  name              String
+  startsAt          DateTime
+  startsAtPrecision ScheduleTimePrecision  @default(EXACT)
+  endsAt            DateTime?
+  endsAtPrecision   ScheduleTimePrecision?
+  status            ScheduleStatus
+  sourceUrl         String?
+  sourceRegion      String
+  family            EventFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  featured          BannerServant[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])

@@ -39,7 +39,9 @@ const eventSchema = z
       "OTHER",
     ]),
     startsAt: z.string().datetime(),
+    startsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).default("EXACT"),
     endsAt: nullableDate,
+    endsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).nullable().optional(),
     status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
     sourceUrl: z.string().url(),
     sourceRegion: z.string().trim().min(1),
@@ -48,7 +50,19 @@ const eventSchema = z
     ({ startsAt, endsAt }) =>
       endsAt === null || new Date(endsAt) >= new Date(startsAt),
     { message: "An event cannot end before it starts.", path: ["endsAt"] },
-  );
+  )
+  .refine(
+    ({ endsAt, endsAtPrecision }) => endsAt !== null || endsAtPrecision == null,
+    {
+      message: "An event without an end time cannot have end-time precision.",
+      path: ["endsAtPrecision"],
+    },
+  )
+  .transform((event) => ({
+    ...event,
+    endsAtPrecision:
+      event.endsAt === null ? null : (event.endsAtPrecision ?? "EXACT"),
+  }));
 
 const rewardSchema = z.object({
   sourceKey,
