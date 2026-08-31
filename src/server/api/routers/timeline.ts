@@ -3,11 +3,31 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 const MAX_TIMELINE_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
+const timelineCategories = [
+  "EVENT",
+  "SUMMONING_CAMPAIGN",
+  "INCOME_SOURCE",
+] as const;
+const scheduleStatuses = ["PROJECTED", "CURATED", "OFFICIAL"] as const;
+const incomeSourceEventTypes = [
+  "LOGIN_BONUS",
+  "EVENT_SHOP",
+  "LIMITED_MISSION",
+  "MAINTENANCE",
+] as const;
 
 const timelineRangeSchema = z
   .object({
     from: z.date(),
     to: z.date(),
+    categories: z.array(z.enum(timelineCategories)).min(1).max(3).optional(),
+    statuses: z.array(z.enum(scheduleStatuses)).min(1).max(3).optional(),
+    sourceRegions: z
+      .array(z.string().trim().min(1).max(50))
+      .min(1)
+      .max(10)
+      .optional(),
+    servantId: z.number().int().positive().optional(),
   })
   .superRefine(({ from, to }, ctx) => {
     if (to < from) {
@@ -65,15 +85,8 @@ const bannerSelect = {
   family: { select: familySelect },
 } as const;
 
-const incomeSourceEventTypes = new Set([
-  "LOGIN_BONUS",
-  "EVENT_SHOP",
-  "LIMITED_MISSION",
-  "MAINTENANCE",
-]);
-
 function eventCategory(eventType: string) {
-  return incomeSourceEventTypes.has(eventType)
+  return incomeSourceEventTypes.some((type) => type === eventType)
     ? ("INCOME_SOURCE" as const)
     : ("EVENT" as const);
 }
@@ -83,6 +96,38 @@ function intervalWhere(from: Date, to: Date) {
     startsAt: { lte: to },
     OR: [{ endsAt: { gte: from } }, { endsAt: null, startsAt: { gte: from } }],
   };
+}
+
+type TimelineListInput = z.infer<typeof timelineRangeSchema>;
+
+function commonWhere(input: TimelineListInput) {
+  return {
+    ...intervalWhere(input.from, input.to),
+    ...(input.statuses ? { status: { in: input.statuses } } : {}),
+    ...(input.sourceRegions
+      ? { sourceRegion: { in: input.sourceRegions } }
+      : {}),
+  };
+}
+
+function selectedCategory(
+  categories: TimelineListInput["categories"],
+  category: (typeof timelineCategories)[number],
+) {
+  return categories === undefined || categories.includes(category);
+}
+
+function eventTypeWhere(categories: TimelineListInput["categories"]) {
+  const includesEvents = selectedCategory(categories, "EVENT");
+  const includesIncome = selectedCategory(categories, "INCOME_SOURCE");
+
+  if (includesEvents === includesIncome) {
+    return {};
+  }
+
+  return includesIncome
+    ? { type: { in: [...incomeSourceEventTypes] } }
+    : { type: { notIn: [...incomeSourceEventTypes] } };
 }
 
 function compareTimelineEntries(
@@ -100,18 +145,37 @@ export const timelineRouter = createTRPCRouter({
   list: publicProcedure
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {
-      const where = intervalWhere(input.from, input.to);
+      const includeEvents =
+        input.servantId === undefined &&
+        (selectedCategory(input.categories, "EVENT") ||
+          selectedCategory(input.categories, "INCOME_SOURCE"));
+      const includeBanners = selectedCategory(
+        input.categories,
+        "SUMMONING_CAMPAIGN",
+      );
       const [events, banners] = await Promise.all([
-        ctx.db.event.findMany({
-          where,
-          select: eventSelect,
-          orderBy: [{ startsAt: "asc" }, { id: "asc" }],
-        }),
-        ctx.db.banner.findMany({
-          where,
-          select: bannerSelect,
-          orderBy: [{ startsAt: "asc" }, { id: "asc" }],
-        }),
+        includeEvents
+          ? ctx.db.event.findMany({
+              where: {
+                ...commonWhere(input),
+                ...eventTypeWhere(input.categories),
+              },
+              select: eventSelect,
+              orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+            })
+          : Promise.resolve([]),
+        includeBanners
+          ? ctx.db.banner.findMany({
+              where: {
+                ...commonWhere(input),
+                ...(input.servantId
+                  ? { featured: { some: { servantId: input.servantId } } }
+                  : {}),
+              },
+              select: bannerSelect,
+              orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+            })
+          : Promise.resolve([]),
       ]);
 
       return [
