@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-31T00:00:00.000Z",
+  "review": {
+    "status": "APPROVED",
+    "reviewedAt": "2026-08-31T00:00:00.000Z",
+    "note": "This example uses the cited Atlas Academy records. The official Global page confirms the date range but omits the start time. Ambiguous login rewards are intentionally excluded."
+  },
+  "sources": [
+    {
+      "sourceKey": "atlas:NA:event:80480",
+      "type": "ATLAS_ACADEMY",
+      "region": "NA",
+      "url": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "retrievedAt": "2026-08-31T00:00:00.000Z",
+      "contentHash": null
+    },
+    {
+      "sourceKey": "atlas:NA:war:9170",
+      "type": "ATLAS_ACADEMY",
+      "region": "NA",
+      "url": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "retrievedAt": "2026-08-31T00:00:00.000Z",
+      "contentHash": "sha256:9d995c816c995aaf94ecf544021a6385f0ac70e121e87f16a04f93f21e64bf77"
+    },
+    {
+      "sourceKey": "official:na:dancing-dragon-castle",
+      "type": "OFFICIAL_ANNOUNCEMENT",
+      "region": "NA",
+      "url": "https://fate-go.us/dancingdragoncastle/",
+      "retrievedAt": "2026-08-31T00:00:00.000Z",
+      "contentHash": null
+    },
+    {
+      "sourceKey": "wiki:na:dancing-dragon-castle-pre-release",
+      "type": "WIKI",
+      "region": "NA",
+      "url": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
+      "retrievedAt": "2026-08-31T00:00:00.000Z",
+      "contentHash": null
+    }
+  ],
+  "families": [
+    {
+      "sourceKey": "event-family:na:dancing-dragon-castle",
+      "name": "The Dancing Dragon Castle!",
+      "artworkUrl": "https://static.atlasacademy.io/NA/Banner/event_war_80463.png",
+      "artworkSourceUrl": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "artworkAlt": "The Dancing Dragon Castle! event artwork",
+      "artworkReviewedAt": "2026-08-31T00:00:00.000Z"
+    }
+  ],
+  "events": [
+    {
+      "sourceKey": "wiki:na:dancing-dragon-castle:pre-release",
+      "familySourceKey": "event-family:na:dancing-dragon-castle",
+      "evidenceSourceKey": "wiki:na:dancing-dragon-castle-pre-release",
+      "name": "The Dancing Dragon Castle! Pre-Release Campaign",
+      "type": "PRE_RELEASE_CAMPAIGN",
+      "startsAt": "2026-06-05T04:00:00.000Z",
+      "endsAt": "2026-06-19T03:59:59.000Z",
+      "status": "CURATED",
+      "sourceUrl": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
+      "sourceRegion": "NA"
+    },
+    {
+      "sourceKey": "atlas:NA:event:80480",
+      "familySourceKey": "event-family:na:dancing-dragon-castle",
+      "evidenceSourceKey": "atlas:NA:event:80480",
+      "name": "The Dancing Dragon Castle! The Princess in the Deep Sea and The Two Gems",
+      "type": "MAIN_EVENT",
+      "startsAt": "2026-06-12T04:00:00.000Z",
+      "endsAt": "2026-07-03T03:59:59.000Z",
+      "status": "CURATED",
+      "sourceUrl": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "sourceRegion": "NA"
+    }
+  ],
+  "rewardSources": [
+    {
+      "sourceKey": "atlas:80480:quest:94098701",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 1: More Shark Sightings in Nagasaki",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098701:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-12T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 1: More Shark Sightings in Nagasaki.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098702",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 2: Dancing Dragon Castle",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098702:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-12T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 2: Dancing Dragon Castle.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098704",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 4: The Garden of Divine Play",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098704:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-13T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 4: The Garden of Divine Play.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098705",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 5: Opening the Door",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098705:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-14T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 5: Opening the Door.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098706",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 6: Land of Beauty and Peace",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098706:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-15T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 6: Land of Beauty and Peace.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098707",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 7: Sleep Over There",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098707:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-16T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 7: Sleep Over There.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:quest:94098708",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:war:9170",
+      "name": "Section 8: The Star Inside Me",
+      "type": "QUEST_CLEAR",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/war/9170",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:quest:94098708:saint_quartz",
+          "itemType": "SAINT_QUARTZ",
+          "amount": 1,
+          "expectedAt": "2026-06-17T04:00:00.000Z",
+          "nature": "CONDITIONAL",
+          "eligibility": "Clear Section 8: The Star Inside Me.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:point:0:150000:11",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:event:80480",
+      "name": "150,000 point reward",
+      "type": "POINT_REWARD",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:point:0:150000:11:summon_ticket",
+          "itemType": "SUMMON_TICKET",
+          "amount": 1,
+          "expectedAt": null,
+          "nature": "CONDITIONAL",
+          "eligibility": "Earn 150,000 event points.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:point:0:600000:27",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:event:80480",
+      "name": "600,000 point reward",
+      "type": "POINT_REWARD",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:point:0:600000:27:summon_ticket",
+          "itemType": "SUMMON_TICKET",
+          "amount": 1,
+          "expectedAt": null,
+          "nature": "CONDITIONAL",
+          "eligibility": "Earn 600,000 event points.",
+          "defaultIncluded": true
+        }
+      ]
+    },
+    {
+      "sourceKey": "atlas:80480:point:0:1300000:45",
+      "eventSourceKey": "atlas:NA:event:80480",
+      "evidenceSourceKey": "atlas:NA:event:80480",
+      "name": "1,300,000 point reward",
+      "type": "POINT_REWARD",
+      "status": "CURATED",
+      "evidenceUrl": "https://api.atlasacademy.io/nice/NA/event/80480",
+      "lastVerifiedAt": "2026-08-31T00:00:00.000Z",
+      "rewards": [
+        {
+          "sourceKey": "atlas:80480:point:0:1300000:45:summon_ticket",
+          "itemType": "SUMMON_TICKET",
+          "amount": 1,
+          "expectedAt": null,
+          "nature": "CONDITIONAL",
+          "eligibility": "Earn 1,300,000 event points.",
+          "defaultIncluded": true
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "sourceKey": "wiki:na:dancing-dragon-castle-pre-release:login-review",
+      "severity": "WARNING",
+      "message": "Login rewards are excluded because the rendered wiki table does not preserve enough item-icon meaning for safe automated identification."
+    }
+  ]
+}
