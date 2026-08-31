@@ -74,6 +74,10 @@ const eventSelect = {
   status: true,
   sourceUrl: true,
   sourceRegion: true,
+  sourceStartsAt: true,
+  sourceEndsAt: true,
+  projectionMethod: true,
+  lastSyncedAt: true,
   updatedAt: true,
   family: { select: familySelect },
 } as const;
@@ -103,6 +107,10 @@ const relatedEventSelect = {
   status: true,
   sourceUrl: true,
   sourceRegion: true,
+  sourceStartsAt: true,
+  sourceEndsAt: true,
+  projectionMethod: true,
+  lastSyncedAt: true,
   updatedAt: true,
 } as const;
 
@@ -148,6 +156,7 @@ const rewardSourceSelect = {
       nature: true,
       eligibility: true,
       defaultIncluded: true,
+      reviewedAt: true,
     },
     orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
   },
@@ -219,6 +228,10 @@ type RelatedScheduleEntry = {
   status: "PROJECTED" | "CURATED" | "OFFICIAL";
   sourceUrl: string | null;
   sourceRegion: string;
+  sourceStartsAt?: Date | null;
+  sourceEndsAt?: Date | null;
+  projectionMethod?: "TWO_CALENDAR_YEARS" | null;
+  lastSyncedAt?: Date | null;
   updatedAt: Date;
 };
 
@@ -233,7 +246,7 @@ function relatedEntries(family: {
       kind: "EVENT" as const,
       category: eventCategory(event.type),
       confidence: null,
-      sourceLastCheckedAt: null,
+      sourceLastCheckedAt: event.lastSyncedAt ?? null,
     })),
     ...family.banners.map((banner) => ({
       ...banner,
@@ -290,6 +303,7 @@ export const timelineRouter = createTRPCRouter({
           kind: "EVENT" as const,
           category: eventCategory(event.type),
           confidence: null,
+          sourceLastCheckedAt: event.lastSyncedAt,
         })),
         ...banners.map((banner) => ({
           ...banner,
@@ -378,7 +392,7 @@ export const timelineRouter = createTRPCRouter({
         kind: "EVENT" as const,
         category: eventCategory(event.type),
         confidence: null,
-        sourceLastCheckedAt: null,
+        sourceLastCheckedAt: event.lastSyncedAt,
         rewardDataStatus:
           rewardSources.length > 0
             ? ("AVAILABLE" as const)
