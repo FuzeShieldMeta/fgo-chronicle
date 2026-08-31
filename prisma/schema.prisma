@@ -59,21 +59,136 @@ enum ScheduleStatus {
   OFFICIAL
 }
 
+enum EventType {
+  MAIN_EVENT
+  PRE_RELEASE_CAMPAIGN
+  LOGIN_BONUS
+  CAMPAIGN
+  EVENT_SHOP
+  QUEST_RELEASE
+  LIMITED_MISSION
+  MAINTENANCE
+  OTHER
+}
+
+enum RewardSourceType {
+  LOGIN_BONUS
+  PRE_CAMPAIGN
+  EVENT_SHOP
+  POINT_REWARD
+  QUEST_CLEAR
+  CHALLENGE_QUEST
+  LIMITED_MISSION
+  MASTER_MISSION
+  SOCIAL_CAMPAIGN
+  MAINTENANCE
+  LOGIN_MILESTONE
+  OTHER
+}
+
+enum RewardItemType {
+  SAINT_QUARTZ
+  SAINT_QUARTZ_FRAGMENT
+  SUMMON_TICKET
+  CRYSTALLIZED_LORE
+  HOLY_GRAIL
+}
+
+enum RewardNature {
+  DETERMINISTIC
+  CONDITIONAL
+  CURATED_ESTIMATE
+}
+
+model EventFamily {
+  id                String    @id @default(cuid())
+  sourceKey         String    @unique
+  name              String
+  artworkUrl        String?
+  artworkSourceUrl  String?
+  artworkAlt        String?
+  artworkReviewedAt DateTime?
+  events            Event[]
+  banners           Banner[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Event {
+  id            String         @id @default(cuid())
+  sourceKey     String         @unique
+  familyId      String?
+  name          String
+  type          EventType
+  startsAt      DateTime
+  endsAt        DateTime?
+  status        ScheduleStatus
+  sourceUrl     String?
+  sourceRegion  String
+  family        EventFamily?   @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  rewardSources RewardSource[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([startsAt])
+  @@index([status, startsAt])
+  @@index([familyId, startsAt])
+}
+
+model RewardSource {
+  id             String             @id @default(cuid())
+  sourceKey      String             @unique
+  eventId        String?
+  name           String
+  type           RewardSourceType
+  status         ScheduleStatus
+  evidenceUrl    String
+  lastVerifiedAt DateTime?
+  event          Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  rewards        RewardDefinition[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([eventId])
+  @@index([type, status])
+}
+
+model RewardDefinition {
+  id              String         @id @default(cuid())
+  sourceKey       String         @unique
+  rewardSourceId  String
+  itemType        RewardItemType
+  amount          Int
+  expectedAt      DateTime?
+  nature          RewardNature
+  eligibility     String?
+  defaultIncluded Boolean        @default(true)
+  rewardSource    RewardSource   @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([rewardSourceId, expectedAt])
+  @@index([itemType, expectedAt])
+}
+
 model Banner {
   id           String          @id @default(cuid())
   sourceKey    String          @unique
+  familyId     String?
   name         String
   startsAt     DateTime
   endsAt       DateTime?
   status       ScheduleStatus
   sourceUrl    String?
   sourceRegion String
+  family       EventFamily?    @relation(fields: [familyId], references: [id], onDelete: SetNull)
   featured     BannerServant[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])
+  @@index([familyId, startsAt])
 }
 
 model Servant {
