@@ -45,6 +45,11 @@ const eventSchema = z
     status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
     sourceUrl: z.string().url(),
     sourceRegion: z.string().trim().min(1),
+    sourceStartsAt: nullableDate.optional(),
+    sourceEndsAt: nullableDate.optional(),
+    projectionMethod: z.enum(["TWO_CALENDAR_YEARS"]).nullable().optional(),
+    lastSyncedAt: nullableDate.optional(),
+    sourceContentHash: z.string().trim().min(1).nullable().optional(),
   })
   .refine(
     ({ startsAt, endsAt }) =>
@@ -78,6 +83,7 @@ const rewardSchema = z.object({
   nature: z.enum(["DETERMINISTIC", "CONDITIONAL", "CURATED_ESTIMATE"]),
   eligibility: z.string().trim().min(1).nullable(),
   defaultIncluded: z.boolean(),
+  reviewedAt: nullableDate.optional().default(null),
 });
 
 const rewardSourceSchema = z.object({
