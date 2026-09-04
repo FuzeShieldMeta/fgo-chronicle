@@ -89,7 +89,10 @@ export function classifyAtlasScheduleEvent(event) {
     return null;
   }
   if (isPermanentRecord(event)) return "QUEST_RELEASE";
-  if (event.type === "fortuneCampaign" || /login bonus|ログインボーナス/i.test(label)) {
+  if (
+    event.type === "fortuneCampaign" ||
+    /login bonus|ログインボーナス/i.test(label)
+  ) {
     return "LOGIN_BONUS";
   }
   if (/pre[- ]?release|開幕直前|直前キャンペーン/i.test(label)) {
@@ -111,8 +114,7 @@ export function classifyAtlasScheduleEvent(event) {
 export function selectRollingJpEvents(events, asOf) {
   const sourceFrom = addCalendarYears(asOf, -2).getTime();
   const sourceTo = asOf.getTime();
-  const overlapFrom =
-    sourceFrom - WINDOW_OVERLAP_DAYS * DAY_SECONDS * 1_000;
+  const overlapFrom = sourceFrom - WINDOW_OVERLAP_DAYS * DAY_SECONDS * 1_000;
 
   return events.filter((event) => {
     if (!classifyAtlasScheduleEvent(event)) return false;
@@ -150,7 +152,9 @@ function eventSignature(event) {
     name: event.name,
     type: event.type,
     startsAt: comparableDate(event.startsAt),
+    startsAtPrecision: event.startsAtPrecision,
     endsAt: comparableDate(event.endsAt),
+    endsAtPrecision: event.endsAtPrecision,
     sourceStartsAt: comparableDate(event.sourceStartsAt),
     sourceEndsAt: comparableDate(event.sourceEndsAt),
     sourceUrl: event.sourceUrl ?? null,
@@ -257,7 +261,9 @@ export function buildProjectedEventDataset(rawEvents, options) {
         familySourceKey,
         type: eventType,
         startsAt: projectIso(result.event.startsAt),
+        startsAtPrecision: "DATE_ONLY",
         endsAt: projectIso(result.event.endsAt),
+        endsAtPrecision: "DATE_ONLY",
         status: "PROJECTED",
         sourceStartsAt: result.event.startsAt,
         sourceEndsAt: result.event.endsAt,

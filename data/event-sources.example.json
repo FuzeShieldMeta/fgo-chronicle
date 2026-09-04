@@ -35,7 +35,9 @@
         "name": "The Dancing Dragon Castle! Pre-Release Campaign",
         "type": "PRE_RELEASE_CAMPAIGN",
         "startsAt": "2026-06-05T04:00:00.000Z",
+        "startsAtPrecision": "EXACT",
         "endsAt": "2026-06-19T03:59:59.000Z",
+        "endsAtPrecision": "EXACT",
         "status": "CURATED",
         "sourceUrl": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
         "sourceRegion": "NA"

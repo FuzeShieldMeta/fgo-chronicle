@@ -39,9 +39,9 @@ const eventSchema = z
       "OTHER",
     ]),
     startsAt: z.string().datetime(),
-    startsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).default("EXACT"),
+    startsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]),
     endsAt: nullableDate,
-    endsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).nullable().optional(),
+    endsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).nullable(),
     status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
     sourceUrl: z.string().url(),
     sourceRegion: z.string().trim().min(1),
@@ -63,11 +63,14 @@ const eventSchema = z
       path: ["endsAtPrecision"],
     },
   )
-  .transform((event) => ({
-    ...event,
-    endsAtPrecision:
-      event.endsAt === null ? null : (event.endsAtPrecision ?? "EXACT"),
-  }));
+  .refine(
+    ({ endsAt, endsAtPrecision }) =>
+      endsAt === null || endsAtPrecision !== null,
+    {
+      message: "An event with an end time must declare its end-time precision.",
+      path: ["endsAtPrecision"],
+    },
+  );
 
 const rewardSchema = z.object({
   sourceKey,
