@@ -162,6 +162,32 @@ const rewardSourceSelect = {
   },
 } satisfies Prisma.RewardSourceSelect;
 
+const incomeContributionSelect = {
+  id: true,
+  itemType: true,
+  amount: true,
+  expectedAt: true,
+  nature: true,
+  eligibility: true,
+  defaultIncluded: true,
+  reviewedAt: true,
+  rewardSource: {
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      status: true,
+      evidenceUrl: true,
+      event: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.RewardDefinitionSelect;
+
 function eventCategory(eventType: string) {
   return incomeSourceEventTypes.some((type) => type === eventType)
     ? ("INCOME_SOURCE" as const)
@@ -313,6 +339,26 @@ export const timelineRouter = createTRPCRouter({
           confidence: null,
         })),
       ].sort(compareTimelineEntries);
+    }),
+  income: publicProcedure
+    .input(timelineRangeSchema)
+    .query(async ({ ctx, input }) => {
+      const contributions = await ctx.db.rewardDefinition.findMany({
+        where: {
+          expectedAt: {
+            gte: input.from,
+            lte: input.to,
+          },
+        },
+        select: incomeContributionSelect,
+        orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
+      });
+
+      return contributions.flatMap((contribution) =>
+        contribution.expectedAt
+          ? [{ ...contribution, expectedAt: contribution.expectedAt }]
+          : [],
+      );
     }),
   details: publicProcedure
     .input(timelineDetailSchema)
