@@ -22,6 +22,7 @@ export type ScheduleLayoutItem<T extends ScheduleInterval> = T & {
   startRow: number;
   endRow: number;
   lane: number;
+  groupLaneCount: number;
   startsBeforeRange: boolean;
   endsAfterRange: boolean;
 };
@@ -40,6 +41,15 @@ type LayoutOptions = {
 
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_VISIBLE_LANES = 3;
+
+export function laneSharePercent(laneCount: number) {
+  if (!Number.isInteger(laneCount) || laneCount < 0) {
+    throw new Error("The timeline lane count must be a non-negative integer.");
+  }
+
+  return 100 / Math.max(laneCount, DEFAULT_VISIBLE_LANES);
+}
 
 function dayNumber(dayKey: string) {
   if (!DAY_KEY_PATTERN.test(dayKey)) {
@@ -137,16 +147,37 @@ export function layoutSchedule<T extends ScheduleInterval>(
   });
 
   return timelineCategories.map((category) => {
-    const laneEnds: number[] = [];
-    const items = visible
+    const categoryIntervals = visible
       .filter((interval) => interval.category === category)
       .sort(
         (left, right) =>
           left.startRow - right.startRow ||
           left.endRow - right.endRow ||
           left.key.localeCompare(right.key),
-      )
-      .map((interval) => {
+      );
+    const overlapGroups: Array<typeof categoryIntervals> = [];
+    let currentGroup: typeof categoryIntervals = [];
+    let currentGroupEnd = -1;
+
+    for (const interval of categoryIntervals) {
+      if (currentGroup.length > 0 && interval.startRow > currentGroupEnd) {
+        overlapGroups.push(currentGroup);
+        currentGroup = [];
+        currentGroupEnd = -1;
+      }
+
+      currentGroup.push(interval);
+      currentGroupEnd = Math.max(currentGroupEnd, interval.endRow);
+    }
+
+    if (currentGroup.length > 0) {
+      overlapGroups.push(currentGroup);
+    }
+
+    let categoryLaneCount = 0;
+    const items = overlapGroups.flatMap((group) => {
+      const laneEnds: number[] = [];
+      const allocated = group.map((interval) => {
         const reusableLane = laneEnds.findIndex(
           (laneEnd) => laneEnd < interval.startRow,
         );
@@ -155,10 +186,18 @@ export function layoutSchedule<T extends ScheduleInterval>(
 
         return { ...interval, lane };
       });
+      const groupLaneCount = Math.max(laneEnds.length, DEFAULT_VISIBLE_LANES);
+      categoryLaneCount = Math.max(categoryLaneCount, laneEnds.length);
+
+      return allocated.map((interval) => ({
+        ...interval,
+        groupLaneCount,
+      }));
+    });
 
     return {
       category,
-      laneCount: laneEnds.length,
+      laneCount: categoryLaneCount,
       items,
     } satisfies ScheduleCategoryLayout<T>;
   });
