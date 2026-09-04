@@ -222,7 +222,10 @@ export function normalizeAtlasEvent(raw, options) {
     family: {
       sourceKey: options.family.sourceKey,
       name: options.family.name,
-      artworkUrl: raw.noticeBanner || raw.banner || null,
+      artworkUrl:
+        typeof raw.banner === "string" && raw.banner.trim()
+          ? raw.banner.trim()
+          : null,
       artworkSourceUrl: url,
       artworkAlt: `${options.family.name} event artwork`,
       artworkReviewedAt: null,
