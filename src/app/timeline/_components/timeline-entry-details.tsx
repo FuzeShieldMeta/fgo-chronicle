@@ -3,6 +3,12 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { PlayerForecastPanel } from "~/app/timeline/_components/player-forecast-panel";
+import {
+  incomeResourceLabels,
+  type IncomeLedgerCell,
+} from "~/app/timeline/_lib/income-ledger";
+import type { PlayerForecastProfile } from "~/app/timeline/_lib/player-forecast";
 import { formatScheduleDate } from "~/app/timeline/_lib/schedule-date";
 import {
   timelineLayout,
@@ -26,7 +32,7 @@ const itemTypeNames = {
   SAINT_QUARTZ: "Saint Quartz",
   SAINT_QUARTZ_FRAGMENT: "Saint Quartz Fragments",
   SUMMON_TICKET: "Summon Tickets",
-  CRYSTALLIZED_LORE: "Crystallized Lores",
+  CRYSTALLIZED_LORE: "Crystallised Lores",
   HOLY_GRAIL: "Holy Grails",
 } as const;
 
@@ -38,7 +44,15 @@ function formatType(value: string) {
     .join(" ");
 }
 
-export function TimelineDetailsPlaceholder() {
+export function TimelineDetailsPlaceholder({
+  profile,
+  today,
+  onSaveProfile,
+}: {
+  profile: PlayerForecastProfile | null;
+  today: string;
+  onSaveProfile: (profile: PlayerForecastProfile) => void;
+}) {
   return (
     <aside
       className="timeline-details timeline-details-empty"
@@ -49,10 +63,174 @@ export function TimelineDetailsPlaceholder() {
         <span className="timeline-type-label">Schedule details</span>
         <h3>Select a timeline entry</h3>
         <p>
-          Select an event, summoning campaign, or income source to inspect its
-          dates, source, rewards, and related schedule entries.
+          Select an event, summoning campaign, or dated resource change to see
+          its source and details.
         </p>
+        {profile ? (
+          <PlayerForecastPanel
+            profile={profile}
+            today={today}
+            onSave={onSaveProfile}
+          />
+        ) : (
+          <section className="timeline-default-assumption">
+            <h4>Using default balances</h4>
+            <p>
+              The forecast starts today with zero resources and a total login
+              count of 100. Select Balances when you want to use your current
+              totals.
+            </p>
+          </section>
+        )}
       </div>
+    </aside>
+  );
+}
+
+export function TimelineProfileDetails({
+  profile,
+  today,
+  onSaveProfile,
+  onClose,
+}: {
+  profile: PlayerForecastProfile | null;
+  today: string;
+  onSaveProfile: (profile: PlayerForecastProfile) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside
+      className="timeline-details"
+      data-empty="false"
+      aria-labelledby="timeline-profile-heading"
+    >
+      <div className="timeline-details-handle" aria-hidden="true" />
+      <div className="timeline-details-header">
+        <div>
+          <span className="timeline-type-label">Player forecast</span>
+          <h3 id="timeline-profile-heading">Starting balances</h3>
+        </div>
+        <button
+          type="button"
+          className="timeline-close-button"
+          onClick={onClose}
+          aria-label="Close starting balances"
+        >
+          Close
+        </button>
+      </div>
+      <PlayerForecastPanel
+        profile={profile}
+        today={today}
+        onSave={onSaveProfile}
+      />
+    </aside>
+  );
+}
+
+function signedAmount(value: number) {
+  if (value > 0) return `+${value}`;
+  if (value < 0) return `−${Math.abs(value)}`;
+  return "0";
+}
+
+export function TimelineIncomeDetails({
+  cell,
+  profile,
+  onOpenProfile,
+  onClose,
+}: {
+  cell: IncomeLedgerCell;
+  profile: PlayerForecastProfile | null;
+  onOpenProfile: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside
+      className="timeline-details"
+      data-empty="false"
+      aria-labelledby="timeline-details-heading"
+    >
+      <div className="timeline-details-handle" aria-hidden="true" />
+      <div className="timeline-details-header">
+        <div>
+          <span className="timeline-type-label">Income sources</span>
+          <h3 id="timeline-details-heading">
+            {incomeResourceLabels[cell.itemType]} {signedAmount(cell.delta)}
+          </h3>
+        </div>
+        <button
+          type="button"
+          className="timeline-close-button"
+          onClick={onClose}
+          aria-label="Close income details"
+        >
+          Close
+        </button>
+      </div>
+
+      <dl className="timeline-detail-facts">
+        <div>
+          <dt>Date</dt>
+          <dd>{cell.day}</dd>
+        </div>
+        <div>
+          <dt>Forecast closing balance</dt>
+          <dd>{cell.closingBalance ?? "Not available"}</dd>
+        </div>
+      </dl>
+
+      <section className="timeline-detail-section">
+        <h4>Change breakdown</h4>
+        <ul>
+          {cell.contributions.map((contribution) => (
+            <li key={contribution.id}>
+              <span>
+                {signedAmount(contribution.amount)} ·{" "}
+                {contribution.rewardSource.name}
+              </span>
+              <small>
+                {formatType(contribution.rewardSource.type)}
+                {contribution.rewardSource.event
+                  ? ` · ${contribution.rewardSource.event.name}`
+                  : ""}
+                {contribution.defaultIncluded ? "" : " · Excluded"}
+                {contribution.reviewedAt ? "" : " · Unreviewed"}
+              </small>
+              {contribution.eligibility ? (
+                <small>{contribution.eligibility}</small>
+              ) : null}
+              {contribution.assumption ? (
+                <small>Assumption: {contribution.assumption}</small>
+              ) : null}
+              <a
+                href={contribution.rewardSource.evidenceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View source
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {profile ? (
+        <p className="timeline-details-message">
+          This balance is calculated from your snapshot dated{" "}
+          {profile.snapshot.effectiveDate}.
+        </p>
+      ) : (
+        <div className="timeline-details-message">
+          <p>
+            This balance uses today as its starting point, with zero resources
+            and a total login count of 100.
+          </p>
+          <button type="button" onClick={onOpenProfile}>
+            Enter current balances
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

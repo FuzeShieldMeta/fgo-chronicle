@@ -1,13 +1,12 @@
-import {
-  DEFAULT_VISIBLE_LANES,
-  timelineCategories,
-} from "~/app/timeline/_lib/schedule-layout";
+import { DEFAULT_VISIBLE_LANES } from "~/app/timeline/_lib/schedule-layout";
 
 export const timelineLayout = {
   dayWidth: 52,
   categoryLabelWidth: 112,
-  minimumCategoryHeight: 144,
-  categoryCount: timelineCategories.length,
+  minimumScheduleCategoryHeight: 144,
+  minimumIncomeResourceRowHeight: 44,
+  incomeResourceCount: 5,
+  incomeResourceIconSize: 24,
   railHorizontalInset: 3,
   railLaneInset: 2,
   maximumInsetLaneCount: 12,
@@ -30,4 +29,10 @@ export const timelineSchedule = {
 } as const;
 
 export const minimumCategoryStackHeight =
-  timelineLayout.minimumCategoryHeight * timelineLayout.categoryCount;
+  timelineLayout.minimumScheduleCategoryHeight * 2 +
+  timelineLayout.minimumIncomeResourceRowHeight *
+    timelineLayout.incomeResourceCount;
+
+export const minimumIncomeCategoryHeight =
+  timelineLayout.minimumIncomeResourceRowHeight *
+  timelineLayout.incomeResourceCount;

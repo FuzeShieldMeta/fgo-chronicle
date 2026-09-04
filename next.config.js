@@ -22,6 +22,13 @@ const config = {
         pathname: "/NA/Banner/**",
         search: "",
       },
+      {
+        protocol: "https",
+        hostname: "static.atlasacademy.io",
+        port: "",
+        pathname: "/NA/Items/**",
+        search: "",
+      },
     ],
   },
 };

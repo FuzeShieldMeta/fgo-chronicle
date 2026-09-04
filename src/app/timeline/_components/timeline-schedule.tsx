@@ -11,9 +11,23 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  TimelineIncomeDetails,
   TimelineDetailsPlaceholder,
   TimelineEntryDetails,
+  TimelineProfileDetails,
 } from "~/app/timeline/_components/timeline-entry-details";
+import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
+import {
+  buildIncomeLedger,
+  incomeResourceIcons,
+  incomeResourceLabels,
+} from "~/app/timeline/_lib/income-ledger";
+import {
+  forecastResourceTypes,
+  loadPlayerForecastProfile,
+  savePlayerForecastProfile,
+  type PlayerForecastProfile,
+} from "~/app/timeline/_lib/player-forecast";
 import {
   calendarDayKey,
   calendarDays,
@@ -23,6 +37,7 @@ import {
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
 import {
+  minimumIncomeCategoryHeight,
   minimumCategoryStackHeight,
   timelineLayout,
   timelineSchedule,
@@ -36,6 +51,7 @@ import { positionViewportTooltip } from "~/app/timeline/_lib/viewport-tooltip";
 import type { RouterOutputs } from "~/trpc/react";
 
 type TimelineEntry = RouterOutputs["timeline"]["list"][number];
+type TimelineIncomeContribution = RouterOutputs["timeline"]["income"][number];
 type LedgerEntry = TimelineEntry & ScheduleInterval;
 
 const categoryNames = {
@@ -257,13 +273,21 @@ function CategoryRow({
 
 export function TimelineSchedule({
   entries,
+  incomeContributions,
   initialCalendar,
 }: {
   entries: TimelineEntry[];
+  incomeContributions: TimelineIncomeContribution[];
   initialCalendar: LocalCalendar;
 }) {
   const [calendar, setCalendar] = useState(initialCalendar);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedIncomeKey, setSelectedIncomeKey] = useState<string | null>(
+    null,
+  );
+  const [playerProfile, setPlayerProfile] =
+    useState<PlayerForecastProfile | null>(null);
+  const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
   const scrollFrameRef = useRef<HTMLDivElement>(null);
@@ -279,6 +303,7 @@ export function TimelineSchedule({
         ? current
         : localCalendar,
     );
+    setPlayerProfile(loadPlayerForecastProfile(window.localStorage));
   }, []);
 
   useEffect(() => {
@@ -296,10 +321,6 @@ export function TimelineSchedule({
       scrollFrame.style.setProperty(
         "--timeline-category-track-height",
         `${Math.max(0, categoryTrackHeight)}px`,
-      );
-      scrollFrame.style.setProperty(
-        "--timeline-category-row-height",
-        `${Math.max(0, categoryTrackHeight / timelineLayout.categoryCount)}px`,
       );
     };
 
@@ -398,14 +419,23 @@ export function TimelineSchedule({
   const view = useMemo(() => {
     const endDay = scheduleEndDay(calendar.today);
     const days = calendarDays(calendar.today, endDay);
-    const layouts = layoutSchedule(entries as LedgerEntry[], {
+    const scheduleEntries = entries.filter(
+      (entry) => entry.category !== "INCOME_SOURCE",
+    );
+    const layouts = layoutSchedule(scheduleEntries as LedgerEntry[], {
       startDay: calendar.today,
       endDay,
       timeZone: calendar.timeZone,
     });
+    const incomeCells = buildIncomeLedger(
+      days,
+      incomeContributions,
+      playerProfile,
+      calendar.timeZone,
+    );
 
-    return { days, layouts };
-  }, [calendar, entries]);
+    return { days, layouts, incomeCells };
+  }, [calendar, entries, incomeContributions, playerProfile]);
 
   const formatter = useMemo(
     () =>
@@ -422,6 +452,15 @@ export function TimelineSchedule({
     () => entries.find((entry) => entry.key === selectedKey) ?? null,
     [entries, selectedKey],
   );
+  const selectedIncomeCell = selectedIncomeKey
+    ? (view.incomeCells.get(selectedIncomeKey) ?? null)
+    : null;
+
+  function saveProfile(profile: PlayerForecastProfile) {
+    savePlayerForecastProfile(window.localStorage, profile);
+    setPlayerProfile(profile);
+    setProfilePanelOpen(false);
+  }
 
   function returnToToday() {
     const reduceMotion = window.matchMedia(
@@ -486,9 +525,12 @@ export function TimelineSchedule({
     "--day-count": view.days.length,
     "--day-width": `${timelineLayout.dayWidth}px`,
     "--timeline-category-label-width": `${timelineLayout.categoryLabelWidth}px`,
-    "--timeline-min-category-height": `${timelineLayout.minimumCategoryHeight}px`,
+    "--timeline-min-schedule-category-height": `${timelineLayout.minimumScheduleCategoryHeight}px`,
+    "--timeline-min-income-category-height": `${minimumIncomeCategoryHeight}px`,
+    "--timeline-min-income-row-height": `${timelineLayout.minimumIncomeResourceRowHeight}px`,
+    "--timeline-income-resource-count": timelineLayout.incomeResourceCount,
+    "--timeline-income-icon-size": `${timelineLayout.incomeResourceIconSize}px`,
     "--timeline-min-category-stack-height": `${minimumCategoryStackHeight}px`,
-    "--timeline-category-count": timelineLayout.categoryCount,
     "--timeline-sticky-label-inset": `${timelineLayout.stickyLabelInset}px`,
   } as CSSProperties;
   const gridStyle = {
@@ -500,6 +542,7 @@ export function TimelineSchedule({
       ref={scheduleRef}
       className="timeline-shell"
       aria-label="Two-year schedule"
+      style={timelineStyle}
     >
       <div className="timeline-toolbar">
         <div className="timeline-toolbar-actions">
@@ -515,6 +558,19 @@ export function TimelineSchedule({
           <button
             type="button"
             className="timeline-tonal-button"
+            data-attention={playerProfile ? undefined : "true"}
+            onClick={() => {
+              setSelectedKey(null);
+              setSelectedIncomeKey(null);
+              setProfilePanelOpen(true);
+            }}
+          >
+            Balances
+          </button>
+
+          <button
+            type="button"
+            className="timeline-tonal-button"
             onClick={returnToToday}
           >
             Today
@@ -524,13 +580,13 @@ export function TimelineSchedule({
 
       <div
         className="timeline-workspace"
-        data-has-selection={selectedEntry ? "true" : "false"}
+        data-has-selection={
+          selectedEntry || selectedIncomeCell || profilePanelOpen
+            ? "true"
+            : "false"
+        }
       >
-        <div
-          ref={scrollFrameRef}
-          className="timeline-scroll-frame"
-          style={timelineStyle}
-        >
+        <div ref={scrollFrameRef} className="timeline-scroll-frame">
           <div
             ref={scrollRef}
             className="timeline-scroll"
@@ -572,17 +628,35 @@ export function TimelineSchedule({
                 </div>
               </header>
 
-              {view.layouts.map((layout) => (
-                <CategoryRow
-                  key={layout.category}
-                  layout={layout}
-                  selectedKey={selectedKey}
-                  timeZone={calendar.timeZone}
-                  onSelect={(entry) => setSelectedKey(entry.key)}
-                  onShowTooltip={showRailTooltip}
-                  onHideTooltip={hideRailTooltip}
-                />
-              ))}
+              {view.layouts.map((layout) =>
+                layout.category === "INCOME_SOURCE" ? (
+                  <TimelineIncomeLedger
+                    key={layout.category}
+                    days={view.days}
+                    cells={view.incomeCells}
+                    selectedKey={selectedIncomeKey}
+                    onSelect={(cell) => {
+                      setProfilePanelOpen(false);
+                      setSelectedKey(null);
+                      setSelectedIncomeKey(cell.key);
+                    }}
+                  />
+                ) : (
+                  <CategoryRow
+                    key={layout.category}
+                    layout={layout}
+                    selectedKey={selectedKey}
+                    timeZone={calendar.timeZone}
+                    onSelect={(entry) => {
+                      setProfilePanelOpen(false);
+                      setSelectedIncomeKey(null);
+                      setSelectedKey(entry.key);
+                    }}
+                    onShowTooltip={showRailTooltip}
+                    onHideTooltip={hideRailTooltip}
+                  />
+                ),
+              )}
             </div>
           </div>
 
@@ -597,21 +671,60 @@ export function TimelineSchedule({
                   className="timeline-category-label"
                   data-category={category}
                 >
-                  {categoryNames[category]}
+                  {category === "INCOME_SOURCE" ? (
+                    <div className="timeline-income-labels">
+                      {forecastResourceTypes.map((itemType) => (
+                        <span key={itemType} data-resource={itemType}>
+                          <Image
+                            className="timeline-income-resource-icon"
+                            src={incomeResourceIcons[itemType]}
+                            alt=""
+                            width={timelineLayout.incomeResourceIconSize}
+                            height={timelineLayout.incomeResourceIconSize}
+                            loading="eager"
+                          />
+                          <b>{incomeResourceLabels[itemType]}</b>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    categoryNames[category]
+                  )}
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {selectedEntry ? (
+        {profilePanelOpen ? (
+          <TimelineProfileDetails
+            profile={playerProfile}
+            today={calendar.today}
+            onSaveProfile={saveProfile}
+            onClose={() => setProfilePanelOpen(false)}
+          />
+        ) : selectedIncomeCell ? (
+          <TimelineIncomeDetails
+            cell={selectedIncomeCell}
+            profile={playerProfile}
+            onOpenProfile={() => {
+              setSelectedIncomeKey(null);
+              setProfilePanelOpen(true);
+            }}
+            onClose={() => setSelectedIncomeKey(null)}
+          />
+        ) : selectedEntry ? (
           <TimelineEntryDetails
             entry={selectedEntry}
             timeZone={calendar.timeZone}
             onClose={() => setSelectedKey(null)}
           />
         ) : (
-          <TimelineDetailsPlaceholder />
+          <TimelineDetailsPlaceholder
+            profile={playerProfile}
+            today={calendar.today}
+            onSaveProfile={saveProfile}
+          />
         )}
       </div>
 
