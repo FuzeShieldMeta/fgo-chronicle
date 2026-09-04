@@ -1,48 +1,47 @@
+import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
+import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { api } from "~/trpc/server";
 
-function twoYearsFromNow() {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() + 2);
-  return date;
+function paddedTwoYearWindow(now: Date) {
+  const from = new Date(now);
+  from.setUTCDate(
+    from.getUTCDate() - timelineSchedule.queryBoundaryPaddingDays,
+  );
+  from.setUTCHours(0, 0, 0, 0);
+
+  const to = new Date(from);
+  to.setUTCFullYear(to.getUTCFullYear() + timelineSchedule.yearsAhead);
+  to.setUTCDate(
+    to.getUTCDate() + timelineSchedule.queryBoundaryPaddingDays * 2,
+  );
+  to.setUTCHours(23, 59, 59, 999);
+
+  return { from, to };
 }
 
 export default async function TimelinePage() {
-  const banners = await api.banner.upcoming({
-    from: new Date(),
-    to: twoYearsFromNow(),
-  });
+  const now = new Date();
+  const entries = await api.timeline.list(paddedTwoYearWindow(now));
+  const initialCalendar = {
+    today: now.toISOString().slice(0, 10),
+    timeZone: "UTC",
+  };
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <h1 className="text-4xl font-bold">Upcoming banners</h1>
+    <main id="main-content" className="timeline-page">
+      <header className="timeline-app-bar">
+        <span className="timeline-brand-mark" aria-hidden="true" />
+        <div className="timeline-app-title">
+          <h1>FGO Chronicle</h1>
+          <p>Global schedule planner</p>
+        </div>
 
-      <div className="mt-8 space-y-4">
-        {banners.map((banner) => (
-          <article key={banner.id} className="rounded-xl border p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold">{banner.name}</h2>
+        <p className="timeline-intro">
+          Events, summoning campaigns, and dated rewards for the next two years.
+        </p>
+      </header>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  {banner.startsAt.toLocaleDateString()} –{" "}
-                  {banner.endsAt?.toLocaleDateString() ?? "Unknown"}
-                </p>
-              </div>
-
-              <span>{banner.status}</span>
-            </div>
-
-            <ul className="mt-4">
-              {banner.featured.map(({ servant, soloRateUp }) => (
-                <li key={servant.id}>
-                  {servant.name} · {servant.className}
-                  {soloRateUp ? " · Solo rate-up" : ""}
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </div>
+      <TimelineSchedule entries={entries} initialCalendar={initialCalendar} />
     </main>
   );
 }

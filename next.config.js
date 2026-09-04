@@ -5,6 +5,25 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "static.atlasacademy.io",
+        port: "",
+        pathname: "/JP/Banner/**",
+        search: "",
+      },
+      {
+        protocol: "https",
+        hostname: "static.atlasacademy.io",
+        port: "",
+        pathname: "/NA/Banner/**",
+        search: "",
+      },
+    ],
+  },
+};
 
 export default config;
