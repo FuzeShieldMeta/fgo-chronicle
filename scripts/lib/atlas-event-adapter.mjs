@@ -7,6 +7,7 @@ const REWARD_ITEMS = new Map([
   [6999, "CRYSTALLIZED_LORE"],
   [7999, "HOLY_GRAIL"],
 ]);
+const MANA_PRISM_ITEM_ID = 3;
 
 /** @typedef {Record<string, any>} AtlasRecord */
 /** @typedef {{region: string, retrievedAt: string, contentHash: string | null, family: {sourceKey: string, name: string}}} AtlasAdapterOptions */
@@ -145,8 +146,12 @@ function extractShopRewards(raw, eventSourceKey, evidenceSourceKey, url) {
     if (rewards.length === 0) return [];
 
     const sourceKey = `atlas:${raw.id}:shop:${shop.id}`;
-    const cost = shop.cost?.item?.name
-      ? ` Spend ${shop.cost.amount} ${shop.cost.item.name}.`
+    const costItemName = shop.cost?.item?.name;
+    const isManaPrismExchange =
+      shop.cost?.item?.id === MANA_PRISM_ITEM_ID ||
+      (typeof costItemName === "string" && /mana prism/i.test(costItemName));
+    const cost = costItemName
+      ? ` Each exchange costs ${shop.cost.amount} ${costItemName}.`
       : "";
     return [
       {
@@ -154,7 +159,7 @@ function extractShopRewards(raw, eventSourceKey, evidenceSourceKey, url) {
         eventSourceKey,
         evidenceSourceKey,
         name: shop.name || `Event shop item ${shop.id}`,
-        type: "EVENT_SHOP",
+        type: isManaPrismExchange ? "MANA_PRISM_EXCHANGE" : "EVENT_SHOP",
         status: "CURATED",
         evidenceUrl: url,
         lastVerifiedAt: null,

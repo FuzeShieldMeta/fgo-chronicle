@@ -98,6 +98,7 @@ const rewardSourceSchema = z.object({
     "LOGIN_BONUS",
     "PRE_CAMPAIGN",
     "EVENT_SHOP",
+    "MANA_PRISM_EXCHANGE",
     "POINT_REWARD",
     "QUEST_CLEAR",
     "CHALLENGE_QUEST",

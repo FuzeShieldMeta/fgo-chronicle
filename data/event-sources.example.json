@@ -25,6 +25,14 @@
         "url": "https://fategrandorder.fandom.com/wiki/Dancing_Dragon_Castle_Pre-Release_Campaign_(US)",
         "retrievedAt": "2026-08-31T00:00:00.000Z",
         "contentHash": null
+      },
+      {
+        "sourceKey": "wiki:na:8th-anniversary-mana-prism-exchange",
+        "type": "WIKI",
+        "region": "NA",
+        "url": "https://fategrandorder.fandom.com/wiki/FGO_Festival_2025_~8th_Anniversary~_(US)/Main_Info",
+        "retrievedAt": "2026-09-04T00:00:00.000Z",
+        "contentHash": null
       }
     ],
     "events": [
@@ -43,7 +51,30 @@
         "sourceRegion": "NA"
       }
     ],
-    "rewardSources": [],
+    "rewardSources": [
+      {
+        "sourceKey": "wiki:na:8th-anniversary:limited-mana-prism-tickets",
+        "eventSourceKey": null,
+        "evidenceSourceKey": "wiki:na:8th-anniversary-mana-prism-exchange",
+        "name": "8th Anniversary limited Mana Prism exchange",
+        "type": "MANA_PRISM_EXCHANGE",
+        "status": "CURATED",
+        "evidenceUrl": "https://fategrandorder.fandom.com/wiki/FGO_Festival_2025_~8th_Anniversary~_(US)/Main_Info",
+        "lastVerifiedAt": "2026-09-04T00:00:00.000Z",
+        "rewards": [
+          {
+            "sourceKey": "wiki:na:8th-anniversary:limited-mana-prism-tickets:summon-ticket",
+            "itemType": "SUMMON_TICKET",
+            "amount": 10,
+            "expectedAt": "2025-07-18T03:59:59.000Z",
+            "nature": "CONDITIONAL",
+            "eligibility": "Exchange 100 Mana Prisms for all 10 limited Summon Tickets before the campaign shop closes.",
+            "defaultIncluded": true,
+            "reviewedAt": "2026-09-04T00:00:00.000Z"
+          }
+        ]
+      }
+    ],
     "issues": [
       {
         "sourceKey": "wiki:na:dancing-dragon-castle-pre-release:login-review",
@@ -54,6 +85,11 @@
         "sourceKey": "official:na:dancing-dragon-castle:companion-review",
         "severity": "INFO",
         "message": "Check the official announcement for login bonuses, social rewards, limited missions, and schedule changes that are not represented by the Atlas event record."
+      },
+      {
+        "sourceKey": "atlas:jp:limited-mana-prism-exchange-coverage",
+        "severity": "WARNING",
+        "message": "Atlas event shop records do not consistently include limited Da Vinci's Workshop Mana Prism exchanges. Add campaign ticket exchanges from a reviewed official or wiki source."
       }
     ]
   }
