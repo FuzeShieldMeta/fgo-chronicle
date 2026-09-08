@@ -5,9 +5,12 @@ import {
   parseAtlasEventExport,
   parseAtlasWarExport,
 } from "./jp-event-sync.mjs";
+import { parseAtlasMasterMissionExport } from "./jp-master-mission-sync.mjs";
 
 export const ATLAS_JP_WAR_EXPORT_URL =
   "https://api.atlasacademy.io/export/JP/nice_war_lang_en.json";
+export const ATLAS_JP_MASTER_MISSION_EXPORT_URL =
+  "https://api.atlasacademy.io/export/JP/nice_master_mission.json";
 
 /**
  * @param {string | undefined} value
@@ -121,6 +124,44 @@ export function parseAndValidateAtlasWarSource(body, minimumRecords) {
   return wars;
 }
 
+/** @param {string} body @param {number} minimumRecords */
+export function parseAndValidateAtlasMasterMissionSource(body, minimumRecords) {
+  let value;
+  try {
+    value = JSON.parse(body);
+  } catch (error) {
+    throw new Error("Atlas returned invalid Master Mission JSON.", {
+      cause: error,
+    });
+  }
+
+  const missionSets = parseAtlasMasterMissionExport(value);
+  if (missionSets.length < minimumRecords) {
+    throw new Error(
+      `Atlas returned ${missionSets.length} Master Mission sets. The safety minimum is ${minimumRecords}.`,
+    );
+  }
+
+  const setIds = new Set();
+  const missionIds = new Set();
+  for (const missionSet of missionSets) {
+    if (setIds.has(missionSet.id)) {
+      throw new Error(
+        `Atlas returned a duplicate Master Mission set id: ${missionSet.id}.`,
+      );
+    }
+    setIds.add(missionSet.id);
+    for (const mission of missionSet.missions) {
+      if (missionIds.has(mission.id)) {
+        throw new Error(
+          `Atlas returned a duplicate Master Mission id: ${mission.id}.`,
+        );
+      }
+      missionIds.add(mission.id);
+    }
+  }
+  return missionSets;
+}
 
 /**
  * @param {{sourceFile: string | null}} options
@@ -160,4 +201,30 @@ export async function loadJpWarSource(options, dependencies = {}) {
   const env = dependencies.env ?? process.env;
   const url = env.ATLAS_JP_WAR_EXPORT_URL?.trim();
   return fetchTextWithRetry(url || ATLAS_JP_WAR_EXPORT_URL, dependencies);
+}
+
+/**
+ * @param {{masterMissionSourceFile?: string | null}} options
+ * @param {{
+ *   env?: Record<string, string | undefined>,
+ *   fetchFn?: (url: string, init: Record<string, any>) => Promise<{ok: boolean, status: number, text: () => Promise<string>}>,
+ *   readFileFn?: (path: string, encoding: "utf8") => Promise<string>,
+ *   delayFn?: (milliseconds: number) => Promise<void>,
+ *   timeoutSignal?: () => AbortSignal | undefined
+ * }} [dependencies]
+ */
+export async function loadJpMasterMissionSource(options, dependencies = {}) {
+  if (options.masterMissionSourceFile) {
+    return (dependencies.readFileFn ?? readFile)(
+      options.masterMissionSourceFile,
+      "utf8",
+    );
+  }
+
+  const env = dependencies.env ?? process.env;
+  const url = env.ATLAS_JP_MASTER_MISSION_EXPORT_URL?.trim();
+  return fetchTextWithRetry(
+    url || ATLAS_JP_MASTER_MISSION_EXPORT_URL,
+    dependencies,
+  );
 }
