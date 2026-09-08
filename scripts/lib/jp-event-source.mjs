@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import {
   ATLAS_JP_EVENT_EXPORT_URL,
   parseAtlasEventExport,
+  parseAtlasWarExport,
 } from "./jp-event-sync.mjs";
+
+export const ATLAS_JP_WAR_EXPORT_URL =
+  "https://api.atlasacademy.io/export/JP/nice_war_lang_en.json";
 
 /**
  * @param {string | undefined} value
@@ -91,6 +95,33 @@ export function parseAndValidateAtlasSource(body, minimumRecords) {
   return events;
 }
 
+/** @param {string} body @param {number} minimumRecords */
+export function parseAndValidateAtlasWarSource(body, minimumRecords) {
+  let value;
+  try {
+    value = JSON.parse(body);
+  } catch (error) {
+    throw new Error("Atlas returned invalid war JSON.", { cause: error });
+  }
+
+  const wars = parseAtlasWarExport(value);
+  if (wars.length < minimumRecords) {
+    throw new Error(
+      `Atlas returned ${wars.length} wars. The safety minimum is ${minimumRecords}.`,
+    );
+  }
+
+  const ids = new Set();
+  for (const war of wars) {
+    if (ids.has(war.id)) {
+      throw new Error(`Atlas returned a duplicate war id: ${war.id}.`);
+    }
+    ids.add(war.id);
+  }
+  return wars;
+}
+
+
 /**
  * @param {{sourceFile: string | null}} options
  * @param {{
@@ -109,4 +140,24 @@ export async function loadJpEventSource(options, dependencies = {}) {
   const env = dependencies.env ?? process.env;
   const url = env.ATLAS_JP_EVENT_EXPORT_URL?.trim();
   return fetchTextWithRetry(url || ATLAS_JP_EVENT_EXPORT_URL, dependencies);
+}
+
+/**
+ * @param {{warSourceFile?: string | null}} options
+ * @param {{
+ *   env?: Record<string, string | undefined>,
+ *   fetchFn?: (url: string, init: Record<string, any>) => Promise<{ok: boolean, status: number, text: () => Promise<string>}>,
+ *   readFileFn?: (path: string, encoding: "utf8") => Promise<string>,
+ *   delayFn?: (milliseconds: number) => Promise<void>,
+ *   timeoutSignal?: () => AbortSignal | undefined
+ * }} [dependencies]
+ */
+export async function loadJpWarSource(options, dependencies = {}) {
+  if (options.warSourceFile) {
+    return (dependencies.readFileFn ?? readFile)(options.warSourceFile, "utf8");
+  }
+
+  const env = dependencies.env ?? process.env;
+  const url = env.ATLAS_JP_WAR_EXPORT_URL?.trim();
+  return fetchTextWithRetry(url || ATLAS_JP_WAR_EXPORT_URL, dependencies);
 }

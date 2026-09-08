@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-import { normalizeAtlasEvent } from "./atlas-event-adapter.mjs";
+import {
+  normalizeAtlasEvent,
+  normalizeAtlasWarRewards,
+} from "./atlas-event-adapter.mjs";
+import {
+  filterAtlasWarToEventWindow,
+  inferAtlasEventWarAssociations,
+} from "./atlas-event-war-association.mjs";
 
 export const ATLAS_JP_EVENT_EXPORT_URL =
   "https://api.atlasacademy.io/export/JP/nice_event_lang_en.json";
@@ -8,6 +15,83 @@ export const RECENT_UPDATE_DAYS = 90;
 const DAY_SECONDS = 24 * 60 * 60;
 const PERMANENT_RECORD_DAYS = 366;
 const WINDOW_OVERLAP_DAYS = 90;
+
+const atlasGiftSchema = z
+  .object({
+    id: z.number().int().optional(),
+    type: z.string(),
+    objectId: z.number().int(),
+    num: z.number().int(),
+  })
+  .passthrough();
+
+const atlasEventRewardSchema = z
+  .object({
+    groupId: z.number().int(),
+    point: z.number().int(),
+    gifts: z.array(atlasGiftSchema),
+  })
+  .passthrough();
+
+const atlasEventMissionSchema = z
+  .object({
+    id: z.number().int(),
+    name: z.string(),
+    dispNo: z.number().int(),
+    endedAt: z.number().int(),
+    gifts: z.array(atlasGiftSchema),
+  })
+  .passthrough();
+
+const atlasEventShopSchema = z
+  .object({
+    id: z.number().int(),
+    name: z.string(),
+    purchaseType: z.string(),
+    targetIds: z.array(z.number().int()),
+    setNum: z.number().int(),
+    limitNum: z.number().int(),
+    gifts: z.array(atlasGiftSchema),
+  })
+  .passthrough();
+
+const atlasLotterySchema = z
+  .object({
+    boxes: z.array(
+      z
+        .object({
+          gifts: z.array(atlasGiftSchema),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+
+const atlasQuestPresentSchema = z
+  .object({
+    phase: z.number().int().positive(),
+    condType: z.string(),
+    gifts: z.array(atlasGiftSchema),
+  })
+  .passthrough();
+
+const atlasWarQuestSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    originalName: z.string().optional(),
+    openedAt: z.number().int().positive(),
+    flags: z.array(z.string()),
+    gifts: z.array(atlasGiftSchema),
+    presents: z.array(atlasQuestPresentSchema).optional(),
+  })
+  .passthrough();
+
+const atlasWarSpotSchema = z
+  .object({
+    quests: z.array(atlasWarQuestSchema),
+  })
+  .passthrough();
 
 const atlasEventSchema = z
   .object({
@@ -18,10 +102,10 @@ const atlasEventSchema = z
     startedAt: z.number().int().positive(),
     endedAt: z.number().int().positive(),
     warIds: z.array(z.number().int().positive()).default([]),
-    rewards: z.array(z.unknown()).default([]),
-    missions: z.array(z.unknown()).default([]),
-    shop: z.array(z.unknown()).default([]),
-    lotteries: z.array(z.unknown()).default([]),
+    rewards: z.array(atlasEventRewardSchema).default([]),
+    missions: z.array(atlasEventMissionSchema).default([]),
+    shop: z.array(atlasEventShopSchema).default([]),
+    lotteries: z.array(atlasLotterySchema).default([]),
   })
   .passthrough()
   .refine(({ startedAt, endedAt }) => endedAt >= startedAt, {
@@ -31,9 +115,33 @@ const atlasEventSchema = z
 
 const atlasEventExportSchema = z.array(atlasEventSchema).min(1);
 
+const atlasWarSchema = z
+  .object({
+    id: z.number().int().positive(),
+    eventId: z.number().int().nonnegative().default(0),
+    spots: z.array(atlasWarSpotSchema).default([]),
+    questSelections: z
+      .array(
+        z
+          .object({
+            quest: atlasWarQuestSchema,
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+const atlasWarExportSchema = z.array(atlasWarSchema).min(1);
+
 /** @param {unknown} value */
 export function parseAtlasEventExport(value) {
   return atlasEventExportSchema.parse(value);
+}
+
+/** @param {unknown} value */
+export function parseAtlasWarExport(value) {
+  return atlasWarExportSchema.parse(value);
 }
 
 /**
@@ -74,7 +182,7 @@ function projectIso(value) {
   return addCalendarYears(new Date(String(value)), 2).toISOString();
 }
 
-/** @param {{type: string, name: string, originalName?: string | null, startedAt: number, endedAt: number}} event */
+/** @param {{type: string, name: string, originalName?: string | null, startedAt: number, endedAt: number, shop?: any[], warIds?: any[], rewards?: any[], missions?: any[], lotteries?: any[], pointGroups?: any[]}} event */
 export function classifyAtlasScheduleEvent(event) {
   if (!new Set(["eventQuest", "fortuneCampaign"]).has(event.type)) {
     return null;
@@ -88,6 +196,17 @@ export function classifyAtlasScheduleEvent(event) {
   ) {
     return null;
   }
+  const isShopOnlyInstant =
+    event.startedAt === event.endedAt &&
+    (event.shop?.length ?? 0) > 0 &&
+    [
+      event.warIds,
+      event.rewards,
+      event.missions,
+      event.lotteries,
+      event.pointGroups,
+    ].every((records) => (records?.length ?? 0) === 0);
+  if (isShopOnlyInstant) return "EVENT_SHOP";
   if (isPermanentRecord(event)) return "QUEST_RELEASE";
   if (
     event.type === "fortuneCampaign" ||
@@ -227,10 +346,27 @@ function projectedKey(key) {
 
 /**
  * @param {Array<z.infer<typeof atlasEventSchema>>} rawEvents
- * @param {{asOf: Date, contentHash: string, retrievedAt: string}} options
+ * @param {{asOf: Date, contentHash: string, retrievedAt: string, rawWars?: Array<Record<string, any>>, warContentHash?: string | null}} options
  */
 export function buildProjectedEventDataset(rawEvents, options) {
   const selected = selectRollingJpEvents(rawEvents, options.asOf);
+  const rawWars = /** @type {Array<Record<string, any>>} */ (
+    options.rawWars ?? []
+  );
+  const warsById = new Map(rawWars.map((war) => [war.id, war]));
+  const warsByEventId = new Map();
+  for (const war of rawWars) {
+    if (!war.eventId) continue;
+    const values = warsByEventId.get(war.eventId) ?? [];
+    values.push(war);
+    warsByEventId.set(war.eventId, values);
+  }
+  const inferredWars = inferAtlasEventWarAssociations(
+    selected,
+    rawWars,
+    classifyAtlasScheduleEvent,
+  );
+
   const normalized = selected.map((raw) => {
     const scheduleRaw = isPermanentRecord(raw)
       ? { ...raw, endedAt: raw.startedAt }
@@ -248,6 +384,73 @@ export function buildProjectedEventDataset(rawEvents, options) {
     const eventSourceKey = projectedKey(result.event.sourceKey);
     const familySourceKey = projectedKey(result.family.sourceKey);
     const eventType = classifyAtlasScheduleEvent(raw);
+
+    const referencedWarIds = new Set(raw.warIds);
+    const eventWars = new Map();
+    for (const warId of referencedWarIds) {
+      const war = warsById.get(warId);
+      if (war) {
+        eventWars.set(
+          war.id,
+          filterAtlasWarToEventWindow(war, raw, { preserveFullAudit: true }),
+        );
+      }
+    }
+    for (const war of warsByEventId.get(raw.id) ?? []) {
+      eventWars.set(
+        war.id,
+        filterAtlasWarToEventWindow(war, raw, { preserveFullAudit: true }),
+      );
+    }
+    const inferredWar = inferredWars.associations.get(raw.id);
+    if (inferredWar) eventWars.set(inferredWar.war.id, inferredWar.war);
+    const missingWarIds = [...referencedWarIds].filter(
+      (warId) => !warsById.has(warId),
+    );
+    const missingWarIssues = missingWarIds.map((warId) => ({
+      sourceKey: projectedKey(`atlas:JP:event:${raw.id}:missing-war:${warId}`),
+      severity: "WARNING",
+      message: `${raw.name} referenced war ${warId}, but that war was absent from the Atlas export. Quest rewards require review.`,
+    }));
+    const inferredWarIssues = inferredWar
+      ? [
+          {
+            sourceKey: projectedKey(
+              `atlas:JP:event:${raw.id}:inferred-war:${inferredWar.war.id}`,
+            ),
+            severity: "WARNING",
+            message: `${raw.name} was linked to Atlas war ${inferredWar.war.id} from ${inferredWar.exactOpeningQuests} quest opening time match${inferredWar.exactOpeningQuests === 1 ? "" : "es"}. The extracted rewards are unreviewed.`,
+          },
+        ]
+      : [];
+    const unresolvedWarIssues = inferredWars.ambiguousEventIds.has(raw.id)
+      ? [
+          {
+            sourceKey: projectedKey(`atlas:JP:event:${raw.id}:ambiguous-war`),
+            severity: "WARNING",
+            message: `${raw.name} matched more than one Atlas war at its opening time. Quest rewards require review.`,
+          },
+        ]
+      : inferredWars.unresolvedEventIds.has(raw.id)
+        ? [
+            {
+              sourceKey: projectedKey(`atlas:JP:event:${raw.id}:missing-war`),
+              severity: "WARNING",
+              message: `${raw.name} has no safely inferred Atlas war. Quest rewards require review.`,
+            },
+          ]
+        : [];
+    const warResults = [...eventWars.values()].map((war) =>
+      normalizeAtlasWarRewards(war, {
+        region: "JP",
+        retrievedAt: options.retrievedAt,
+        contentHash: options.warContentHash ?? null,
+        eventId: raw.id,
+        eventSourceKey,
+        eventStartsAt: raw.startedAt,
+        eventEndsAt: raw.endedAt,
+      }),
+    );
 
     return {
       source: result.source,
@@ -271,7 +474,11 @@ export function buildProjectedEventDataset(rawEvents, options) {
         lastSyncedAt: options.retrievedAt,
         sourceContentHash: options.contentHash,
       },
-      rewardSources: result.rewardSources.map((source) => {
+      sources: [result.source, ...warResults.map(({ source }) => source)],
+      rewardSources: [
+        ...result.rewardSources,
+        ...warResults.flatMap(({ rewardSources }) => rewardSources),
+      ].map((source) => {
         const sourceKey = projectedKey(source.sourceKey);
         return {
           ...source,
@@ -286,12 +493,99 @@ export function buildProjectedEventDataset(rawEvents, options) {
           })),
         };
       }),
-      issues: result.issues.map((issue) => ({
-        ...issue,
-        sourceKey: projectedKey(issue.sourceKey),
-      })),
+      issues: [
+        ...result.issues.map((issue) => ({
+          ...issue,
+          sourceKey: projectedKey(issue.sourceKey),
+        })),
+        ...warResults.flatMap(({ issues }) =>
+          issues.map((issue) => ({
+            ...issue,
+            sourceKey: projectedKey(issue.sourceKey),
+          })),
+        ),
+        ...missingWarIssues,
+        ...inferredWarIssues,
+        ...unresolvedWarIssues,
+      ],
+      eventAudit: result.audit,
+      playableEvent:
+        eventType !== null &&
+        new Set(["MAIN_EVENT", "QUEST_RELEASE"]).has(eventType),
+      warAudit: {
+        checkedWarIds: [...eventWars.keys()],
+        rewardedWarIds: [...eventWars.values()]
+          .filter(
+            (_war, index) => (warResults[index]?.rewardSources.length ?? 0) > 0,
+          )
+          .map(({ id }) => id),
+        rewardDefinitions: warResults.reduce(
+          (count, warResult) =>
+            count +
+            warResult.rewardSources.reduce(
+              (sourceCount, source) => sourceCount + source.rewards.length,
+              0,
+            ),
+          0,
+        ),
+        trackedGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.trackedGiftLocations ?? 0),
+          0,
+        ),
+        questPresentLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.questPresentLocations ?? 0),
+          0,
+        ),
+        ignoredSelectionGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.ignoredSelectionGiftLocations ?? 0),
+          0,
+        ),
+        ignoredSpotGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.ignoredSpotGiftLocations ?? 0),
+          0,
+        ),
+        eligibleSelectionGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.eligibleSelectionGiftLocations ?? 0),
+          0,
+        ),
+        replacementGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.replacementGiftLocations ?? 0),
+          0,
+        ),
+        unknownGiftLocations: warResults.reduce(
+          (count, warResult) =>
+            count + (warResult.audit?.unknownGiftLocations ?? 0),
+          0,
+        ),
+        missingWarIds,
+        inferredWarId: inferredWar?.war.id ?? null,
+        unresolvedInferredWar: inferredWars.unresolvedEventIds.has(raw.id),
+        ambiguousInferredWar: inferredWars.ambiguousEventIds.has(raw.id),
+        shadowedByFiniteRelease:
+          inferredWars.shadowedEventIds?.has(raw.id) ?? false,
+      },
     };
   });
+
+  const sources = [
+    ...new Map(
+      normalized
+        .flatMap(({ sources: eventSources }) => eventSources)
+        .map((source) => [source.sourceKey, source]),
+    ).values(),
+  ];
+  const checkedWarIds = new Set(
+    normalized.flatMap(({ warAudit }) => warAudit.checkedWarIds),
+  );
+  const rewardedWarIds = new Set(
+    normalized.flatMap(({ warAudit }) => warAudit.rewardedWarIds),
+  );
 
   return {
     schemaVersion: 1,
@@ -301,7 +595,7 @@ export function buildProjectedEventDataset(rawEvents, options) {
       reviewedAt: null,
       note: "Schedule dates publish automatically. Extracted rewards remain marked as unreviewed.",
     },
-    sources: normalized.map(({ source }) => source),
+    sources,
     families: normalized.map(({ family }) => family),
     events: normalized.map(({ event }) => event),
     rewardSources: normalized.flatMap(({ rewardSources }) => rewardSources),
@@ -310,6 +604,93 @@ export function buildProjectedEventDataset(rawEvents, options) {
       fetched: rawEvents.length,
       selected: selected.length,
       excluded: rawEvents.length - selected.length,
+      trackedEventGiftLocations: normalized.reduce(
+        (count, { eventAudit }) =>
+          count + (eventAudit?.trackedGiftLocations ?? 0),
+        0,
+      ),
+      trackedEventShopTargets: normalized.reduce(
+        (count, { eventAudit }) =>
+          count + (eventAudit?.trackedShopTargets ?? 0),
+        0,
+      ),
+      unknownEventGiftLocations: normalized.reduce(
+        (count, { eventAudit }) =>
+          count + (eventAudit?.unknownGiftLocations ?? 0),
+        0,
+      ),
+      eventsWithWarsChecked: normalized.filter(
+        ({ warAudit }) => warAudit.checkedWarIds.length > 0,
+      ).length,
+      playableEventsSelected: normalized.filter(
+        ({ playableEvent }) => playableEvent,
+      ).length,
+      playableEventsWithWarsChecked: normalized.filter(
+        ({ playableEvent, warAudit }) =>
+          playableEvent && warAudit.checkedWarIds.length > 0,
+      ).length,
+      playableEventsWithoutSafeWar: normalized.filter(
+        ({ playableEvent, warAudit }) =>
+          playableEvent &&
+          warAudit.checkedWarIds.length === 0 &&
+          !warAudit.shadowedByFiniteRelease,
+      ).length,
+      playableEventsShadowedByFiniteRelease: normalized.filter(
+        ({ playableEvent, warAudit }) =>
+          playableEvent && warAudit.shadowedByFiniteRelease,
+      ).length,
+      eventWarAssociationsChecked: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.checkedWarIds.length,
+        0,
+      ),
+      uniqueWarsChecked: checkedWarIds.size,
+      warsWithTrackedRewards: rewardedWarIds.size,
+      warRewardDefinitions: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.rewardDefinitions,
+        0,
+      ),
+      trackedWarGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.trackedGiftLocations,
+        0,
+      ),
+      questPresentGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.questPresentLocations,
+        0,
+      ),
+      ignoredSelectionGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.ignoredSelectionGiftLocations,
+        0,
+      ),
+      ignoredSpotGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.ignoredSpotGiftLocations,
+        0,
+      ),
+      eligibleSelectionGiftLocations: normalized.reduce(
+        (count, { warAudit }) =>
+          count + warAudit.eligibleSelectionGiftLocations,
+        0,
+      ),
+      replacementGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.replacementGiftLocations,
+        0,
+      ),
+      unknownWarGiftLocations: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.unknownGiftLocations,
+        0,
+      ),
+      missingReferencedWars: normalized.reduce(
+        (count, { warAudit }) => count + warAudit.missingWarIds.length,
+        0,
+      ),
+      inferredWarAssociations: normalized.filter(
+        ({ warAudit }) => warAudit.inferredWarId !== null,
+      ).length,
+      unresolvedPlayableWarAssociations: normalized.filter(
+        ({ warAudit }) => warAudit.unresolvedInferredWar,
+      ).length,
+      ambiguousPlayableWarAssociations: normalized.filter(
+        ({ warAudit }) => warAudit.ambiguousInferredWar,
+      ).length,
     },
   };
 }

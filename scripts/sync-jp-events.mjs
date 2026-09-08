@@ -4,7 +4,12 @@ import { runJpEventSync } from "./lib/jp-event-sync-runner.mjs";
 const db = new PrismaClient();
 
 function parseArguments(values) {
-  const options = { dryRun: false, asOf: new Date(), sourceFile: null };
+  const options = {
+    dryRun: false,
+    asOf: new Date(),
+    sourceFile: null,
+    warSourceFile: null,
+  };
   for (const value of values) {
     if (value === "--dry-run") {
       options.dryRun = true;
@@ -19,6 +24,8 @@ function parseArguments(values) {
       }
     } else if (value.startsWith("--source-file=")) {
       options.sourceFile = value.slice("--source-file=".length);
+    } else if (value.startsWith("--war-source-file=")) {
+      options.warSourceFile = value.slice("--war-source-file=".length);
     } else {
       throw new Error(`Unknown argument: ${value}`);
     }

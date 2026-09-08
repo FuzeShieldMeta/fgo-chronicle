@@ -4,7 +4,9 @@ import { reconcileProjectedJpEvents } from "./jp-event-reconciler.mjs";
 import { buildProjectedEventDataset } from "./jp-event-sync.mjs";
 import {
   loadJpEventSource,
+  loadJpWarSource,
   parseAndValidateAtlasSource,
+  parseAndValidateAtlasWarSource,
   parseIntegerSetting,
 } from "./jp-event-source.mjs";
 
@@ -36,13 +38,15 @@ async function markSyncRunFailed(db, syncRunId, error) {
 
 /**
  * @param {Record<string, any>} db
- * @param {{dryRun: boolean, asOf: Date, sourceFile: string | null}} options
+ * @param {{dryRun: boolean, asOf: Date, sourceFile: string | null, warSourceFile?: string | null}} options
  * @param {{
  *   env?: Record<string, string | undefined>,
  *   fetchFn?: (url: string, init: Record<string, any>) => Promise<{ok: boolean, status: number, text: () => Promise<string>}>,
  *   readFileFn?: (path: string, encoding: "utf8") => Promise<string>,
  *   delayFn?: (milliseconds: number) => Promise<void>,
  *   timeoutSignal?: () => AbortSignal | undefined,
+ *   sourceBody?: string,
+ *   warSourceBody?: string,
  *   now?: () => Date,
  *   reconcileFn?: typeof reconcileProjectedJpEvents
  * }} [dependencies]
@@ -73,20 +77,47 @@ export async function runJpEventSync(db, options, dependencies = {}) {
       defaultValue: 25,
       allowZero: true,
     });
-    const body = await loadJpEventSource(options, {
-      env,
-      fetchFn: dependencies.fetchFn,
-      readFileFn: dependencies.readFileFn,
-      delayFn: dependencies.delayFn,
-      timeoutSignal: dependencies.timeoutSignal,
-    });
+    const maxRewardChanges = parseIntegerSetting(
+      env.JP_EVENT_SYNC_MAX_REWARD_CHANGES,
+      {
+        name: "JP_EVENT_SYNC_MAX_REWARD_CHANGES",
+        defaultValue: 250,
+        allowZero: true,
+      },
+    );
+    const minimumWarRecords = parseIntegerSetting(
+      env.JP_WAR_SYNC_MIN_EXPORT_RECORDS,
+      { name: "JP_WAR_SYNC_MIN_EXPORT_RECORDS", defaultValue: 200 },
+    );
+    const body =
+      dependencies.sourceBody ??
+      (await loadJpEventSource(options, {
+        env,
+        fetchFn: dependencies.fetchFn,
+        readFileFn: dependencies.readFileFn,
+        delayFn: dependencies.delayFn,
+        timeoutSignal: dependencies.timeoutSignal,
+      }));
     const contentHash = `sha256:${createHash("sha256").update(body).digest("hex")}`;
+    const warBody =
+      dependencies.warSourceBody ??
+      (await loadJpWarSource(options, {
+        env,
+        fetchFn: dependencies.fetchFn,
+        readFileFn: dependencies.readFileFn,
+        delayFn: dependencies.delayFn,
+        timeoutSignal: dependencies.timeoutSignal,
+      }));
+    const warContentHash = `sha256:${createHash("sha256").update(warBody).digest("hex")}`;
     const rawEvents = parseAndValidateAtlasSource(body, minimumRecords);
+    const rawWars = parseAndValidateAtlasWarSource(warBody, minimumWarRecords);
     const retrievedAt = now().toISOString();
     const dataset = buildProjectedEventDataset(rawEvents, {
       asOf: options.asOf,
       retrievedAt,
       contentHash,
+      warContentHash,
+      rawWars,
     });
     if (dataset.events.length === 0) {
       throw new Error("The rolling JP window contains no supported events.");
@@ -99,6 +130,7 @@ export async function runJpEventSync(db, options, dependencies = {}) {
         asOf: options.asOf,
         dryRun: options.dryRun,
         maxUpdates,
+        maxRewardChanges,
         syncRunId,
       },
     );
