@@ -100,6 +100,7 @@ const rewardSourceSchema = z.object({
     "EVENT_SHOP",
     "MANA_PRISM_EXCHANGE",
     "POINT_REWARD",
+    "LOTTERY",
     "QUEST_CLEAR",
     "CHALLENGE_QUEST",
     "LIMITED_MISSION",

@@ -1,0 +1,1 @@
+ALTER TYPE "RewardSourceType" ADD VALUE 'LOTTERY';
