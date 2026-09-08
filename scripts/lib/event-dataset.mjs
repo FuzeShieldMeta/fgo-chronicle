@@ -89,32 +89,43 @@ const rewardSchema = z.object({
   reviewedAt: nullableDate.optional().default(null),
 });
 
-const rewardSourceSchema = z.object({
-  sourceKey,
-  eventSourceKey: sourceKey.nullable(),
-  evidenceSourceKey: sourceKey,
-  name: z.string().trim().min(1),
-  type: z.enum([
-    "LOGIN_BONUS",
-    "PRE_CAMPAIGN",
-    "EVENT_SHOP",
-    "MANA_PRISM_EXCHANGE",
-    "POINT_REWARD",
-    "LOTTERY",
-    "QUEST_CLEAR",
-    "CHALLENGE_QUEST",
-    "LIMITED_MISSION",
-    "MASTER_MISSION",
-    "SOCIAL_CAMPAIGN",
-    "MAINTENANCE",
-    "LOGIN_MILESTONE",
-    "OTHER",
-  ]),
-  status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
-  evidenceUrl: z.string().url(),
-  lastVerifiedAt: nullableDate,
-  rewards: z.array(rewardSchema).min(1),
-});
+const rewardSourceSchema = z
+  .object({
+    sourceKey,
+    eventSourceKey: sourceKey.nullable(),
+    externalEventSourceKey: sourceKey.nullable().optional().default(null),
+    evidenceSourceKey: sourceKey,
+    name: z.string().trim().min(1),
+    type: z.enum([
+      "LOGIN_BONUS",
+      "PRE_CAMPAIGN",
+      "EVENT_SHOP",
+      "MANA_PRISM_EXCHANGE",
+      "POINT_REWARD",
+      "LOTTERY",
+      "QUEST_CLEAR",
+      "CHALLENGE_QUEST",
+      "LIMITED_MISSION",
+      "MASTER_MISSION",
+      "SOCIAL_CAMPAIGN",
+      "MAINTENANCE",
+      "LOGIN_MILESTONE",
+      "OTHER",
+    ]),
+    status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
+    evidenceUrl: z.string().url(),
+    lastVerifiedAt: nullableDate,
+    rewards: z.array(rewardSchema).min(1),
+  })
+  .refine(
+    ({ eventSourceKey, externalEventSourceKey }) =>
+      !(eventSourceKey && externalEventSourceKey),
+    {
+      message:
+        "A reward source cannot use both an in-dataset event and an external event reference.",
+      path: ["externalEventSourceKey"],
+    },
+  );
 
 const reviewIssueSchema = z.object({
   sourceKey,
@@ -180,6 +191,23 @@ const eventDatasetSchema = z
     });
 
     dataset.rewardSources.forEach((source, index) => {
+      const rewardKeys = new Set();
+      source.rewards.forEach((reward, rewardIndex) => {
+        if (rewardKeys.has(reward.sourceKey)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate reward source key: ${reward.sourceKey}`,
+            path: [
+              "rewardSources",
+              index,
+              "rewards",
+              rewardIndex,
+              "sourceKey",
+            ],
+          });
+        }
+        rewardKeys.add(reward.sourceKey);
+      });
       if (source.eventSourceKey && !eventKeys.has(source.eventSourceKey)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

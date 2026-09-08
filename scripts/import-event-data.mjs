@@ -66,12 +66,14 @@ async function importEvent(event, familyIds) {
   });
 }
 
-async function importRewardSource(source, eventIds) {
+async function importRewardSource(source, eventIds, externalEventIds) {
   return db.$transaction(async (transaction) => {
     const data = {
       eventId: source.eventSourceKey
         ? eventIds.get(source.eventSourceKey)
-        : null,
+        : source.externalEventSourceKey
+          ? externalEventIds.get(source.externalEventSourceKey)
+          : null,
       name: source.name,
       type: source.type,
       status: source.status,
@@ -118,6 +120,28 @@ async function main() {
   const dataset = await loadDataset();
   const familyIds = new Map();
   const eventIds = new Map();
+  const externalEventKeys = [
+    ...new Set(
+      dataset.rewardSources.flatMap(({ externalEventSourceKey }) =>
+        externalEventSourceKey ? [externalEventSourceKey] : [],
+      ),
+    ),
+  ];
+  const externalEvents = await db.event.findMany({
+    where: { sourceKey: { in: externalEventKeys } },
+    select: { id: true, sourceKey: true },
+  });
+  const externalEventIds = new Map(
+    externalEvents.map(({ sourceKey, id }) => [sourceKey, id]),
+  );
+  const missingExternalEvents = externalEventKeys.filter(
+    (sourceKey) => !externalEventIds.has(sourceKey),
+  );
+  if (missingExternalEvents.length > 0) {
+    throw new Error(
+      `Referenced events have not been imported: ${missingExternalEvents.join(", ")}.`,
+    );
+  }
 
   console.log(
     `Importing approved event dataset generated at ${dataset.generatedAt}`,
@@ -134,7 +158,7 @@ async function main() {
   }
 
   for (const source of dataset.rewardSources) {
-    await importRewardSource(source, eventIds);
+    await importRewardSource(source, eventIds, externalEventIds);
   }
 
   for (const issue of dataset.issues) {
