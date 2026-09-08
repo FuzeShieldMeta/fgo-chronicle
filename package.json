@@ -8,6 +8,7 @@
     "check": "eslint . && tsc --noEmit",
     "data:import-banners": "node --env-file=.env scripts/import-banner-estimates.mjs",
     "data:import-events": "node --env-file=.env scripts/import-events.mjs",
+    "data:prepare-event-review": "node --env-file=.env scripts/prepare-event-review.mjs",
     "data:audit-event-coverage": "node --env-file=.env scripts/audit-event-coverage.mjs",
     "data:sync-event-schedule": "node --env-file=.env scripts/sync-event-schedule.mjs",
     "data:sync-jp-events": "node --env-file=.env scripts/sync-jp-events.mjs",
