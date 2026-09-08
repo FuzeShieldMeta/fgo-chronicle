@@ -19,6 +19,7 @@ db.sqlite
 /data/banner-estimates.json
 !/data/banner-estimates.example.json
 /data/event-sources.json
+/data/fandom-coverage.json
 /data/timeline-events.json
 
 # next.js

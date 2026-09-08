@@ -8,6 +8,8 @@
     "check": "eslint . && tsc --noEmit",
     "data:import-banners": "node --env-file=.env scripts/import-banner-estimates.mjs",
     "data:import-events": "node --env-file=.env scripts/import-events.mjs",
+    "data:audit-event-coverage": "node --env-file=.env scripts/audit-event-coverage.mjs",
+    "data:sync-event-schedule": "node --env-file=.env scripts/sync-event-schedule.mjs",
     "data:sync-jp-events": "node --env-file=.env scripts/sync-jp-events.mjs",
     "db:generate": "prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
