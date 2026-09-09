@@ -9,6 +9,7 @@ import {
   playerForecastProfileSchema,
   type PlayerForecastProfile,
 } from "~/app/timeline/_lib/player-forecast";
+import { useStoryCatalogue } from "./story-catalogue-provider";
 import { recurringIncomeRules } from "~/app/timeline/_lib/recurring-income-rules";
 
 export function PlayerForecastPanel({
@@ -20,6 +21,15 @@ export function PlayerForecastPanel({
   today: string;
   onSave: (profile: PlayerForecastProfile) => void;
 }) {
+  const catalogue = useStoryCatalogue();
+  const mainStoryChapters = catalogue.filter((chapter) => !chapter.optional);
+  const optionalStoryChapters = catalogue.filter((chapter) => chapter.optional);
+  const [selectedOptionalStories, setSelectedOptionalStories] = useState(
+    profile?.storyProgress?.optionalWarIds ?? [],
+  );
+  const allOptionalSelected = optionalStoryChapters.every((chapter) =>
+    selectedOptionalStories.includes(chapter.warId),
+  );
   const [editing, setEditing] = useState(profile === null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +41,15 @@ export function PlayerForecastPanel({
           Balances are counted from{" "}
           <time>{profile.snapshot.effectiveDate}</time>.
         </p>
-        <button type="button" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedOptionalStories(
+              profile.storyProgress?.optionalWarIds ?? [],
+            );
+            setEditing(true);
+          }}
+        >
           Edit starting balances
         </button>
       </section>
@@ -57,6 +75,12 @@ export function PlayerForecastPanel({
             : "";
         const result = playerForecastProfileSchema.safeParse({
           version: 2,
+          storyProgress: {
+            mainWarId: data.get("mainStory")
+              ? Number(data.get("mainStory"))
+              : null,
+            optionalWarIds: data.getAll("optionalStory").map(Number),
+          },
           snapshot: { effectiveDate: today, balances },
           cumulativeLoginCount: Number(data.get("cumulativeLoginCount")),
           consecutiveLoginDay: consecutiveLoginEntry
@@ -108,6 +132,61 @@ export function PlayerForecastPanel({
         ))}
       </div>
 
+      <fieldset className="timeline-story-progress">
+        <legend>Story progress</legend>
+        <label>
+          Main story completed through
+          <select
+            name="mainStory"
+            defaultValue={profile?.storyProgress?.mainWarId ?? ""}
+          >
+            <option value="">Not set</option>
+            {mainStoryChapters.map((chapter) => (
+              <option key={chapter.warId} value={chapter.warId}>
+                {chapter.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <small>
+          Earlier main stories are included. This checks story requirements, not
+          whether you have claimed a reward.
+        </small>
+        <details>
+          <summary>Other completed stories</summary>
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedOptionalStories(
+                allOptionalSelected
+                  ? []
+                  : optionalStoryChapters.map((chapter) => chapter.warId),
+              )
+            }
+          >
+            {allOptionalSelected ? "Clear all" : "Select all"}
+          </button>
+          {optionalStoryChapters.map((chapter) => (
+            <label className="timeline-profile-checkbox" key={chapter.warId}>
+              <input
+                type="checkbox"
+                name="optionalStory"
+                value={chapter.warId}
+                checked={selectedOptionalStories.includes(chapter.warId)}
+                onChange={(event) =>
+                  setSelectedOptionalStories((current) =>
+                    event.target.checked
+                      ? [...current, chapter.warId]
+                      : current.filter((id) => id !== chapter.warId),
+                  )
+                }
+              />
+              {chapter.name}
+            </label>
+          ))}
+        </details>
+      </fieldset>
+
       <label>
         Total login count <small>Rewards start at day 100</small>
         <input
@@ -146,10 +225,12 @@ export function PlayerForecastPanel({
           defaultChecked={profile?.includeMonthlyManaPrismTickets ?? true}
         />
         <span>
-          Include all {recurringIncomeRules.monthlyManaPrismExchange.maximumTickets}{" "}
-          monthly Mana Prism tickets
+          Include all{" "}
+          {recurringIncomeRules.monthlyManaPrismExchange.maximumTickets} monthly
+          Mana Prism tickets
           <small>
-            {" "}Costs{" "}
+            {" "}
+            Costs{" "}
             {recurringIncomeRules.monthlyManaPrismExchange.maximumTickets *
               recurringIncomeRules.monthlyManaPrismExchange
                 .manaPrismCostEach}{" "}

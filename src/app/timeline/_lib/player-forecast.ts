@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import { recurringIncomeRules } from "~/app/timeline/_lib/recurring-income-rules";
 
 export const forecastResourceTypes = [
@@ -24,6 +23,17 @@ const forecastBalancesSchema = z.object(
 
 export const playerForecastProfileSchema = z.object({
   version: z.literal(2),
+  storyProgress: z
+    .object({
+      mainWarId: z
+        .number()
+        .int()
+        .nonnegative()
+        .nullable()
+        .transform((id) => (id === 0 ? null : id)),
+      optionalWarIds: z.array(z.number().int().positive()),
+    })
+    .optional(),
   snapshot: z.object({
     effectiveDate: z
       .string()

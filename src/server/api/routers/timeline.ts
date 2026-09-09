@@ -1,3 +1,4 @@
+import storyChapters from "~/data/story-chapters.json";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -155,6 +156,8 @@ const rewardSourceSelect = {
       expectedAt: true,
       nature: true,
       eligibility: true,
+      storyWarId: true,
+      storyReleaseAt: true,
       defaultIncluded: true,
       reviewedAt: true,
     },
@@ -169,6 +172,8 @@ const incomeContributionSelect = {
   expectedAt: true,
   nature: true,
   eligibility: true,
+  storyWarId: true,
+  storyReleaseAt: true,
   defaultIncluded: true,
   reviewedAt: true,
   rewardSource: {
@@ -286,6 +291,12 @@ function relatedEntries(family: {
 }
 
 export const timelineRouter = createTRPCRouter({
+  stories: publicProcedure.query(async ({ ctx }) => {
+    const chapters = await ctx.db.storyChapter.findMany({
+      orderBy: [{ sortOrder: "asc" }, { warId: "asc" }],
+    });
+    return chapters.length ? chapters : storyChapters;
+  }),
   list: publicProcedure
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {

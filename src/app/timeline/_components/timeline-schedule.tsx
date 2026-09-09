@@ -1,6 +1,12 @@
 "use client";
+import {
+  StoryCatalogueContext,
+  useStoryCatalogue,
+} from "./story-catalogue-provider";
+import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -278,7 +284,20 @@ function CategoryRow({
   );
 }
 
-export function TimelineSchedule({
+export function TimelineSchedule(props: {
+  entries: TimelineEntry[];
+  incomeContributions: TimelineIncomeContribution[];
+  initialCalendar: LocalCalendar;
+  stories?: StoryChapter[];
+}) {
+  return (
+    <StoryCatalogueContext.Provider value={props.stories ?? storyChapters}>
+      <TimelineScheduleContent {...props} />
+    </StoryCatalogueContext.Provider>
+  );
+}
+
+function TimelineScheduleContent({
   entries,
   incomeContributions,
   initialCalendar,
@@ -287,6 +306,8 @@ export function TimelineSchedule({
   incomeContributions: TimelineIncomeContribution[];
   initialCalendar: LocalCalendar;
 }) {
+  const catalogue = useStoryCatalogue();
+  const router = useRouter();
   const [calendar, setCalendar] = useState(initialCalendar);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedIncomeKey, setSelectedIncomeKey] = useState<string | null>(
@@ -449,10 +470,12 @@ export function TimelineSchedule({
       playerProfile,
       calendar.timeZone,
       rewardPreferences,
+      catalogue,
     );
 
     return { days, layouts, incomeCells };
   }, [
+    catalogue,
     calendar,
     entries,
     incomeContributions,
@@ -480,9 +503,15 @@ export function TimelineSchedule({
     : null;
 
   function saveProfile(profile: PlayerForecastProfile) {
-    savePlayerForecastProfile(window.localStorage, profile);
     setPlayerProfile(profile);
+    try {
+      savePlayerForecastProfile(window.localStorage, profile);
+      setRewardStorageError(false);
+    } catch {
+      setRewardStorageError(true);
+    }
     setProfilePanelOpen(false);
+    router.refresh();
   }
 
   function saveRewardInclusion(rewardId: string, included: boolean) {
@@ -614,7 +643,7 @@ export function TimelineSchedule({
 
       {rewardStorageError ? (
         <p className="timeline-preference-notice" role="status">
-          Your browser could not save reward choices. Changes apply until you
+          Your browser could not save forecast settings. Changes apply until you
           reload this page.
         </p>
       ) : null}
@@ -757,6 +786,7 @@ export function TimelineSchedule({
         ) : selectedEntry ? (
           <TimelineEntryDetails
             entry={selectedEntry}
+            profile={playerProfile}
             timeZone={calendar.timeZone}
             rewardPreferences={rewardPreferences}
             onSetRewardInclusion={saveRewardInclusion}

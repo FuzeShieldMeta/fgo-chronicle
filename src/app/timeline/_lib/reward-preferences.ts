@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  hasCompletedStory,
+  storyChapters,
+  type StoryChapter,
+} from "~/app/timeline/_lib/story-progress";
+import type { PlayerForecastProfile } from "~/app/timeline/_lib/player-forecast";
 
 export const rewardPreferencesSchema = z.object({
   version: z.literal(1),
@@ -61,13 +67,42 @@ export function setRewardInclusion(
 }
 
 export function resolveRewardInclusion(
-  reward: { id: string; nature: string; defaultIncluded: boolean },
+  reward: {
+    id: string;
+    nature: string;
+    defaultIncluded: boolean;
+    storyWarId?: number | null;
+    storyReleaseAt?: Date | null;
+  },
   preferences: RewardPreferences,
+  profile?: PlayerForecastProfile | null,
+  catalogue: StoryChapter[] = storyChapters,
 ) {
   const hasPlayerDecision = Object.hasOwn(
     preferences.includedByRewardId,
     reward.id,
   );
+  if (!hasPlayerDecision && reward.storyWarId && profile?.storyProgress) {
+    const completed = hasCompletedStory(
+      reward.storyWarId,
+      profile.storyProgress,
+      catalogue,
+    );
+    if (completed !== null) {
+      const release = reward.storyReleaseAt?.toISOString().slice(0, 10);
+      const newlyAvailable =
+        release !== undefined && release > profile.snapshot.effectiveDate;
+      return {
+        included: completed && newlyAvailable,
+        inclusionResolved: completed,
+        inclusionReason: !completed
+          ? "Story not marked complete. Include manually if you plan to finish it."
+          : newlyAvailable
+            ? "Included from your story progress."
+            : "Story complete. This reward may already be in your starting balances. Include it only if it is unclaimed.",
+      };
+    }
+  }
   return {
     included: hasPlayerDecision
       ? (preferences.includedByRewardId[reward.id] ?? reward.defaultIncluded)

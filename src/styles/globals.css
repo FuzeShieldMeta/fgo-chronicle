@@ -1489,3 +1489,26 @@ button {
   color: var(--md-on-surface);
   background: var(--md-surface-high);
 }
+
+.timeline-story-progress {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--md-outline-variant);
+}
+.timeline-story-progress select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  border: 1px solid var(--md-outline);
+}
+.timeline-story-progress summary { cursor: pointer; padding: 8px 0; }
+.timeline-story-progress select:focus-visible,
+.timeline-story-progress summary:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}

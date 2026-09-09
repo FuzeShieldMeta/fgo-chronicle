@@ -22,9 +22,10 @@ function paddedTwoYearWindow(now: Date) {
 export default async function TimelinePage() {
   const now = new Date();
   const range = paddedTwoYearWindow(now);
-  const [entries, incomeContributions] = await Promise.all([
+  const [entries, incomeContributions, stories] = await Promise.all([
     api.timeline.list(range),
     api.timeline.income(range),
+    api.timeline.stories(),
   ]);
   const initialCalendar = {
     today: now.toISOString().slice(0, 10),
@@ -46,6 +47,7 @@ export default async function TimelinePage() {
       </header>
 
       <TimelineSchedule
+        stories={stories}
         entries={entries}
         incomeContributions={incomeContributions}
         initialCalendar={initialCalendar}

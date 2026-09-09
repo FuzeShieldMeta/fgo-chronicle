@@ -73,6 +73,7 @@ export function TimelineIncomeLedger({
                   }
                   style={style}
                   aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${cell.hasUnresolvedConditional ? " Contains a conditional reward that needs your choice." : ""}`}
+                  title={`Included income: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.`}
                   aria-pressed={selectedKey === cell.key}
                   onClick={() => onSelect(cell)}
                 >

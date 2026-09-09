@@ -1,3 +1,4 @@
+import { storyChapters, type StoryChapter } from "./story-progress";
 import { calendarDayKey } from "~/app/timeline/_lib/schedule-layout";
 import {
   createDefaultPlayerForecastProfile,
@@ -38,6 +39,8 @@ export type IncomeContribution = {
   expectedAt: Date;
   nature: "DETERMINISTIC" | "CONDITIONAL" | "CURATED_ESTIMATE";
   eligibility: string | null;
+  storyWarId?: number | null;
+  storyReleaseAt?: Date | null;
   defaultIncluded: boolean;
   reviewedAt: Date | null;
   assumption?: string | null;
@@ -64,6 +67,7 @@ export type IncomeLedgerCell = {
 export type ResolvedIncomeContribution = IncomeContribution & {
   included: boolean;
   inclusionResolved: boolean;
+  inclusionReason?: string;
 };
 
 const recurringRuleReviewedAt = new Date(recurringIncomeRuleSet.verifiedAt);
@@ -75,10 +79,12 @@ function cellKey(day: string, itemType: ForecastResourceType) {
 function resolveContribution(
   contribution: IncomeContribution,
   preferences: RewardPreferences,
+  profile: PlayerForecastProfile | null,
+  catalogue: StoryChapter[],
 ): ResolvedIncomeContribution {
   return {
     ...contribution,
-    ...resolveRewardInclusion(contribution, preferences),
+    ...resolveRewardInclusion(contribution, preferences, profile, catalogue),
   };
 }
 
@@ -247,6 +253,7 @@ export function buildIncomeLedger(
   profile: PlayerForecastProfile | null,
   timeZone: string,
   preferences: RewardPreferences = createRewardPreferences(),
+  catalogue: StoryChapter[] = storyChapters,
 ) {
   const effectiveProfile =
     profile ?? createDefaultPlayerForecastProfile(days[0] ?? "1970-01-01");
@@ -264,6 +271,8 @@ export function buildIncomeLedger(
     const contribution = resolveContribution(
       unresolvedContribution,
       preferences,
+      profile,
+      catalogue,
     );
     const day = calendarDayKey(contribution.expectedAt, "EXACT", timeZone);
     if (!daySet.has(day)) continue;

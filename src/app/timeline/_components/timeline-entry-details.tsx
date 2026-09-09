@@ -1,6 +1,8 @@
 "use client";
+import { useStoryCatalogue } from "./story-catalogue-provider";
 
 import Image from "next/image";
+import { englishRewardLabel } from "~/app/timeline/_lib/reward-labels";
 import { useState } from "react";
 
 import { PlayerForecastPanel } from "~/app/timeline/_components/player-forecast-panel";
@@ -224,6 +226,11 @@ export function TimelineIncomeDetails({
 
       <section className="timeline-detail-section">
         <h4>Change breakdown</h4>
+        <p>
+          Counted income: {signedAmount(cell.delta)}.{" "}
+          {cell.contributions.filter((reward) => !reward.included).length}{" "}
+          excluded rewards are not counted.
+        </p>
         <ul>
           {cell.contributions.map((contribution) => {
             const needsDecision =
@@ -237,7 +244,7 @@ export function TimelineIncomeDetails({
               >
                 <span>
                   {signedAmount(contribution.amount)} ·{" "}
-                  {contribution.rewardSource.name}
+                  {englishRewardLabel(contribution.rewardSource.name)}
                 </span>
                 <small>
                   {formatType(contribution.rewardSource.type)}
@@ -255,8 +262,18 @@ export function TimelineIncomeDetails({
                     default.
                   </small>
                 ) : null}
+                {contribution.inclusionReason ? (
+                  <small>{contribution.inclusionReason}</small>
+                ) : null}
+                {englishRewardLabel(contribution.rewardSource.name) !==
+                contribution.rewardSource.name ? (
+                  <details>
+                    <summary>Japanese source name</summary>
+                    {contribution.rewardSource.name}
+                  </details>
+                ) : null}
                 {contribution.eligibility ? (
-                  <small>{contribution.eligibility}</small>
+                  <small>{englishRewardLabel(contribution.eligibility)}</small>
                 ) : null}
                 {contribution.assumption ? (
                   <small>Assumption: {contribution.assumption}</small>
@@ -271,7 +288,7 @@ export function TimelineIncomeDetails({
                 {contribution.nature === "CONDITIONAL" ? (
                   <RewardInclusionControls
                     rewardId={contribution.id}
-                    label={`${contribution.rewardSource.name}: ${contribution.amount} ${incomeResourceLabels[contribution.itemType]}`}
+                    label={`${englishRewardLabel(contribution.rewardSource.name)}: ${contribution.amount} ${incomeResourceLabels[contribution.itemType]}`}
                     included={contribution.included}
                     inclusionResolved={contribution.inclusionResolved}
                     onSetRewardInclusion={onSetRewardInclusion}
@@ -305,17 +322,20 @@ export function TimelineIncomeDetails({
 
 export function TimelineEntryDetails({
   entry,
+  profile,
   timeZone,
   rewardPreferences,
   onSetRewardInclusion,
   onClose,
 }: {
   entry: TimelineEntry;
+  profile?: PlayerForecastProfile | null;
   timeZone: string;
   rewardPreferences: RewardPreferences;
   onSetRewardInclusion: (rewardId: string, included: boolean) => void;
   onClose: () => void;
 }) {
+  const catalogue = useStoryCatalogue();
   const input =
     entry.kind === "EVENT"
       ? ({ kind: "EVENT", id: entry.id } as const)
@@ -454,14 +474,22 @@ export function TimelineEntryDetails({
             <ul>
               {details.data.rewardSources.map((source) => (
                 <li key={source.id}>
-                  <span>{source.name}</span>
+                  <span>{englishRewardLabel(source.name)}</span>
                   <small>{formatType(source.type)}</small>
+                  {englishRewardLabel(source.name) !== source.name ? (
+                    <details>
+                      <summary>Japanese source name</summary>
+                      {source.name}
+                    </details>
+                  ) : null}
                   {source.rewards.length > 0 ? (
                     <ul className="timeline-reward-list">
                       {source.rewards.map((reward) => {
                         const inclusion = resolveRewardInclusion(
                           reward,
                           rewardPreferences,
+                          profile,
+                          catalogue,
                         );
                         return (
                           <li
@@ -482,8 +510,13 @@ export function TimelineEntryDetails({
                                 Needs your choice. Excluded by default.
                               </small>
                             ) : null}
+                            {inclusion.inclusionReason ? (
+                              <small>{inclusion.inclusionReason}</small>
+                            ) : null}
                             {reward.eligibility ? (
-                              <small>{reward.eligibility}</small>
+                              <small>
+                                {englishRewardLabel(reward.eligibility)}
+                              </small>
                             ) : null}
                             {!reward.expectedAt ? (
                               <small>No forecast date is available yet.</small>
@@ -491,7 +524,7 @@ export function TimelineEntryDetails({
                             {reward.nature === "CONDITIONAL" ? (
                               <RewardInclusionControls
                                 rewardId={reward.id}
-                                label={`${source.name}: ${reward.amount} ${itemTypeNames[reward.itemType]}`}
+                                label={`${englishRewardLabel(source.name)}: ${reward.amount} ${itemTypeNames[reward.itemType]}`}
                                 {...inclusion}
                                 onSetRewardInclusion={onSetRewardInclusion}
                               />
