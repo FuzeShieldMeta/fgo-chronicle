@@ -9,6 +9,11 @@ import {
   recurringIncomeRules,
   recurringIncomeRuleSet,
 } from "~/app/timeline/_lib/recurring-income-rules";
+import {
+  createRewardPreferences,
+  resolveRewardInclusion,
+  type RewardPreferences,
+} from "~/app/timeline/_lib/reward-preferences";
 
 export const incomeResourceLabels: Record<ForecastResourceType, string> = {
   SAINT_QUARTZ: "Saint Quartz",
@@ -52,13 +57,29 @@ export type IncomeLedgerCell = {
   itemType: ForecastResourceType;
   delta: number;
   closingBalance: number | null;
-  contributions: IncomeContribution[];
+  hasUnresolvedConditional: boolean;
+  contributions: ResolvedIncomeContribution[];
+};
+
+export type ResolvedIncomeContribution = IncomeContribution & {
+  included: boolean;
+  inclusionResolved: boolean;
 };
 
 const recurringRuleReviewedAt = new Date(recurringIncomeRuleSet.verifiedAt);
 
 function cellKey(day: string, itemType: ForecastResourceType) {
   return `${day}:${itemType}`;
+}
+
+function resolveContribution(
+  contribution: IncomeContribution,
+  preferences: RewardPreferences,
+): ResolvedIncomeContribution {
+  return {
+    ...contribution,
+    ...resolveRewardInclusion(contribution, preferences),
+  };
 }
 
 function loginMilestoneContributions(
@@ -225,6 +246,7 @@ export function buildIncomeLedger(
   sourceContributions: IncomeContribution[],
   profile: PlayerForecastProfile | null,
   timeZone: string,
+  preferences: RewardPreferences = createRewardPreferences(),
 ) {
   const effectiveProfile =
     profile ?? createDefaultPlayerForecastProfile(days[0] ?? "1970-01-01");
@@ -238,7 +260,11 @@ export function buildIncomeLedger(
     ...monthlyManaPrismTicketContributions(days, effectiveProfile),
   ];
 
-  for (const contribution of contributions) {
+  for (const unresolvedContribution of contributions) {
+    const contribution = resolveContribution(
+      unresolvedContribution,
+      preferences,
+    );
     const day = calendarDayKey(contribution.expectedAt, "EXACT", timeZone);
     if (!daySet.has(day)) continue;
 
@@ -246,7 +272,10 @@ export function buildIncomeLedger(
     const existing = grouped.get(key);
     if (existing) {
       existing.contributions.push(contribution);
-      if (contribution.defaultIncluded) existing.delta += contribution.amount;
+      if (contribution.included) existing.delta += contribution.amount;
+      if (!contribution.inclusionResolved) {
+        existing.hasUnresolvedConditional = true;
+      }
       continue;
     }
 
@@ -254,8 +283,9 @@ export function buildIncomeLedger(
       key,
       day,
       itemType: contribution.itemType,
-      delta: contribution.defaultIncluded ? contribution.amount : 0,
+      delta: contribution.included ? contribution.amount : 0,
       closingBalance: null,
+      hasUnresolvedConditional: !contribution.inclusionResolved,
       contributions: [contribution],
     });
   }
