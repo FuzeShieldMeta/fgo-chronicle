@@ -1,3 +1,7 @@
+import {
+  buildStoryCatalogue,
+  reconcileStoryCatalogue,
+} from "./story-catalogue.mjs";
 import { parseEventDataset } from "./event-dataset.mjs";
 import { buildProjectedEventDataset } from "./jp-event-sync.mjs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
@@ -153,6 +157,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
     dependencies.parseAtlasMasterMissionFn ??
     parseAndValidateAtlasMasterMissionSource
   )(atlasMasterMissionBody, minimumMasterMissionRecords);
+  const storyCatalogue = buildStoryCatalogue(atlasWars);
   const warContentHash = `sha256:${createHash("sha256").update(atlasWarBody).digest("hex")}`;
   const masterMissionContentHash = `sha256:${createHash("sha256").update(atlasMasterMissionBody).digest("hex")}`;
   const retrievedAt = new Date().toISOString();
@@ -162,6 +167,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
     asOf: options.asOf,
     retrievedAt,
     contentHash: masterMissionContentHash,
+    rawWars: atlasWars,
   });
   const supportedAtlasEvents =
     /** @type {Parameters<typeof buildFandomCoverage>[0]} */ (atlasEvents);
@@ -189,6 +195,11 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
   );
   /** @param {Record<string, any>} publicationDb */
   const publish = async (publicationDb) => {
+    const storyReport = await reconcileStoryCatalogue(
+      publicationDb,
+      storyCatalogue,
+      options,
+    );
     const atlasReport = await (dependencies.runAtlasSyncFn ?? runJpEventSync)(
       publicationDb,
       options,
@@ -228,7 +239,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
         fandomPublicationDataset.masterMissionAssociations ?? [],
     });
 
-    return { atlasReport, fandomPublication, masterMissionReport };
+    return { atlasReport, fandomPublication, masterMissionReport, storyReport };
   };
   let publication;
   if (options.dryRun) {
@@ -295,6 +306,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
   }
 
   return {
+    stories: publication.storyReport,
     atlas: atlasReport,
     masterMissions: masterMissionReport,
     fandom: {

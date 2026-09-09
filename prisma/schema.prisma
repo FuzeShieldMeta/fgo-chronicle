@@ -186,6 +186,8 @@ model RewardDefinition {
   expectedAt      DateTime?
   nature          RewardNature
   eligibility     String?
+  storyWarId      Int?
+  storyReleaseAt  DateTime?
   defaultIncluded Boolean        @default(true)
   reviewedAt      DateTime?
   rewardSource    RewardSource   @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
@@ -265,4 +267,13 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model StoryChapter {
+  warId        Int     @id
+  name         String
+  originalName String
+  lastQuestId  Int     @unique
+  optional     Boolean
+  sortOrder    Int
 }

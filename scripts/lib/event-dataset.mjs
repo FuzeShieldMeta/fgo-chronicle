@@ -85,6 +85,8 @@ const rewardSchema = z.object({
   expectedAt: nullableDate,
   nature: z.enum(["DETERMINISTIC", "CONDITIONAL", "CURATED_ESTIMATE"]),
   eligibility: z.string().trim().min(1).nullable(),
+  storyWarId: z.number().int().positive().nullable().optional().default(null),
+  storyReleaseAt: nullableDate.optional().default(null),
   defaultIncluded: z.boolean(),
   reviewedAt: nullableDate.optional().default(null),
 });

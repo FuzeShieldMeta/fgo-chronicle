@@ -1,0 +1,247 @@
+[
+  {
+    "warId": 100,
+    "name": "Fuyuki",
+    "originalName": "特異点F\n炎上汚染都市 冬木",
+    "lastQuestId": 1000011,
+    "optional": false
+  },
+  {
+    "warId": 101,
+    "name": "Orleans",
+    "originalName": "第一特異点\n邪竜百年戦争 オルレアン",
+    "lastQuestId": 1000115,
+    "optional": false
+  },
+  {
+    "warId": 102,
+    "name": "Septem",
+    "originalName": "第二特異点\n永続狂気帝国 セプテム",
+    "lastQuestId": 1000215,
+    "optional": false
+  },
+  {
+    "warId": 103,
+    "name": "Okeanos",
+    "originalName": "第三特異点\n封鎖終局四海 オケアノス",
+    "lastQuestId": 1000314,
+    "optional": false
+  },
+  {
+    "warId": 104,
+    "name": "London",
+    "originalName": "第四特異点\n死界魔霧都市 ロンドン",
+    "lastQuestId": 1000413,
+    "optional": false
+  },
+  {
+    "warId": 105,
+    "name": "E Pluribus Unum",
+    "originalName": "第五特異点\n北米神話大戦 イ・プルーリバス・ウナム",
+    "lastQuestId": 1000522,
+    "optional": false
+  },
+  {
+    "warId": 106,
+    "name": "Camelot",
+    "originalName": "第六特異点\n神聖円卓領域 キャメロット",
+    "lastQuestId": 1000632,
+    "optional": false
+  },
+  {
+    "warId": 107,
+    "name": "Babylonia",
+    "originalName": "第七特異点\n絶対魔獣戦線 バビロニア",
+    "lastQuestId": 1000722,
+    "optional": false
+  },
+  {
+    "warId": 108,
+    "name": "Solomon",
+    "originalName": "終局特異点\n冠位時間神殿 ソロモン",
+    "lastQuestId": 1000822,
+    "optional": false
+  },
+  {
+    "warId": 201,
+    "name": "Shinjuku",
+    "originalName": "亜種特異点Ⅰ\n悪性隔絶魔境 新宿",
+    "lastQuestId": 2000118,
+    "optional": true
+  },
+  {
+    "warId": 202,
+    "name": "Agartha",
+    "originalName": "亜種特異点Ⅱ\n伝承地底世界 アガルタ",
+    "lastQuestId": 2000216,
+    "optional": true
+  },
+  {
+    "warId": 203,
+    "name": "Shimousa",
+    "originalName": "亜種並行世界\n屍山血河舞台 下総国",
+    "lastQuestId": 2000316,
+    "optional": true
+  },
+  {
+    "warId": 204,
+    "name": "Salem",
+    "originalName": "亜種特異点Ⅳ\n禁忌降臨庭園 セイレム",
+    "lastQuestId": 2000410,
+    "optional": true
+  },
+  {
+    "warId": 300,
+    "name": "Cosmos in the Lostbelt: Prologue",
+    "originalName": "序／2017年 12月26日",
+    "lastQuestId": 3000008,
+    "optional": false
+  },
+  {
+    "warId": 301,
+    "name": "Anastasia",
+    "originalName": "Lostbelt No.1\n永久凍土帝国 アナスタシア",
+    "lastQuestId": 3000125,
+    "optional": false
+  },
+  {
+    "warId": 302,
+    "name": "Götterdämmerung",
+    "originalName": "Lostbelt No.2\n無間氷焔世紀 ゲッテルデメルング",
+    "lastQuestId": 3000218,
+    "optional": false
+  },
+  {
+    "warId": 303,
+    "name": "SIN",
+    "originalName": "Lostbelt No.3\n人智統合真国 シン",
+    "lastQuestId": 3000320,
+    "optional": false
+  },
+  {
+    "warId": 304,
+    "name": "Yuga Kshetra",
+    "originalName": "Lostbelt No.4\n創世滅亡輪廻 ユガ・クシェートラ",
+    "lastQuestId": 3000421,
+    "optional": false
+  },
+  {
+    "warId": 305,
+    "name": "Atlantis",
+    "originalName": "Lostbelt No.5\n神代巨神海洋 アトランティス",
+    "lastQuestId": 3000531,
+    "optional": false
+  },
+  {
+    "warId": 306,
+    "name": "Olympus",
+    "originalName": "Lostbelt No.5\n星間都市山脈 オリュンポス",
+    "lastQuestId": 3000628,
+    "optional": false
+  },
+  {
+    "warId": 307,
+    "name": "Heian-kyo",
+    "originalName": "地獄界曼荼羅 平安京",
+    "lastQuestId": 3000716,
+    "optional": true
+  },
+  {
+    "warId": 308,
+    "name": "Avalon le Fae",
+    "originalName": "Lostbelt No.6\n妖精円卓領域 アヴァロン・ル・フェ",
+    "lastQuestId": 3001009,
+    "optional": false
+  },
+  {
+    "warId": 309,
+    "name": "Tunguska Sanctuary: Epilogue",
+    "originalName": "非霊長生存圏 ツングースカ・サンクチュアリ",
+    "lastQuestId": 3001101,
+    "optional": true
+  },
+  {
+    "warId": 310,
+    "name": "Traum",
+    "originalName": "死想顕現界域 トラオム",
+    "lastQuestId": 3001222,
+    "optional": true
+  },
+  {
+    "warId": 311,
+    "name": "Nahui Mictlan",
+    "originalName": "Lostbelt No.7\n黄金樹海紀行 ナウイ・ミクトラン",
+    "lastQuestId": 3001327,
+    "optional": false
+  },
+  {
+    "warId": 400,
+    "name": "Ordeal Call: Prologue",
+    "originalName": "奏章プロローグ",
+    "lastQuestId": 4000000,
+    "optional": false
+  },
+  {
+    "warId": 401,
+    "name": "Ordeal Call: Bleached Earth",
+    "originalName": "オーディール・コール",
+    "lastQuestId": 4000100,
+    "optional": false
+  },
+  {
+    "warId": 402,
+    "name": "Ordeal Call I: Paper Moon",
+    "originalName": "奏章Ⅰ 虚数羅針内界 ペーパームーン",
+    "lastQuestId": 4000217,
+    "optional": false
+  },
+  {
+    "warId": 403,
+    "name": "Ordeal Call II: Id",
+    "originalName": "奏章Ⅱ 不可逆廃棄孔 イド",
+    "lastQuestId": 4000326,
+    "optional": false
+  },
+  {
+    "warId": 404,
+    "name": "Ordeal Call III: Archetype Inception",
+    "originalName": "奏章Ⅲ 新霊長後継戦 アーキタイプ・インセプション",
+    "lastQuestId": 4000426,
+    "optional": false
+  },
+  {
+    "warId": 405,
+    "name": "Ordeal Call IV: Trinity Metatronios",
+    "originalName": "奏章Ⅳ 人類裁決法廷 トリニティ・メタトロニオス",
+    "lastQuestId": 4000529,
+    "optional": false
+  },
+  {
+    "warId": 406,
+    "name": "Part 2 Finale: Prologue",
+    "originalName": "終章_序",
+    "lastQuestId": 4000600,
+    "optional": false
+  },
+  {
+    "warId": 407,
+    "name": "Part 2 Finale",
+    "originalName": "終章",
+    "lastQuestId": 4000709,
+    "optional": false
+  },
+  {
+    "warId": 500,
+    "name": "After Time Begins",
+    "originalName": "アフタータイムのはじまり",
+    "lastQuestId": 5000000,
+    "optional": false
+  },
+  {
+    "warId": 501,
+    "name": "Past Chaldea",
+    "originalName": "？？？編 郷愁永巡刻盤 パスト・カルデア",
+    "lastQuestId": 5000110,
+    "optional": false
+  }
+]

@@ -12,6 +12,8 @@ function rewardSignature(reward) {
     reward.nature,
     reward.eligibility ?? null,
     reward.defaultIncluded,
+    reward.storyWarId ?? null,
+    reward.storyReleaseAt ? new Date(reward.storyReleaseAt).toISOString() : null,
   ]);
 }
 

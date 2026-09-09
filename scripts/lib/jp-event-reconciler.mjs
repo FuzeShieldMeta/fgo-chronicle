@@ -42,6 +42,8 @@ function rewardData(reward, rewardSourceId) {
     expectedAt: toDate(reward.expectedAt),
     nature: reward.nature,
     eligibility: reward.eligibility,
+    storyWarId: reward.storyWarId ?? null,
+    storyReleaseAt: toDate(reward.storyReleaseAt),
     defaultIncluded: reward.defaultIncluded,
     reviewedAt: toDate(reward.reviewedAt),
   };

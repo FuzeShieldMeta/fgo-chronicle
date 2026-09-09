@@ -1,4 +1,6 @@
+import { buildStoryCatalogue } from "./story-catalogue.mjs";
 import { z } from "zod";
+import { storyMissionRequirement } from "./story-mission-requirements.mjs";
 
 import {
   combineTrackedRewards,
@@ -95,9 +97,10 @@ function normalisedLocation(location) {
 
 /**
  * @param {any[]} missionSets
- * @param {{asOf: Date, retrievedAt: string, contentHash: string}} options
+ * @param {{asOf: Date, retrievedAt: string, contentHash: string, rawWars?: Array<Record<string, any>>}} options
  */
 export function buildProjectedMasterMissionDataset(missionSets, options) {
+  const storyCatalogue = buildStoryCatalogue(options.rawWars ?? []);
   const sourceFrom = unixSeconds(addCalendarYears(options.asOf, -2));
   const sourceTo = unixSeconds(options.asOf);
   const allLocations = missionSets.flatMap((missionSet) =>
@@ -149,6 +152,11 @@ export function buildProjectedMasterMissionDataset(missionSets, options) {
         continue;
       }
 
+      const story = storyMissionRequirement(
+        mission,
+        options.rawWars ?? [],
+        storyCatalogue.chapters,
+      );
       const isLimited = mission.type === "limited";
       if (isLimited) selectedLimitedMissions += 1;
       else selectedPermanentMissions += 1;
@@ -183,6 +191,8 @@ export function buildProjectedMasterMissionDataset(missionSets, options) {
           expectedAt,
           nature: "CONDITIONAL",
           eligibility: mission.detail?.trim() || missionName,
+          storyWarId: story?.warId ?? null,
+          storyReleaseAt: story ? projectedIso(mission.startedAt) : null,
           defaultIncluded: isLimited,
           reviewedAt: null,
         })),
