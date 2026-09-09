@@ -55,15 +55,12 @@ export function saveRewardPreferences(
 export function setRewardInclusion(
   preferences: RewardPreferences,
   rewardId: string,
-  included: boolean,
+  included: boolean | null,
 ): RewardPreferences {
-  return {
-    ...preferences,
-    includedByRewardId: {
-      ...preferences.includedByRewardId,
-      [rewardId]: included,
-    },
-  };
+  const includedByRewardId = { ...preferences.includedByRewardId };
+  if (included === null) delete includedByRewardId[rewardId];
+  else includedByRewardId[rewardId] = included;
+  return { ...preferences, includedByRewardId };
 }
 
 export function resolveRewardInclusion(

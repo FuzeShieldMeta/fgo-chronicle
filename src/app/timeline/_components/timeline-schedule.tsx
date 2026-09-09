@@ -514,7 +514,7 @@ function TimelineScheduleContent({
     router.refresh();
   }
 
-  function saveRewardInclusion(rewardId: string, included: boolean) {
+  function saveRewardInclusion(rewardId: string, included: boolean | null) {
     const next = setRewardInclusion(rewardPreferences, rewardId, included);
     setRewardPreferences(next);
     try {
@@ -775,6 +775,7 @@ function TimelineScheduleContent({
         ) : selectedIncomeCell ? (
           <TimelineIncomeDetails
             cell={selectedIncomeCell}
+            rewardPreferences={rewardPreferences}
             profile={playerProfile}
             onSetRewardInclusion={saveRewardInclusion}
             onOpenProfile={() => {

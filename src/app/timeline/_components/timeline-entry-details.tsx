@@ -143,15 +143,13 @@ function signedAmount(value: number) {
 function RewardInclusionControls({
   rewardId,
   label,
-  included,
-  inclusionResolved,
+  override,
   onSetRewardInclusion,
 }: {
   rewardId: string;
   label: string;
-  included: boolean;
-  inclusionResolved: boolean;
-  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
+  override: boolean | undefined;
+  onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
 }) {
   return (
     <div
@@ -159,17 +157,15 @@ function RewardInclusionControls({
       role="group"
       aria-label={`Choose whether to include ${label}`}
     >
-      {[true, false].map((choice) => (
+      {([true, false, null] as const).map((choice) => (
         <button
           key={String(choice)}
           type="button"
-          data-selected={
-            inclusionResolved && included === choice ? "true" : undefined
-          }
-          aria-pressed={inclusionResolved && included === choice}
+          data-selected={(override ?? null) === choice ? "true" : undefined}
+          aria-pressed={(override ?? null) === choice}
           onClick={() => onSetRewardInclusion(rewardId, choice)}
         >
-          {choice ? "Include" : "Exclude"}
+          {choice === null ? "Use automatic" : choice ? "Include" : "Exclude"}
         </button>
       ))}
     </div>
@@ -179,16 +175,21 @@ function RewardInclusionControls({
 export function TimelineIncomeDetails({
   cell,
   profile,
+  rewardPreferences,
   onSetRewardInclusion,
   onOpenProfile,
   onClose,
 }: {
   cell: IncomeLedgerCell;
+  rewardPreferences: RewardPreferences;
   profile: PlayerForecastProfile | null;
-  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
+  onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
   onOpenProfile: () => void;
   onClose: () => void;
 }) {
+  const excludedCount = cell.contributions.filter(
+    (reward) => !reward.included,
+  ).length;
   return (
     <aside
       className="timeline-details"
@@ -228,8 +229,11 @@ export function TimelineIncomeDetails({
         <h4>Change breakdown</h4>
         <p>
           Counted income: {signedAmount(cell.delta)}.{" "}
-          {cell.contributions.filter((reward) => !reward.included).length}{" "}
-          excluded rewards are not counted.
+          {excludedCount === 0
+            ? "No rewards are excluded."
+            : excludedCount === 1
+              ? "1 excluded reward is not counted."
+              : `${excludedCount} excluded rewards are not counted.`}
         </p>
         <ul>
           {cell.contributions.map((contribution) => {
@@ -289,8 +293,9 @@ export function TimelineIncomeDetails({
                   <RewardInclusionControls
                     rewardId={contribution.id}
                     label={`${englishRewardLabel(contribution.rewardSource.name)}: ${contribution.amount} ${incomeResourceLabels[contribution.itemType]}`}
-                    included={contribution.included}
-                    inclusionResolved={contribution.inclusionResolved}
+                    override={
+                      rewardPreferences.includedByRewardId[contribution.id]
+                    }
                     onSetRewardInclusion={onSetRewardInclusion}
                   />
                 ) : null}
@@ -332,7 +337,7 @@ export function TimelineEntryDetails({
   profile?: PlayerForecastProfile | null;
   timeZone: string;
   rewardPreferences: RewardPreferences;
-  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
+  onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
   onClose: () => void;
 }) {
   const catalogue = useStoryCatalogue();
@@ -525,7 +530,11 @@ export function TimelineEntryDetails({
                               <RewardInclusionControls
                                 rewardId={reward.id}
                                 label={`${englishRewardLabel(source.name)}: ${reward.amount} ${itemTypeNames[reward.itemType]}`}
-                                {...inclusion}
+                                override={
+                                  rewardPreferences.includedByRewardId[
+                                    reward.id
+                                  ]
+                                }
                                 onSetRewardInclusion={onSetRewardInclusion}
                               />
                             ) : null}
