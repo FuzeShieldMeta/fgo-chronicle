@@ -8,6 +8,10 @@ import {
   incomeResourceLabels,
   type IncomeLedgerCell,
 } from "~/app/timeline/_lib/income-ledger";
+import {
+  resolveRewardInclusion,
+  type RewardPreferences,
+} from "~/app/timeline/_lib/reward-preferences";
 import type { PlayerForecastProfile } from "~/app/timeline/_lib/player-forecast";
 import { formatScheduleDate } from "~/app/timeline/_lib/schedule-date";
 import {
@@ -134,14 +138,52 @@ function signedAmount(value: number) {
   return "0";
 }
 
+function RewardInclusionControls({
+  rewardId,
+  label,
+  included,
+  inclusionResolved,
+  onSetRewardInclusion,
+}: {
+  rewardId: string;
+  label: string;
+  included: boolean;
+  inclusionResolved: boolean;
+  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
+}) {
+  return (
+    <div
+      className="timeline-reward-decision-actions"
+      role="group"
+      aria-label={`Choose whether to include ${label}`}
+    >
+      {[true, false].map((choice) => (
+        <button
+          key={String(choice)}
+          type="button"
+          data-selected={
+            inclusionResolved && included === choice ? "true" : undefined
+          }
+          aria-pressed={inclusionResolved && included === choice}
+          onClick={() => onSetRewardInclusion(rewardId, choice)}
+        >
+          {choice ? "Include" : "Exclude"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function TimelineIncomeDetails({
   cell,
   profile,
+  onSetRewardInclusion,
   onOpenProfile,
   onClose,
 }: {
   cell: IncomeLedgerCell;
   profile: PlayerForecastProfile | null;
+  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
   onOpenProfile: () => void;
   onClose: () => void;
 }) {
@@ -183,35 +225,61 @@ export function TimelineIncomeDetails({
       <section className="timeline-detail-section">
         <h4>Change breakdown</h4>
         <ul>
-          {cell.contributions.map((contribution) => (
-            <li key={contribution.id}>
-              <span>
-                {signedAmount(contribution.amount)} ·{" "}
-                {contribution.rewardSource.name}
-              </span>
-              <small>
-                {formatType(contribution.rewardSource.type)}
-                {contribution.rewardSource.event
-                  ? ` · ${contribution.rewardSource.event.name}`
-                  : ""}
-                {contribution.defaultIncluded ? "" : " · Excluded"}
-                {contribution.reviewedAt ? "" : " · Unreviewed"}
-              </small>
-              {contribution.eligibility ? (
-                <small>{contribution.eligibility}</small>
-              ) : null}
-              {contribution.assumption ? (
-                <small>Assumption: {contribution.assumption}</small>
-              ) : null}
-              <a
-                href={contribution.rewardSource.evidenceUrl}
-                target="_blank"
-                rel="noreferrer"
+          {cell.contributions.map((contribution) => {
+            const needsDecision =
+              contribution.nature === "CONDITIONAL" &&
+              !contribution.inclusionResolved;
+
+            return (
+              <li
+                key={contribution.id}
+                data-needs-decision={needsDecision ? "true" : undefined}
               >
-                View source
-              </a>
-            </li>
-          ))}
+                <span>
+                  {signedAmount(contribution.amount)} ·{" "}
+                  {contribution.rewardSource.name}
+                </span>
+                <small>
+                  {formatType(contribution.rewardSource.type)}
+                  {` · ${formatType(contribution.nature)}`}
+                  {contribution.rewardSource.event
+                    ? ` · ${contribution.rewardSource.event.name}`
+                    : ""}
+                  {contribution.included ? " · Included" : " · Excluded"}
+                  {contribution.reviewedAt ? "" : " · Unreviewed"}
+                </small>
+                {needsDecision ? (
+                  <small className="timeline-reward-decision-status">
+                    Needs your choice. This reward is currently{" "}
+                    {contribution.defaultIncluded ? "included" : "excluded"} by
+                    default.
+                  </small>
+                ) : null}
+                {contribution.eligibility ? (
+                  <small>{contribution.eligibility}</small>
+                ) : null}
+                {contribution.assumption ? (
+                  <small>Assumption: {contribution.assumption}</small>
+                ) : null}
+                <a
+                  href={contribution.rewardSource.evidenceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View source
+                </a>
+                {contribution.nature === "CONDITIONAL" ? (
+                  <RewardInclusionControls
+                    rewardId={contribution.id}
+                    label={`${contribution.rewardSource.name}: ${contribution.amount} ${incomeResourceLabels[contribution.itemType]}`}
+                    included={contribution.included}
+                    inclusionResolved={contribution.inclusionResolved}
+                    onSetRewardInclusion={onSetRewardInclusion}
+                  />
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
@@ -238,10 +306,14 @@ export function TimelineIncomeDetails({
 export function TimelineEntryDetails({
   entry,
   timeZone,
+  rewardPreferences,
+  onSetRewardInclusion,
   onClose,
 }: {
   entry: TimelineEntry;
   timeZone: string;
+  rewardPreferences: RewardPreferences;
+  onSetRewardInclusion: (rewardId: string, included: boolean) => void;
   onClose: () => void;
 }) {
   const input =
@@ -386,13 +458,47 @@ export function TimelineEntryDetails({
                   <small>{formatType(source.type)}</small>
                   {source.rewards.length > 0 ? (
                     <ul className="timeline-reward-list">
-                      {source.rewards.map((reward) => (
-                        <li key={reward.id}>
-                          {reward.amount.toString()}{" "}
-                          {itemTypeNames[reward.itemType]}
-                          {reward.reviewedAt ? "" : " · Unreviewed"}
-                        </li>
-                      ))}
+                      {source.rewards.map((reward) => {
+                        const inclusion = resolveRewardInclusion(
+                          reward,
+                          rewardPreferences,
+                        );
+                        return (
+                          <li
+                            key={reward.id}
+                            data-needs-decision={
+                              !inclusion.inclusionResolved ? "true" : undefined
+                            }
+                          >
+                            <span>
+                              {reward.amount} {itemTypeNames[reward.itemType]}
+                            </span>
+                            <small>
+                              {inclusion.included ? "Included" : "Excluded"}
+                              {reward.reviewedAt ? "" : " · Unreviewed"}
+                            </small>
+                            {!inclusion.inclusionResolved ? (
+                              <small className="timeline-reward-decision-status">
+                                Needs your choice. Excluded by default.
+                              </small>
+                            ) : null}
+                            {reward.eligibility ? (
+                              <small>{reward.eligibility}</small>
+                            ) : null}
+                            {!reward.expectedAt ? (
+                              <small>No forecast date is available yet.</small>
+                            ) : null}
+                            {reward.nature === "CONDITIONAL" ? (
+                              <RewardInclusionControls
+                                rewardId={reward.id}
+                                label={`${source.name}: ${reward.amount} ${itemTypeNames[reward.itemType]}`}
+                                {...inclusion}
+                                onSetRewardInclusion={onSetRewardInclusion}
+                              />
+                            ) : null}
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : null}
                 </li>

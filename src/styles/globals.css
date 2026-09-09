@@ -43,6 +43,8 @@
   --md-income-lore-container: #e9e2ff;
   --md-income-spend: #9d353b;
   --md-income-spend-container: #f8dadd;
+  --md-conditional: #9d353b;
+  --md-conditional-container: #fff0f0;
   --md-attention: #d6ad4a;
   --md-shadow: rgb(24 28 35 / 20%);
   --app-bar-height: 72px;
@@ -57,6 +59,11 @@
   --timeline-balance-attention-duration: 6s;
   --timeline-balance-attention-ring-size: 7px;
   --timeline-balance-attention-halo-size: 24px;
+  --timeline-decision-marker-size: 14px;
+  --timeline-decision-marker-block-inset: 2px;
+  --timeline-decision-marker-inline-inset: 3px;
+  --timeline-decision-accent-width: 3px;
+  --timeline-decision-action-min-width: 88px;
   --timeline-type-micro: clamp(0.625rem, 0.59rem + 0.08vw, 0.75rem);
   --timeline-type-dense: clamp(0.6875rem, 0.65rem + 0.08vw, 0.75rem);
   --timeline-type-label: clamp(0.75rem, 0.7rem + 0.1vw, 0.875rem);
@@ -211,7 +218,7 @@ button {
 .timeline-tonal-button,
 .timeline-close-button,
 .timeline-details-message button {
-  min-height: var(--timeline-min-income-row-height, 44px);
+  min-height: 44px;
   padding: 0 18px;
   cursor: pointer;
   border: 0;
@@ -633,6 +640,35 @@ button {
 
 .timeline-income-cell[data-direction="NEUTRAL"]:hover {
   background: var(--md-surface-highest);
+}
+
+.timeline-income-cell[data-needs-decision="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--md-conditional) 68%,
+    var(--md-outline-variant)
+  );
+  background: color-mix(
+    in srgb,
+    var(--md-conditional-container) 74%,
+    var(--md-surface)
+  );
+}
+
+.timeline-income-decision-marker {
+  position: absolute;
+  top: var(--timeline-decision-marker-block-inset);
+  right: var(--timeline-decision-marker-inline-inset);
+  display: grid;
+  width: var(--timeline-decision-marker-size);
+  height: var(--timeline-decision-marker-size);
+  place-items: center;
+  border: 1px solid var(--md-conditional);
+  border-radius: 50%;
+  color: var(--md-conditional);
+  font-size: var(--timeline-type-micro);
+  font-weight: 750;
+  line-height: 1;
 }
 
 .timeline-income-cell:focus-visible,
@@ -1095,6 +1131,51 @@ button {
   font-size: var(--timeline-type-body);
 }
 
+.timeline-detail-section li[data-needs-decision="true"] {
+  border-left: var(--timeline-decision-accent-width) solid var(--md-conditional);
+  background: var(--md-conditional-container);
+}
+
+.timeline-reward-decision-status {
+  color: var(--md-conditional) !important;
+  font-weight: 650;
+}
+
+.timeline-reward-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.timeline-reward-decision-actions button {
+  min-width: var(--timeline-decision-action-min-width);
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  border: 1px solid var(--md-outline);
+  border-radius: 2px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-weight: 650;
+}
+
+.timeline-reward-decision-actions button:hover {
+  background: var(--md-surface-high);
+}
+
+.timeline-reward-decision-actions button[data-selected="true"] {
+  border-color: var(--md-primary);
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+
+.timeline-reward-decision-actions button:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 2px;
+}
+
 .timeline-detail-section small {
   color: var(--md-on-surface-variant);
   font-size: var(--timeline-type-label);
@@ -1247,7 +1328,7 @@ button {
 
 .timeline-source-link {
   display: inline-flex;
-  min-height: var(--timeline-min-income-row-height, 44px);
+  min-height: 44px;
   align-items: center;
   margin-top: 22px;
   padding: 0 18px;
@@ -1399,4 +1480,12 @@ button {
         color-mix(in srgb, var(--md-attention) 72%, transparent),
       0 3px 5px rgb(0 0 0 / 18%);
   }
+}
+
+.timeline-preference-notice {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--md-on-surface);
+  background: var(--md-surface-high);
 }

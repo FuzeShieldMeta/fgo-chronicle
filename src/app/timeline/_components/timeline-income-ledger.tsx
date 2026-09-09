@@ -68,13 +68,24 @@ export function TimelineIncomeLedger({
                         : "NEUTRAL"
                   }
                   data-selected={selectedKey === cell.key ? "true" : "false"}
+                  data-needs-decision={
+                    cell.hasUnresolvedConditional ? "true" : undefined
+                  }
                   style={style}
-                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}`}
+                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${cell.hasUnresolvedConditional ? " Contains a conditional reward that needs your choice." : ""}`}
                   aria-pressed={selectedKey === cell.key}
                   onClick={() => onSelect(cell)}
                 >
                   <strong>{signedAmount(cell.delta)}</strong>
                   <small>{cell.closingBalance ?? "—"}</small>
+                  {cell.hasUnresolvedConditional ? (
+                    <span
+                      className="timeline-income-decision-marker"
+                      aria-hidden="true"
+                    >
+                      ?
+                    </span>
+                  ) : null}
                 </button>
               );
             })}

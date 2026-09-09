@@ -29,6 +29,13 @@ import {
   type PlayerForecastProfile,
 } from "~/app/timeline/_lib/player-forecast";
 import {
+  createRewardPreferences,
+  loadRewardPreferences,
+  saveRewardPreferences,
+  setRewardInclusion,
+  type RewardPreferences,
+} from "~/app/timeline/_lib/reward-preferences";
+import {
   calendarDayKey,
   calendarDays,
   laneSharePercent,
@@ -287,6 +294,10 @@ export function TimelineSchedule({
   );
   const [playerProfile, setPlayerProfile] =
     useState<PlayerForecastProfile | null>(null);
+  const [rewardPreferences, setRewardPreferences] = useState<RewardPreferences>(
+    createRewardPreferences,
+  );
+  const [rewardStorageError, setRewardStorageError] = useState(false);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
@@ -303,7 +314,12 @@ export function TimelineSchedule({
         ? current
         : localCalendar,
     );
-    setPlayerProfile(loadPlayerForecastProfile(window.localStorage));
+    try {
+      setPlayerProfile(loadPlayerForecastProfile(window.localStorage));
+      setRewardPreferences(loadRewardPreferences(window.localStorage));
+    } catch {
+      setRewardStorageError(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -432,10 +448,17 @@ export function TimelineSchedule({
       incomeContributions,
       playerProfile,
       calendar.timeZone,
+      rewardPreferences,
     );
 
     return { days, layouts, incomeCells };
-  }, [calendar, entries, incomeContributions, playerProfile]);
+  }, [
+    calendar,
+    entries,
+    incomeContributions,
+    playerProfile,
+    rewardPreferences,
+  ]);
 
   const formatter = useMemo(
     () =>
@@ -460,6 +483,17 @@ export function TimelineSchedule({
     savePlayerForecastProfile(window.localStorage, profile);
     setPlayerProfile(profile);
     setProfilePanelOpen(false);
+  }
+
+  function saveRewardInclusion(rewardId: string, included: boolean) {
+    const next = setRewardInclusion(rewardPreferences, rewardId, included);
+    setRewardPreferences(next);
+    try {
+      saveRewardPreferences(window.localStorage, next);
+      setRewardStorageError(false);
+    } catch {
+      setRewardStorageError(true);
+    }
   }
 
   function returnToToday() {
@@ -578,6 +612,12 @@ export function TimelineSchedule({
         </div>
       </div>
 
+      {rewardStorageError ? (
+        <p className="timeline-preference-notice" role="status">
+          Your browser could not save reward choices. Changes apply until you
+          reload this page.
+        </p>
+      ) : null}
       <div
         className="timeline-workspace"
         data-has-selection={
@@ -707,6 +747,7 @@ export function TimelineSchedule({
           <TimelineIncomeDetails
             cell={selectedIncomeCell}
             profile={playerProfile}
+            onSetRewardInclusion={saveRewardInclusion}
             onOpenProfile={() => {
               setSelectedIncomeKey(null);
               setProfilePanelOpen(true);
@@ -717,6 +758,8 @@ export function TimelineSchedule({
           <TimelineEntryDetails
             entry={selectedEntry}
             timeZone={calendar.timeZone}
+            rewardPreferences={rewardPreferences}
+            onSetRewardInclusion={saveRewardInclusion}
             onClose={() => setSelectedKey(null)}
           />
         ) : (
