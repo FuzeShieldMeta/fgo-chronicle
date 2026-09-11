@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   SummonPlanPanel,
@@ -36,6 +36,9 @@ const initialSpending: SummonPlanSpending = {
   startingBonusCount: 0,
   autoConvertFragments: false,
 };
+
+const summonTabs = ["PLAN", "PROBABILITY"] as const;
+type SummonTab = (typeof summonTabs)[number];
 
 export function TimelineDayDetails({
   day,
@@ -75,7 +78,11 @@ export function TimelineDayDetails({
   timeZone: string;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"PLAN" | "PROBABILITY">("PLAN");
+  const [tab, setTab] = useState<SummonTab>("PLAN");
+  const tabRefs = useRef<Record<SummonTab, HTMLButtonElement | null>>({
+    PLAN: null,
+    PROBABILITY: null,
+  });
   const [selectedBannerId, setSelectedBannerId] = useState(
     initialBannerId ?? banners[0]?.id ?? "",
   );
@@ -238,6 +245,31 @@ export function TimelineDayDetails({
     setEditingSessionId(session.id);
     setTab("PLAN");
     setSavedMessage(null);
+  }
+
+  function handleTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: SummonTab,
+  ) {
+    const currentIndex = summonTabs.indexOf(currentTab);
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % summonTabs.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + summonTabs.length) % summonTabs.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = summonTabs.length - 1;
+    }
+
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = summonTabs[nextIndex];
+    if (!nextTab) return;
+    setTab(nextTab);
+    tabRefs.current[nextTab]?.focus();
   }
 
   return (
@@ -439,64 +471,90 @@ export function TimelineDayDetails({
 
       <div className="summon-tabs" role="tablist" aria-label="Summon tools">
         <button
+          ref={(element) => {
+            tabRefs.current.PLAN = element;
+          }}
+          id="summon-plan-tab"
           type="button"
           role="tab"
           aria-selected={tab === "PLAN"}
+          aria-controls="summon-plan-panel"
+          tabIndex={tab === "PLAN" ? 0 : -1}
           onClick={() => setTab("PLAN")}
+          onKeyDown={(event) => handleTabKeyDown(event, "PLAN")}
         >
           Plan
         </button>
         <button
+          ref={(element) => {
+            tabRefs.current.PROBABILITY = element;
+          }}
+          id="summon-probability-tab"
           type="button"
           role="tab"
           aria-selected={tab === "PROBABILITY"}
+          aria-controls="summon-probability-panel"
+          tabIndex={tab === "PROBABILITY" ? 0 : -1}
           onClick={() => setTab("PROBABILITY")}
+          onKeyDown={(event) => handleTabKeyDown(event, "PROBABILITY")}
         >
           Probability
         </button>
       </div>
 
       {tab === "PLAN" ? (
-        <SummonPlanPanel
-          day={day}
-          banner={
-            effectiveBanner
-              ? {
-                  ...effectiveBanner,
-                  lineupKey: effectiveLineupKey!,
-                }
-              : null
-          }
-          target={planTarget}
-          balances={balances}
-          status={status}
-          spending={spending}
-          onStatusChange={setStatus}
-          onSpendingChange={setSpending}
-          onSave={(session) => {
-            if (editingSession) onUpdate(session);
-            else onSave(session);
-            setEditingSessionId(session.id);
-            setSavedMessage(
-              `${editingSession ? "Session updated" : session.status === "PLANNED" ? "Plan saved" : "Spent session saved"} for ${session.day}.`,
-            );
-          }}
-          earliestAffordableDay={earliestAffordableDay}
-          editingSession={editingSession}
-        />
+        <div
+          id="summon-plan-panel"
+          role="tabpanel"
+          aria-labelledby="summon-plan-tab"
+        >
+          <SummonPlanPanel
+            day={day}
+            banner={
+              effectiveBanner
+                ? {
+                    ...effectiveBanner,
+                    lineupKey: effectiveLineupKey!,
+                  }
+                : null
+            }
+            target={planTarget}
+            balances={balances}
+            status={status}
+            spending={spending}
+            onStatusChange={setStatus}
+            onSpendingChange={setSpending}
+            onSave={(session) => {
+              if (editingSession) onUpdate(session);
+              else onSave(session);
+              setEditingSessionId(session.id);
+              setSavedMessage(
+                `${editingSession ? "Session updated" : session.status === "PLANNED" ? "Plan saved" : "Spent session saved"} for ${session.day}.`,
+              );
+            }}
+            earliestAffordableDay={earliestAffordableDay}
+            editingSession={editingSession}
+          />
+        </div>
       ) : (
-        <SummonProbabilityPanel
-          settings={probabilitySettings}
-          onUsePlan={({ multis, singles }) => {
-            setSpending((current) => ({
-              ...current,
-              multis,
-              quartzSingles: singles,
-              tickets: 0,
-            }));
-            setTab("PLAN");
-          }}
-        />
+        <div
+          id="summon-probability-panel"
+          role="tabpanel"
+          aria-labelledby="summon-probability-tab"
+        >
+          <SummonProbabilityPanel
+            settings={probabilitySettings}
+            onUsePlan={({ multis, singles }) => {
+              setSpending((current) => ({
+                ...current,
+                multis,
+                quartzSingles: singles,
+                tickets: 0,
+              }));
+              setTab("PLAN");
+            }}
+          />
+        </div>
       )}
 
       {savedMessage ? (

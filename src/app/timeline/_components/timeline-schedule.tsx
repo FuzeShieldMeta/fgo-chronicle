@@ -25,6 +25,7 @@ import {
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
 import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
 import { TimelineDayClickDemo } from "~/app/timeline/_components/timeline-day-click-demo";
+import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
 import {
   buildIncomeLedger,
   findEarliestAffordableSummonDay,
@@ -782,6 +783,36 @@ function TimelineScheduleContent({
             : undefined,
         )
     : undefined;
+  const hasDetailsSelection = Boolean(
+    selectedEntry !== null ||
+    selectedIncomeCell !== null ||
+    selectedDay !== null ||
+    profilePanelOpen,
+  );
+  const detailsSelectionKey = selectedDay
+    ? `day:${selectedDay}`
+    : profilePanelOpen
+      ? "profile"
+      : selectedIncomeCell
+        ? `income:${selectedIncomeCell.key}`
+        : selectedEntry
+          ? `entry:${selectedEntry.key}`
+          : "placeholder";
+  const detailsHeadingId = selectedDay
+    ? "timeline-day-heading"
+    : profilePanelOpen
+      ? "timeline-profile-heading"
+      : "timeline-details-heading";
+
+  function closeActiveDetails() {
+    if (selectedDay) {
+      closeSelectedDay();
+      return;
+    }
+    setProfilePanelOpen(false);
+    setSelectedIncomeKey(null);
+    setSelectedKey(null);
+  }
 
   return (
     <section
@@ -790,6 +821,7 @@ function TimelineScheduleContent({
       aria-label="Two-year schedule"
       style={timelineStyle}
     >
+      <h2 className="sr-only">Two-year schedule</h2>
       <div className="timeline-toolbar">
         <div className="timeline-toolbar-actions">
           <div className="timeline-legend" aria-label="Schedule status legend">
@@ -1028,95 +1060,102 @@ function TimelineScheduleContent({
           </div>
         </div>
 
-        {selectedDay && selectedDayBalances ? (
-          <TimelineDayDetails
-            key={selectedDay}
-            day={selectedDay}
-            banners={selectedDayBanners}
-            balances={selectedDayBalances}
-            sessions={selectedDaySessions}
-            initialBannerId={selectedDayBannerId}
-            onSave={addSummonSession}
-            onUpdate={replaceSummonSession}
-            onDuplicate={copySummonSession}
-            onMove={changeSummonSessionDay}
-            onDelete={removeSummonSession}
-            onStatusChange={changeSummonSessionStatus}
-            findAffordableDay={findAffordableDay}
-            scheduleStartDay={view.days[0]}
-            scheduleEndDay={view.days.at(-1)}
-            timeZone={calendar.timeZone}
-            onClose={closeSelectedDay}
-          />
-        ) : profilePanelOpen ? (
-          <TimelineProfileDetails
-            profile={playerProfile}
-            today={calendar.today}
-            onSaveProfile={saveProfile}
-            onClose={() => setProfilePanelOpen(false)}
-          />
-        ) : selectedIncomeCell ? (
-          <TimelineIncomeDetails
-            cell={selectedIncomeCell}
-            rewardPreferences={rewardPreferences}
-            profile={playerProfile}
-            onSetRewardInclusion={saveRewardInclusion}
-            onOpenProfile={() => {
-              setSelectedIncomeKey(null);
-              setProfilePanelOpen(true);
-            }}
-            onClose={() => setSelectedIncomeKey(null)}
-          />
-        ) : selectedEntry ? (
-          <TimelineEntryDetails
-            entry={selectedEntry}
-            profile={playerProfile}
-            timeZone={calendar.timeZone}
-            rewardPreferences={rewardPreferences}
-            onSetRewardInclusion={saveRewardInclusion}
-            onPlanSummons={
-              selectedEntry.kind === "BANNER"
-                ? () => {
-                    const starts = calendarDayKey(
-                      selectedEntry.startsAt,
-                      selectedEntry.startsAtPrecision,
-                      calendar.timeZone,
-                    );
-                    const ends = selectedEntry.endsAt
-                      ? calendarDayKey(
-                          selectedEntry.endsAt,
-                          selectedEntry.endsAtPrecision ?? "EXACT",
-                          calendar.timeZone,
-                        )
-                      : starts;
-                    const preferredDay =
-                      calendar.today >= starts && calendar.today <= ends
-                        ? calendar.today
+        <TimelineDetailsLayer
+          active={hasDetailsSelection}
+          labelledBy={detailsHeadingId}
+          selectionKey={detailsSelectionKey}
+          onClose={closeActiveDetails}
+        >
+          {selectedDay && selectedDayBalances ? (
+            <TimelineDayDetails
+              key={selectedDay}
+              day={selectedDay}
+              banners={selectedDayBanners}
+              balances={selectedDayBalances}
+              sessions={selectedDaySessions}
+              initialBannerId={selectedDayBannerId}
+              onSave={addSummonSession}
+              onUpdate={replaceSummonSession}
+              onDuplicate={copySummonSession}
+              onMove={changeSummonSessionDay}
+              onDelete={removeSummonSession}
+              onStatusChange={changeSummonSessionStatus}
+              findAffordableDay={findAffordableDay}
+              scheduleStartDay={view.days[0]}
+              scheduleEndDay={view.days.at(-1)}
+              timeZone={calendar.timeZone}
+              onClose={closeSelectedDay}
+            />
+          ) : profilePanelOpen ? (
+            <TimelineProfileDetails
+              profile={playerProfile}
+              today={calendar.today}
+              onSaveProfile={saveProfile}
+              onClose={() => setProfilePanelOpen(false)}
+            />
+          ) : selectedIncomeCell ? (
+            <TimelineIncomeDetails
+              cell={selectedIncomeCell}
+              rewardPreferences={rewardPreferences}
+              profile={playerProfile}
+              onSetRewardInclusion={saveRewardInclusion}
+              onOpenProfile={() => {
+                setSelectedIncomeKey(null);
+                setProfilePanelOpen(true);
+              }}
+              onClose={() => setSelectedIncomeKey(null)}
+            />
+          ) : selectedEntry ? (
+            <TimelineEntryDetails
+              entry={selectedEntry}
+              profile={playerProfile}
+              timeZone={calendar.timeZone}
+              rewardPreferences={rewardPreferences}
+              onSetRewardInclusion={saveRewardInclusion}
+              onPlanSummons={
+                selectedEntry.kind === "BANNER"
+                  ? () => {
+                      const starts = calendarDayKey(
+                        selectedEntry.startsAt,
+                        selectedEntry.startsAtPrecision,
+                        calendar.timeZone,
+                      );
+                      const ends = selectedEntry.endsAt
+                        ? calendarDayKey(
+                            selectedEntry.endsAt,
+                            selectedEntry.endsAtPrecision ?? "EXACT",
+                            calendar.timeZone,
+                          )
                         : starts;
-                    const firstDay = view.days[0] ?? preferredDay;
-                    const lastDay = view.days.at(-1) ?? preferredDay;
-                    const day =
-                      preferredDay < firstDay
-                        ? firstDay
-                        : preferredDay > lastDay
-                          ? lastDay
-                          : preferredDay;
-                    setSelectedDayBannerId(selectedEntry.id);
-                    setSelectedKey(null);
-                    setSelectedDay(day);
-                  }
-                : undefined
-            }
-            onClose={() => setSelectedKey(null)}
-          />
-        ) : (
-          <TimelineDetailsPlaceholder
-            profile={playerProfile}
-            today={calendar.today}
-            onSaveProfile={saveProfile}
-            onOpenProfile={() => setProfilePanelOpen(true)}
-          />
-        )}
+                      const preferredDay =
+                        calendar.today >= starts && calendar.today <= ends
+                          ? calendar.today
+                          : starts;
+                      const firstDay = view.days[0] ?? preferredDay;
+                      const lastDay = view.days.at(-1) ?? preferredDay;
+                      const day =
+                        preferredDay < firstDay
+                          ? firstDay
+                          : preferredDay > lastDay
+                            ? lastDay
+                            : preferredDay;
+                      setSelectedDayBannerId(selectedEntry.id);
+                      setSelectedKey(null);
+                      setSelectedDay(day);
+                    }
+                  : undefined
+              }
+              onClose={() => setSelectedKey(null)}
+            />
+          ) : (
+            <TimelineDetailsPlaceholder
+              profile={playerProfile}
+              today={calendar.today}
+              onSaveProfile={saveProfile}
+              onOpenProfile={() => setProfilePanelOpen(true)}
+            />
+          )}
+        </TimelineDetailsLayer>
       </div>
 
       {railTooltip

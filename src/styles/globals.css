@@ -1114,6 +1114,14 @@ button {
     0 1px 18px rgb(0 0 0 / 12%);
 }
 
+.timeline-details-layer {
+  display: contents;
+}
+
+.timeline-details-layer .timeline-details {
+  overscroll-behavior: contain;
+}
+
 .timeline-details-handle {
   display: none;
 }
@@ -1880,6 +1888,14 @@ button {
 }
 
 @media (max-width: 900px) {
+  .timeline-details-layer {
+    position: fixed;
+    z-index: 119;
+    inset: 0;
+    display: block;
+    background: rgb(25 28 32 / 46%);
+  }
+
   .timeline-workspace,
   .timeline-workspace[data-has-selection="true"] {
     grid-template-columns: minmax(0, 1fr);
