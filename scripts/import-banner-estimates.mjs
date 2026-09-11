@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  atlasJpServantCatalogueUrl,
+  downloadAtlasServantCatalogue,
+} from "./lib/atlas-servant-catalogue.mjs";
+
 const spreadsheetId = process.env.BANNER_SPREADSHEET_ID?.trim();
 
 if (!spreadsheetId) {
@@ -83,6 +88,7 @@ async function fetchSheet(sheet) {
 }
 
 const banners = new Map();
+const servantCatalogue = await downloadAtlasServantCatalogue();
 
 for (const sheet of sheets) {
   const rows = await fetchSheet(sheet);
@@ -113,10 +119,17 @@ for (const sheet of sheets) {
       if (
         !existing.servants.some((servant) => servant.id === Number(servantId))
       ) {
+        const atlasServant = servantCatalogue.get(Number(servantId));
+        if (!atlasServant) {
+          throw new Error(
+            `Atlas has no Servant rarity for collection number ${servantId}.`,
+          );
+        }
         existing.servants.push({
           id: Number(servantId),
           name: servantName,
           class: sheet,
+          rarity: atlasServant.rarity,
           soloRateUp: solo === "Yes",
         });
       }
@@ -140,6 +153,7 @@ await writeFile(
     {
       importedAt: new Date().toISOString(),
       note: "PROJECTED dates are already JP dates shifted approximately two years by the sheet maintainers.",
+      servantCatalogueUrl: atlasJpServantCatalogueUrl,
       count: output.length,
       banners: output,
     },

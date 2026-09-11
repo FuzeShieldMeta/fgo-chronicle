@@ -23,8 +23,12 @@ import {
   TimelineProfileDetails,
 } from "~/app/timeline/_components/timeline-entry-details";
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
+import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
+import { TimelineDayClickDemo } from "~/app/timeline/_components/timeline-day-click-demo";
 import {
   buildIncomeLedger,
+  findEarliestAffordableSummonDay,
+  forecastBalancesOnDay,
   incomeResourceIcons,
   incomeResourceLabels,
 } from "~/app/timeline/_lib/income-ledger";
@@ -42,10 +46,22 @@ import {
   type RewardPreferences,
 } from "~/app/timeline/_lib/reward-preferences";
 import {
+  deleteSummonSession,
+  duplicateSummonSession,
+  loadSummonSessions,
+  moveSummonSession,
+  saveSummonSessions,
+  setSummonSessionStatus,
+  type SummonSession,
+  type SummonSessionStatus,
+} from "~/app/timeline/_lib/summon-session";
+import type { SummonPlanSpending } from "~/app/timeline/_components/summon-plan-panel";
+import {
   calendarDayKey,
   calendarDays,
   laneSharePercent,
   layoutSchedule,
+  visibleDayIndex,
   type ScheduleCategoryLayout,
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
@@ -90,6 +106,11 @@ type RailTooltip = {
   x: number;
   y: number;
   placement: "above" | "below";
+};
+
+type PlanDemo = {
+  day: string;
+  runId: number;
 };
 
 function scheduleEndDay(dayKey: string) {
@@ -313,19 +334,29 @@ function TimelineScheduleContent({
   const [selectedIncomeKey, setSelectedIncomeKey] = useState<string | null>(
     null,
   );
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedDayBannerId, setSelectedDayBannerId] = useState<string | null>(
+    null,
+  );
   const [playerProfile, setPlayerProfile] =
     useState<PlayerForecastProfile | null>(null);
   const [rewardPreferences, setRewardPreferences] = useState<RewardPreferences>(
     createRewardPreferences,
   );
   const [rewardStorageError, setRewardStorageError] = useState(false);
+  const [summonSessions, setSummonSessions] = useState<SummonSession[]>([]);
+  const [summonStorageWarning, setSummonStorageWarning] = useState<
+    string | null
+  >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+  const [planDemo, setPlanDemo] = useState<PlanDemo | null>(null);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
   const scrollFrameRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const ledgerRef = useRef<HTMLDivElement>(null);
   const dateAxisRef = useRef<HTMLElement>(null);
+  const planDemoRunRef = useRef(0);
 
   useEffect(() => {
     const localCalendar = readLocalCalendar();
@@ -338,10 +369,37 @@ function TimelineScheduleContent({
     try {
       setPlayerProfile(loadPlayerForecastProfile(window.localStorage));
       setRewardPreferences(loadRewardPreferences(window.localStorage));
+      const loadedSessions = loadSummonSessions(window.localStorage);
+      setSummonSessions(loadedSessions.sessions);
+      setSummonStorageWarning(loadedSessions.warnings[0] ?? null);
     } catch {
       setRewardStorageError(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!planDemo) return;
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const selectTimer = window.setTimeout(
+      () => {
+        setSelectedDayBannerId(null);
+        setSelectedDay(planDemo.day);
+      },
+      reduceMotion ? 400 : 850,
+    );
+    const clearTimer = window.setTimeout(
+      () => setPlanDemo(null),
+      reduceMotion ? 700 : 1_350,
+    );
+
+    return () => {
+      window.clearTimeout(selectTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [planDemo]);
 
   useEffect(() => {
     const scrollFrame = scrollFrameRef.current;
@@ -471,6 +529,7 @@ function TimelineScheduleContent({
       calendar.timeZone,
       rewardPreferences,
       catalogue,
+      summonSessions,
     );
 
     return { days, layouts, incomeCells };
@@ -481,6 +540,7 @@ function TimelineScheduleContent({
     incomeContributions,
     playerProfile,
     rewardPreferences,
+    summonSessions,
   ]);
 
   const formatter = useMemo(
@@ -525,6 +585,61 @@ function TimelineScheduleContent({
     }
   }
 
+  function persistSummonSessions(next: SummonSession[]) {
+    setSummonSessions(next);
+    try {
+      saveSummonSessions(window.localStorage, next);
+      setSummonStorageWarning(null);
+      setRewardStorageError(false);
+    } catch {
+      setRewardStorageError(true);
+    }
+  }
+
+  function addSummonSession(session: SummonSession) {
+    persistSummonSessions([...summonSessions, session]);
+  }
+
+  function replaceSummonSession(session: SummonSession) {
+    persistSummonSessions(
+      summonSessions.map((current) =>
+        current.id === session.id ? session : current,
+      ),
+    );
+  }
+
+  function copySummonSession(sessionId: string) {
+    persistSummonSessions(duplicateSummonSession(summonSessions, sessionId));
+  }
+
+  function changeSummonSessionDay(sessionId: string, day: string) {
+    persistSummonSessions(moveSummonSession(summonSessions, sessionId, day));
+  }
+
+  function removeSummonSession(sessionId: string) {
+    persistSummonSessions(deleteSummonSession(summonSessions, sessionId));
+  }
+
+  function changeSummonSessionStatus(
+    sessionId: string,
+    status: SummonSessionStatus,
+  ) {
+    persistSummonSessions(
+      setSummonSessionStatus(summonSessions, sessionId, status),
+    );
+  }
+
+  function closeSelectedDay() {
+    const day = selectedDay;
+    setSelectedDay(null);
+    setSelectedDayBannerId(null);
+    if (day) {
+      requestAnimationFrame(() =>
+        document.getElementById(`timeline-day-${day}`)?.focus(),
+      );
+    }
+  }
+
   function returnToToday() {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -538,6 +653,28 @@ function TimelineScheduleContent({
       top: 0,
       left: 0,
     });
+  }
+
+  function demonstrateDaySelection() {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+
+    const index = visibleDayIndex({
+      scrollLeft: scroll.scrollLeft,
+      viewportWidth: scroll.clientWidth,
+      dayWidth: timelineLayout.dayWidth,
+      dayCount: view.days.length,
+    });
+    const day = view.days[index];
+    if (!day) return;
+
+    planDemoRunRef.current += 1;
+    setProfilePanelOpen(false);
+    setSelectedKey(null);
+    setSelectedIncomeKey(null);
+    setSelectedDayBannerId(null);
+    setSelectedDay(null);
+    setPlanDemo({ day, runId: planDemoRunRef.current });
   }
 
   function showRailTooltip(
@@ -599,6 +736,52 @@ function TimelineScheduleContent({
   const gridStyle = {
     width: `${view.days.length * timelineLayout.dayWidth}px`,
   } as CSSProperties;
+  const selectedDayIndex = selectedDay ? view.days.indexOf(selectedDay) : -1;
+  const selectedDayBanners = selectedDay
+    ? entries.flatMap((entry) => {
+        if (entry.kind !== "BANNER") return [];
+        const starts = calendarDayKey(
+          entry.startsAt,
+          entry.startsAtPrecision,
+          calendar.timeZone,
+        );
+        const ends = entry.endsAt
+          ? calendarDayKey(
+              entry.endsAt,
+              entry.endsAtPrecision ?? "EXACT",
+              calendar.timeZone,
+            )
+          : starts;
+        return selectedDay >= starts && selectedDay <= ends
+          ? [{ id: entry.id, name: entry.name }]
+          : [];
+      })
+    : [];
+  const selectedDaySessions = selectedDay
+    ? summonSessions.filter((session) => session.day === selectedDay)
+    : [];
+  const selectedDayBalances = selectedDay
+    ? forecastBalancesOnDay(
+        view.incomeCells,
+        playerProfile,
+        view.days[0] ?? calendar.today,
+        selectedDay,
+      )
+    : null;
+  const findAffordableDay = selectedDay
+    ? (spending: SummonPlanSpending, excludedSessionId?: string) =>
+        findEarliestAffordableSummonDay(
+          view.incomeCells,
+          playerProfile,
+          view.days[0] ?? calendar.today,
+          view.days,
+          selectedDay,
+          spending,
+          excludedSessionId
+            ? summonSessions.find((session) => session.id === excludedSessionId)
+            : undefined,
+        )
+    : undefined;
 
   return (
     <section
@@ -621,10 +804,21 @@ function TimelineScheduleContent({
           <button
             type="button"
             className="timeline-tonal-button"
+            aria-label="Show how to select a summon planning date"
+            onClick={demonstrateDaySelection}
+          >
+            Plan summons
+          </button>
+
+          <button
+            type="button"
+            className="timeline-tonal-button"
             data-attention={playerProfile ? undefined : "true"}
             onClick={() => {
+              setPlanDemo(null);
               setSelectedKey(null);
               setSelectedIncomeKey(null);
+              setSelectedDay(null);
               setProfilePanelOpen(true);
             }}
           >
@@ -634,7 +828,10 @@ function TimelineScheduleContent({
           <button
             type="button"
             className="timeline-tonal-button"
-            onClick={returnToToday}
+            onClick={() => {
+              setPlanDemo(null);
+              returnToToday();
+            }}
           >
             Today
           </button>
@@ -647,10 +844,15 @@ function TimelineScheduleContent({
           reload this page.
         </p>
       ) : null}
+      {summonStorageWarning ? (
+        <p className="timeline-preference-notice" role="status">
+          {summonStorageWarning} Other saved sessions remain available.
+        </p>
+      ) : null}
       <div
         className="timeline-workspace"
         data-has-selection={
-          selectedEntry || selectedIncomeCell || profilePanelOpen
+          selectedEntry || selectedIncomeCell || selectedDay || profilePanelOpen
             ? "true"
             : "false"
         }
@@ -671,6 +873,16 @@ function TimelineScheduleContent({
             }}
           >
             <div ref={ledgerRef} className="timeline-ledger" style={gridStyle}>
+              {selectedDayIndex >= 0 ? (
+                <span
+                  className="timeline-selected-day-column"
+                  style={{
+                    left: selectedDayIndex * timelineLayout.dayWidth,
+                    width: timelineLayout.dayWidth,
+                  }}
+                  aria-hidden="true"
+                />
+              ) : null}
               <header ref={dateAxisRef} className="timeline-date-axis">
                 <div
                   className="timeline-date-track"
@@ -679,19 +891,66 @@ function TimelineScheduleContent({
                   {view.days.map((day) => {
                     const label = dateLabel(day, formatter);
                     const isMonthStart = day.endsWith("-01");
+                    const daySessions = summonSessions.filter(
+                      (session) => session.day === day,
+                    );
+                    const hasSessions = daySessions.length > 0;
+                    const hasPlanned = daySessions.some(
+                      (session) => session.status === "PLANNED",
+                    );
+                    const hasSpent = daySessions.some(
+                      (session) => session.status === "SPENT",
+                    );
+                    const sessionStatus =
+                      hasPlanned && hasSpent
+                        ? "MIXED"
+                        : hasSpent
+                          ? "SPENT"
+                          : "PLANNED";
+                    const sessionLabel = hasSessions
+                      ? hasPlanned && hasSpent
+                        ? " Has planned and spent summon sessions."
+                        : hasSpent
+                          ? " Has a spent summon session."
+                          : " Has a planned summon session."
+                      : "";
                     return (
-                      <time
+                      <button
                         key={day}
                         id={`timeline-day-${day}`}
-                        dateTime={day}
+                        type="button"
                         className="timeline-day"
                         data-month-start={isMonthStart ? "true" : "false"}
-                        title={`${label.weekday}, ${label.month} ${label.day}`}
+                        data-selected={selectedDay === day ? "true" : undefined}
+                        data-has-sessions={hasSessions ? "true" : undefined}
+                        title={`Plan summons for ${label.weekday}, ${label.month} ${label.day}`}
+                        aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel} Select this date to plan summons.`}
+                        aria-pressed={selectedDay === day}
+                        onClick={() => {
+                          setPlanDemo(null);
+                          setProfilePanelOpen(false);
+                          setSelectedKey(null);
+                          setSelectedIncomeKey(null);
+                          setSelectedDayBannerId(null);
+                          setSelectedDay(day);
+                        }}
                       >
-                        <span>{label.month}</span>
-                        <strong>{label.day}</strong>
-                        <small>{label.weekday}</small>
-                      </time>
+                        <time dateTime={day}>
+                          <span>{label.month}</span>
+                          <strong>{label.day}</strong>
+                          <small>{label.weekday}</small>
+                        </time>
+                        {planDemo?.day === day ? (
+                          <TimelineDayClickDemo key={planDemo.runId} />
+                        ) : null}
+                        {hasSessions ? (
+                          <i
+                            className="timeline-day-session-marker"
+                            data-status={sessionStatus}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </button>
                     );
                   })}
                 </div>
@@ -705,8 +964,10 @@ function TimelineScheduleContent({
                     cells={view.incomeCells}
                     selectedKey={selectedIncomeKey}
                     onSelect={(cell) => {
+                      setPlanDemo(null);
                       setProfilePanelOpen(false);
                       setSelectedKey(null);
+                      setSelectedDay(null);
                       setSelectedIncomeKey(cell.key);
                     }}
                   />
@@ -717,8 +978,10 @@ function TimelineScheduleContent({
                     selectedKey={selectedKey}
                     timeZone={calendar.timeZone}
                     onSelect={(entry) => {
+                      setPlanDemo(null);
                       setProfilePanelOpen(false);
                       setSelectedIncomeKey(null);
+                      setSelectedDay(null);
                       setSelectedKey(entry.key);
                     }}
                     onShowTooltip={showRailTooltip}
@@ -765,7 +1028,27 @@ function TimelineScheduleContent({
           </div>
         </div>
 
-        {profilePanelOpen ? (
+        {selectedDay && selectedDayBalances ? (
+          <TimelineDayDetails
+            key={selectedDay}
+            day={selectedDay}
+            banners={selectedDayBanners}
+            balances={selectedDayBalances}
+            sessions={selectedDaySessions}
+            initialBannerId={selectedDayBannerId}
+            onSave={addSummonSession}
+            onUpdate={replaceSummonSession}
+            onDuplicate={copySummonSession}
+            onMove={changeSummonSessionDay}
+            onDelete={removeSummonSession}
+            onStatusChange={changeSummonSessionStatus}
+            findAffordableDay={findAffordableDay}
+            scheduleStartDay={view.days[0]}
+            scheduleEndDay={view.days.at(-1)}
+            timeZone={calendar.timeZone}
+            onClose={closeSelectedDay}
+          />
+        ) : profilePanelOpen ? (
           <TimelineProfileDetails
             profile={playerProfile}
             today={calendar.today}
@@ -791,6 +1074,39 @@ function TimelineScheduleContent({
             timeZone={calendar.timeZone}
             rewardPreferences={rewardPreferences}
             onSetRewardInclusion={saveRewardInclusion}
+            onPlanSummons={
+              selectedEntry.kind === "BANNER"
+                ? () => {
+                    const starts = calendarDayKey(
+                      selectedEntry.startsAt,
+                      selectedEntry.startsAtPrecision,
+                      calendar.timeZone,
+                    );
+                    const ends = selectedEntry.endsAt
+                      ? calendarDayKey(
+                          selectedEntry.endsAt,
+                          selectedEntry.endsAtPrecision ?? "EXACT",
+                          calendar.timeZone,
+                        )
+                      : starts;
+                    const preferredDay =
+                      calendar.today >= starts && calendar.today <= ends
+                        ? calendar.today
+                        : starts;
+                    const firstDay = view.days[0] ?? preferredDay;
+                    const lastDay = view.days.at(-1) ?? preferredDay;
+                    const day =
+                      preferredDay < firstDay
+                        ? firstDay
+                        : preferredDay > lastDay
+                          ? lastDay
+                          : preferredDay;
+                    setSelectedDayBannerId(selectedEntry.id);
+                    setSelectedKey(null);
+                    setSelectedDay(day);
+                  }
+                : undefined
+            }
             onClose={() => setSelectedKey(null)}
           />
         ) : (
@@ -798,6 +1114,7 @@ function TimelineScheduleContent({
             profile={playerProfile}
             today={calendar.today}
             onSaveProfile={saveProfile}
+            onOpenProfile={() => setProfilePanelOpen(true)}
           />
         )}
       </div>

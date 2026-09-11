@@ -234,6 +234,7 @@ model Banner {
   sourceRegion      String
   family            EventFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
   featured          BannerServant[]
+  summonLineups     SummonLineup[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -243,10 +244,12 @@ model Banner {
 }
 
 model Servant {
-  id        Int             @id
+  id        Int                   @id
   name      String
   className String
+  rarity    Int?
   banners   BannerServant[]
+  lineups   SummonLineupServant[]
 }
 
 model BannerServant {
@@ -258,6 +261,36 @@ model BannerServant {
   servant Servant @relation(fields: [servantId], references: [id], onDelete: Cascade)
 
   @@id([bannerId, servantId])
+  @@index([servantId])
+}
+
+model SummonLineup {
+  id             String                @id @default(cuid())
+  sourceKey      String                @unique
+  bannerId       String
+  name           String
+  startsAt       DateTime
+  endsAt         DateTime?
+  evidenceUrl    String
+  sourceRegion   String
+  lastVerifiedAt DateTime?
+  banner         Banner                @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  featured       SummonLineupServant[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([bannerId, startsAt])
+  @@index([startsAt, endsAt])
+}
+
+model SummonLineupServant {
+  lineupId   String
+  servantId  Int
+  soloRateUp Boolean      @default(true)
+  lineup     SummonLineup @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  servant    Servant      @relation(fields: [servantId], references: [id], onDelete: Cascade)
+
+  @@id([lineupId, servantId])
   @@index([servantId])
 }
 

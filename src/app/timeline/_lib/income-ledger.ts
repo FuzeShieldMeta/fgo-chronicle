@@ -15,6 +15,12 @@ import {
   resolveRewardInclusion,
   type RewardPreferences,
 } from "~/app/timeline/_lib/reward-preferences";
+import {
+  automaticFragmentConversion,
+  calculateSummonCost,
+  type SummonSpendInput,
+} from "~/app/timeline/_lib/summon-cost";
+import type { SummonSession } from "~/app/timeline/_lib/summon-session";
 
 export const incomeResourceLabels: Record<ForecastResourceType, string> = {
   SAINT_QUARTZ: "Saint Quartz",
@@ -60,14 +66,30 @@ export type IncomeLedgerCell = {
   itemType: ForecastResourceType;
   delta: number;
   closingBalance: number | null;
+  incomeDelta: number;
+  sessionDelta: number;
   hasUnresolvedConditional: boolean;
   contributions: ResolvedIncomeContribution[];
+  sessionChanges: SummonSessionResourceChange[];
 };
 
 export type ResolvedIncomeContribution = IncomeContribution & {
   included: boolean;
   inclusionResolved: boolean;
   inclusionReason?: string;
+};
+
+export type SummonSessionResourceChange = {
+  id: string;
+  sessionId: string;
+  day: string;
+  itemType: ForecastResourceType;
+  amount: number;
+  kind: "FRAGMENT_CONVERSION" | "SUMMON_SPEND";
+  status: SummonSession["status"];
+  bannerName: string;
+  targetName: string;
+  createdAt: string;
 };
 
 const recurringRuleReviewedAt = new Date(recurringIncomeRuleSet.verifiedAt);
@@ -86,6 +108,63 @@ function resolveContribution(
     ...contribution,
     ...resolveRewardInclusion(contribution, preferences, profile, catalogue),
   };
+}
+
+function summonSessionResourceChanges(
+  session: SummonSession,
+): SummonSessionResourceChange[] {
+  const cost = calculateSummonCost({
+    ...session.spending,
+    startingBonusCount: session.startingBonusCount,
+  });
+  const common = {
+    sessionId: session.id,
+    day: session.day,
+    status: session.status,
+    bannerName: session.banner.name,
+    targetName: session.target.name,
+    createdAt: session.createdAt,
+  };
+  const changes: SummonSessionResourceChange[] = [];
+
+  if (cost.fragmentsConverted > 0) {
+    changes.push(
+      {
+        ...common,
+        id: `${session.id}:fragment-conversion:fragments`,
+        itemType: "SAINT_QUARTZ_FRAGMENT",
+        amount: -cost.fragmentsConverted,
+        kind: "FRAGMENT_CONVERSION",
+      },
+      {
+        ...common,
+        id: `${session.id}:fragment-conversion:quartz`,
+        itemType: "SAINT_QUARTZ",
+        amount: cost.quartzFromFragments,
+        kind: "FRAGMENT_CONVERSION",
+      },
+    );
+  }
+  if (cost.quartzSpent > 0) {
+    changes.push({
+      ...common,
+      id: `${session.id}:summon-spend:quartz`,
+      itemType: "SAINT_QUARTZ",
+      amount: -cost.quartzSpent,
+      kind: "SUMMON_SPEND",
+    });
+  }
+  if (cost.ticketsSpent > 0) {
+    changes.push({
+      ...common,
+      id: `${session.id}:summon-spend:tickets`,
+      itemType: "SUMMON_TICKET",
+      amount: -cost.ticketsSpent,
+      kind: "SUMMON_SPEND",
+    });
+  }
+
+  return changes;
 }
 
 function loginMilestoneContributions(
@@ -254,6 +333,7 @@ export function buildIncomeLedger(
   timeZone: string,
   preferences: RewardPreferences = createRewardPreferences(),
   catalogue: StoryChapter[] = storyChapters,
+  summonSessions: SummonSession[] = [],
 ) {
   const effectiveProfile =
     profile ?? createDefaultPlayerForecastProfile(days[0] ?? "1970-01-01");
@@ -281,7 +361,10 @@ export function buildIncomeLedger(
     const existing = grouped.get(key);
     if (existing) {
       existing.contributions.push(contribution);
-      if (contribution.included) existing.delta += contribution.amount;
+      if (contribution.included) {
+        existing.incomeDelta += contribution.amount;
+        existing.delta += contribution.amount;
+      }
       if (!contribution.inclusionResolved) {
         existing.hasUnresolvedConditional = true;
       }
@@ -294,8 +377,45 @@ export function buildIncomeLedger(
       itemType: contribution.itemType,
       delta: contribution.included ? contribution.amount : 0,
       closingBalance: null,
+      incomeDelta: contribution.included ? contribution.amount : 0,
+      sessionDelta: 0,
       hasUnresolvedConditional: !contribution.inclusionResolved,
       contributions: [contribution],
+      sessionChanges: [],
+    });
+  }
+
+  const sessionChanges = [...summonSessions]
+    .sort(
+      (left, right) =>
+        left.day.localeCompare(right.day) ||
+        left.createdAt.localeCompare(right.createdAt) ||
+        left.id.localeCompare(right.id),
+    )
+    .flatMap(summonSessionResourceChanges);
+
+  for (const change of sessionChanges) {
+    if (!daySet.has(change.day)) continue;
+    const key = cellKey(change.day, change.itemType);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.sessionChanges.push(change);
+      existing.sessionDelta += change.amount;
+      existing.delta += change.amount;
+      continue;
+    }
+
+    grouped.set(key, {
+      key,
+      day: change.day,
+      itemType: change.itemType,
+      delta: change.amount,
+      closingBalance: null,
+      incomeDelta: 0,
+      sessionDelta: change.amount,
+      hasUnresolvedConditional: false,
+      contributions: [],
+      sessionChanges: [change],
     });
   }
 
@@ -307,8 +427,12 @@ export function buildIncomeLedger(
         if (day < effectiveProfile.snapshot.effectiveDate) continue;
 
         const cell = grouped.get(cellKey(day, itemType));
-        if (day > effectiveProfile.snapshot.effectiveDate && cell) {
-          balance += cell.delta;
+        if (cell) {
+          if (day > effectiveProfile.snapshot.effectiveDate) {
+            balance += cell.delta;
+          } else if (day === effectiveProfile.snapshot.effectiveDate) {
+            balance += cell.sessionDelta;
+          }
         }
         if (cell) cell.closingBalance = balance;
       }
@@ -316,4 +440,88 @@ export function buildIncomeLedger(
   }
 
   return grouped;
+}
+
+export function forecastBalancesOnDay(
+  cells: Map<string, IncomeLedgerCell>,
+  profile: PlayerForecastProfile | null,
+  forecastStartDay: string,
+  day: string,
+) {
+  const effectiveProfile =
+    profile ?? createDefaultPlayerForecastProfile(forecastStartDay);
+  const balances = { ...effectiveProfile.snapshot.balances };
+  const latestDayByType = new Map<ForecastResourceType, string>();
+
+  for (const cell of cells.values()) {
+    if (
+      cell.day > day ||
+      cell.day < effectiveProfile.snapshot.effectiveDate ||
+      cell.closingBalance === null
+    ) {
+      continue;
+    }
+    const latestDay = latestDayByType.get(cell.itemType);
+    if (latestDay && latestDay > cell.day) continue;
+    latestDayByType.set(cell.itemType, cell.day);
+    balances[cell.itemType] = cell.closingBalance;
+  }
+
+  return balances;
+}
+
+export function findEarliestAffordableSummonDay(
+  cells: Map<string, IncomeLedgerCell>,
+  profile: PlayerForecastProfile | null,
+  forecastStartDay: string,
+  days: string[],
+  startingDay: string,
+  spending: SummonSpendInput & { autoConvertFragments?: boolean },
+  excludedSession?: SummonSession,
+) {
+  for (const day of days) {
+    if (day < startingDay) continue;
+    const balances = forecastBalancesOnDay(
+      cells,
+      profile,
+      forecastStartDay,
+      day,
+    );
+    if (excludedSession && excludedSession.day <= day) {
+      const excludedCost = calculateSummonCost({
+        ...excludedSession.spending,
+        startingBonusCount: excludedSession.startingBonusCount,
+      });
+      balances.SAINT_QUARTZ +=
+        excludedCost.quartzSpent - excludedCost.quartzFromFragments;
+      balances.SUMMON_TICKET += excludedCost.ticketsSpent;
+      balances.SAINT_QUARTZ_FRAGMENT += excludedCost.fragmentsConverted;
+    }
+    const costWithoutFragments = calculateSummonCost({
+      ...spending,
+      fragmentsConverted: 0,
+      startingBonusCount: 0,
+    });
+    const fragmentsConverted = spending.autoConvertFragments
+      ? automaticFragmentConversion({
+          quartzCost: costWithoutFragments.quartzSpent,
+          quartzAvailable: balances.SAINT_QUARTZ,
+          fragmentsAvailable: balances.SAINT_QUARTZ_FRAGMENT,
+        })
+      : spending.fragmentsConverted;
+    const cost = calculateSummonCost({
+      ...spending,
+      fragmentsConverted,
+      startingBonusCount: 0,
+    });
+    const hasFragments =
+      balances.SAINT_QUARTZ_FRAGMENT >= cost.fragmentsConverted;
+    const hasQuartz =
+      balances.SAINT_QUARTZ + cost.quartzFromFragments >= cost.quartzSpent;
+    const hasTickets = balances.SUMMON_TICKET >= cost.ticketsSpent;
+
+    if (hasFragments && hasQuartz && hasTickets) return day;
+  }
+
+  return null;
 }

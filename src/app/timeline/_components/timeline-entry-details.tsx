@@ -54,10 +54,12 @@ export function TimelineDetailsPlaceholder({
   profile,
   today,
   onSaveProfile,
+  onOpenProfile,
 }: {
   profile: PlayerForecastProfile | null;
   today: string;
   onSaveProfile: (profile: PlayerForecastProfile) => void;
+  onOpenProfile: () => void;
 }) {
   return (
     <aside
@@ -80,12 +82,18 @@ export function TimelineDetailsPlaceholder({
           />
         ) : (
           <section className="timeline-default-assumption">
-            <h4>Using default balances</h4>
+            <h4>Enter your balances</h4>
             <p>
-              The forecast starts today with zero resources and a total login
-              count of 100. Select Balances when you want to use your current
-              totals.
+              Add your current Quartz, fragments, tickets, and login count to
+              calculate your resource forecast.
             </p>
+            <button
+              type="button"
+              className="timeline-tonal-button"
+              onClick={onOpenProfile}
+            >
+              Enter balances
+            </button>
           </section>
         )}
       </div>
@@ -190,6 +198,12 @@ export function TimelineIncomeDetails({
   const excludedCount = cell.contributions.filter(
     (reward) => !reward.included,
   ).length;
+  const summonSpending = cell.sessionChanges
+    .filter((change) => change.kind === "SUMMON_SPEND")
+    .reduce((total, change) => total + change.amount, 0);
+  const fragmentConversion = cell.sessionChanges
+    .filter((change) => change.kind === "FRAGMENT_CONVERSION")
+    .reduce((total, change) => total + change.amount, 0);
   return (
     <aside
       className="timeline-details"
@@ -199,7 +213,7 @@ export function TimelineIncomeDetails({
       <div className="timeline-details-handle" aria-hidden="true" />
       <div className="timeline-details-header">
         <div>
-          <span className="timeline-type-label">Income sources</span>
+          <span className="timeline-type-label">Resource changes</span>
           <h3 id="timeline-details-heading">
             {incomeResourceLabels[cell.itemType]} {signedAmount(cell.delta)}
           </h3>
@@ -220,6 +234,24 @@ export function TimelineIncomeDetails({
           <dd>{cell.day}</dd>
         </div>
         <div>
+          <dt>Income</dt>
+          <dd>{signedAmount(cell.incomeDelta)}</dd>
+        </div>
+        <div>
+          <dt>Summon spending</dt>
+          <dd>{signedAmount(summonSpending)}</dd>
+        </div>
+        {fragmentConversion !== 0 ? (
+          <div>
+            <dt>Fragment conversion</dt>
+            <dd>{signedAmount(fragmentConversion)}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Net change</dt>
+          <dd>{signedAmount(cell.delta)}</dd>
+        </div>
+        <div>
           <dt>Forecast closing balance</dt>
           <dd>{cell.closingBalance ?? "Not available"}</dd>
         </div>
@@ -228,7 +260,7 @@ export function TimelineIncomeDetails({
       <section className="timeline-detail-section">
         <h4>Change breakdown</h4>
         <p>
-          Counted income: {signedAmount(cell.delta)}.{" "}
+          Net resource change: {signedAmount(cell.delta)}.{" "}
           {excludedCount === 0
             ? "No rewards are excluded."
             : excludedCount === 1
@@ -302,6 +334,19 @@ export function TimelineIncomeDetails({
               </li>
             );
           })}
+          {cell.sessionChanges.map((change) => (
+            <li key={change.id} data-session-status={change.status}>
+              <span>
+                {signedAmount(change.amount)} · {change.targetName}
+              </span>
+              <small>
+                {change.kind === "FRAGMENT_CONVERSION"
+                  ? "Fragment conversion"
+                  : "Summon spending"}
+                {` · ${change.bannerName} · ${change.status === "PLANNED" ? "Planned" : "Spent"}`}
+              </small>
+            </li>
+          ))}
         </ul>
       </section>
 
@@ -313,11 +358,11 @@ export function TimelineIncomeDetails({
       ) : (
         <div className="timeline-details-message">
           <p>
-            This balance uses today as its starting point, with zero resources
-            and a total login count of 100.
+            Add your current balances to calculate an accurate forecast for this
+            date.
           </p>
           <button type="button" onClick={onOpenProfile}>
-            Enter current balances
+            Enter balances
           </button>
         </div>
       )}
@@ -331,6 +376,7 @@ export function TimelineEntryDetails({
   timeZone,
   rewardPreferences,
   onSetRewardInclusion,
+  onPlanSummons,
   onClose,
 }: {
   entry: TimelineEntry;
@@ -338,6 +384,7 @@ export function TimelineEntryDetails({
   timeZone: string;
   rewardPreferences: RewardPreferences;
   onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
+  onPlanSummons?: () => void;
   onClose: () => void;
 }) {
   const catalogue = useStoryCatalogue();
@@ -469,6 +516,15 @@ export function TimelineEntryDetails({
           ) : (
             <p>No featured Servant data is available.</p>
           )}
+          {onPlanSummons ? (
+            <button
+              type="button"
+              className="timeline-primary-button"
+              onClick={onPlanSummons}
+            >
+              Plan summons
+            </button>
+          ) : null}
         </section>
       ) : null}
 

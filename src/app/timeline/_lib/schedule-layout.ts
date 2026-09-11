@@ -101,6 +101,30 @@ export function calendarDays(startDay: string, endDay: string) {
   );
 }
 
+export function visibleDayIndex({
+  scrollLeft,
+  viewportWidth,
+  dayWidth,
+  dayCount,
+}: {
+  scrollLeft: number;
+  viewportWidth: number;
+  dayWidth: number;
+  dayCount: number;
+}) {
+  if (!Number.isFinite(dayWidth) || dayWidth <= 0) {
+    throw new RangeError("day width must be greater than zero");
+  }
+  if (!Number.isSafeInteger(dayCount) || dayCount < 0) {
+    throw new RangeError("day count must be a non-negative integer");
+  }
+  if (dayCount === 0) return -1;
+
+  const viewportCentre =
+    Math.max(0, scrollLeft) + Math.max(0, viewportWidth) / 2;
+  return Math.min(dayCount - 1, Math.floor(viewportCentre / dayWidth));
+}
+
 export function layoutSchedule<T extends ScheduleInterval>(
   intervals: T[],
   options: LayoutOptions,

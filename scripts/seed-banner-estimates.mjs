@@ -37,6 +37,7 @@ async function importServants(banners) {
         id: servant.id,
         name: servant.name,
         className: servant.class,
+        rarity: servant.rarity ?? null,
       });
     }
   }
@@ -50,6 +51,7 @@ async function importServants(banners) {
       update: {
         name: servant.name,
         className: servant.className,
+        rarity: servant.rarity,
       },
     });
   }
@@ -104,7 +106,58 @@ async function importBanner(banner) {
       });
     }
 
-    return savedBanner;
+    const savedLineupKeys = [];
+    for (const lineup of banner.summonLineups ?? []) {
+      const lineupSourceKey = `${sourceKey}:${lineup.sourceKey}`;
+      const savedLineup = await transaction.summonLineup.upsert({
+        where: { sourceKey: lineupSourceKey },
+        create: {
+          sourceKey: lineupSourceKey,
+          bannerId: savedBanner.id,
+          name: lineup.name,
+          startsAt: new Date(lineup.startsAt),
+          endsAt: lineup.endsAt ? new Date(lineup.endsAt) : null,
+          evidenceUrl: lineup.evidenceUrl,
+          sourceRegion: lineup.sourceRegion,
+          lastVerifiedAt: lineup.lastVerifiedAt
+            ? new Date(lineup.lastVerifiedAt)
+            : null,
+        },
+        update: {
+          bannerId: savedBanner.id,
+          name: lineup.name,
+          startsAt: new Date(lineup.startsAt),
+          endsAt: lineup.endsAt ? new Date(lineup.endsAt) : null,
+          evidenceUrl: lineup.evidenceUrl,
+          sourceRegion: lineup.sourceRegion,
+          lastVerifiedAt: lineup.lastVerifiedAt
+            ? new Date(lineup.lastVerifiedAt)
+            : null,
+        },
+      });
+      savedLineupKeys.push(lineupSourceKey);
+
+      await transaction.summonLineupServant.deleteMany({
+        where: { lineupId: savedLineup.id },
+      });
+      if (lineup.servants.length > 0) {
+        await transaction.summonLineupServant.createMany({
+          data: lineup.servants.map((servant) => ({
+            lineupId: savedLineup.id,
+            servantId: servant.servantId,
+            soloRateUp: servant.soloRateUp,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    await transaction.summonLineup.deleteMany({
+      where: {
+        bannerId: savedBanner.id,
+        sourceKey: { notIn: savedLineupKeys },
+      },
+    });
   });
 }
 

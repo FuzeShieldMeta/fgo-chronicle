@@ -54,6 +54,7 @@ function createBanner(
           id: 1,
           name: "Artoria Pendragon",
           className: "Saber",
+          rarity: 5,
         },
       },
     ],

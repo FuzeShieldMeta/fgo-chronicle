@@ -110,7 +110,7 @@ export function PlayerForecastPanel({
         </h4>
         <p>
           Enter the resources you have today to replace the default zero
-          balances. Your details stay in this browser for now.
+          balances.
         </p>
         <small>These balances will be saved as current for {today}.</small>
       </div>

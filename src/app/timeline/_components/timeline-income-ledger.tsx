@@ -32,7 +32,7 @@ export function TimelineIncomeLedger({
     <section
       className="timeline-category timeline-income-ledger"
       data-category="INCOME_SOURCE"
-      aria-label="Income sources by resource and date"
+      aria-label="Resource changes by resource and date"
     >
       {forecastResourceTypes.map((itemType) => {
         const resourceCells = [...cells.values()].filter(
@@ -73,7 +73,7 @@ export function TimelineIncomeLedger({
                   }
                   style={style}
                   aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${cell.hasUnresolvedConditional ? " Contains a conditional reward that needs your choice." : ""}`}
-                  title={`Included income: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.`}
+                  title={`Resource change: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.`}
                   aria-pressed={selectedKey === cell.key}
                   onClick={() => onSelect(cell)}
                 >

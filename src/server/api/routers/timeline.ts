@@ -193,6 +193,26 @@ const incomeContributionSelect = {
   },
 } satisfies Prisma.RewardDefinitionSelect;
 
+const summonLineupSelect = {
+  id: true,
+  sourceKey: true,
+  name: true,
+  startsAt: true,
+  endsAt: true,
+  evidenceUrl: true,
+  sourceRegion: true,
+  lastVerifiedAt: true,
+  featured: {
+    select: {
+      soloRateUp: true,
+      servant: {
+        select: { id: true, name: true, className: true, rarity: true },
+      },
+    },
+    orderBy: [{ servantId: "asc" }],
+  },
+} satisfies Prisma.SummonLineupSelect;
+
 function eventCategory(eventType: string) {
   return incomeSourceEventTypes.some((type) => type === eventType)
     ? ("INCOME_SOURCE" as const)
@@ -384,10 +404,19 @@ export const timelineRouter = createTRPCRouter({
               select: {
                 soloRateUp: true,
                 servant: {
-                  select: { id: true, name: true, className: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    className: true,
+                    rarity: true,
+                  },
                 },
               },
               orderBy: [{ servantId: "asc" }],
+            },
+            summonLineups: {
+              select: summonLineupSelect,
+              orderBy: [{ startsAt: "asc" }, { id: "asc" }],
             },
           },
         });

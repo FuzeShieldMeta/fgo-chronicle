@@ -1,9 +1,27 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
+import type { Prisma } from "../../../../generated/prisma";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 const MAX_BANNER_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
+
+const bannerRelations = {
+  featured: {
+    include: {
+      servant: true,
+    },
+  },
+  summonLineups: {
+    include: {
+      featured: {
+        include: { servant: true },
+        orderBy: [{ servantId: "asc" }],
+      },
+    },
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+  },
+} satisfies Prisma.BannerInclude;
 
 const bannerRangeSchema = z
   .object({
@@ -59,11 +77,7 @@ export const bannerRouter = createTRPCRouter({
         },
       },
       include: {
-        featured: {
-          include: {
-            servant: true,
-          },
-        },
+        ...bannerRelations,
       },
       orderBy: [{ startsAt: "asc" }, { id: "asc" }],
     });
@@ -80,11 +94,7 @@ export const bannerRouter = createTRPCRouter({
           id: input.id,
         },
         include: {
-          featured: {
-            include: {
-              servant: true,
-            },
-          },
+          ...bannerRelations,
         },
       });
 
@@ -156,11 +166,7 @@ export const bannerRouter = createTRPCRouter({
           },
         },
         include: {
-          featured: {
-            include: {
-              servant: true,
-            },
-          },
+          ...bannerRelations,
         },
         orderBy: [{ startsAt: "asc" }, { id: "asc" }],
       });

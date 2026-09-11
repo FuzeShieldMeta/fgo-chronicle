@@ -14,13 +14,36 @@
           "id": 2,
           "name": "Example Saber",
           "class": "Saber",
+          "rarity": 5,
           "soloRateUp": true
         },
         {
           "id": 3,
           "name": "Example Archer",
           "class": "Archer",
+          "rarity": 4,
           "soloRateUp": false
+        }
+      ],
+      "summonLineups": [
+        {
+          "sourceKey": "rotation-1",
+          "name": "Rotation 1",
+          "startsAt": "2027-01-01T04:00:00.000Z",
+          "endsAt": "2027-01-08T03:59:59.000Z",
+          "evidenceUrl": "https://example.com/summon/rotation-1",
+          "sourceRegion": "NA",
+          "lastVerifiedAt": "2026-12-31T00:00:00.000Z",
+          "servants": [
+            {
+              "servantId": 2,
+              "soloRateUp": true
+            },
+            {
+              "servantId": 3,
+              "soloRateUp": false
+            }
+          ]
         }
       ]
     },
@@ -35,6 +58,7 @@
           "id": 4,
           "name": "Example Caster",
           "class": "Caster",
+          "rarity": 5,
           "soloRateUp": true
         }
       ]
