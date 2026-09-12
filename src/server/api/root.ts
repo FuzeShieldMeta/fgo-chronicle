@@ -1,6 +1,7 @@
 import { healthRouter } from "~/server/api/routers/health";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 import { bannerRouter } from "~/server/api/routers/banner";
+import { plannerStateRouter } from "~/server/api/routers/planner-state";
 import { timelineRouter } from "~/server/api/routers/timeline";
 
 /**
@@ -11,6 +12,7 @@ import { timelineRouter } from "~/server/api/routers/timeline";
 export const appRouter = createTRPCRouter({
   health: healthRouter,
   banner: bannerRouter,
+  plannerState: plannerStateRouter,
   timeline: timelineRouter,
 });
 

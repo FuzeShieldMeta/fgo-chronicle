@@ -148,10 +148,7 @@ export function PlayerForecastPanel({
             ))}
           </select>
         </label>
-        <small>
-          Earlier main stories are included. This checks story requirements, not
-          whether you have claimed a reward.
-        </small>
+        <small>Earlier main stories are included.</small>
         <details>
           <summary>Other completed stories</summary>
           <button

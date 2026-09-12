@@ -1,5 +1,6 @@
 import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
+import { auth } from "~/server/auth";
 import { api } from "~/trpc/server";
 
 function paddedTwoYearWindow(now: Date) {
@@ -19,18 +20,24 @@ function paddedTwoYearWindow(now: Date) {
   return { from, to };
 }
 
-export default async function TimelinePage() {
+export default async function TimelinePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>;
+}) {
   const now = new Date();
   const range = paddedTwoYearWindow(now);
-  const [entries, incomeContributions, stories] = await Promise.all([
+  const [entries, incomeContributions, stories, session] = await Promise.all([
     api.timeline.list(range),
     api.timeline.income(range),
     api.timeline.stories(),
+    auth(),
   ]);
   const initialCalendar = {
     today: now.toISOString().slice(0, 10),
     timeZone: "UTC",
   };
+  const authError = Boolean((await searchParams)?.error);
 
   return (
     <main id="main-content" className="timeline-page">
@@ -51,6 +58,16 @@ export default async function TimelinePage() {
         entries={entries}
         incomeContributions={incomeContributions}
         initialCalendar={initialCalendar}
+        user={
+          session?.user
+            ? {
+                id: session.user.id,
+                name: session.user.name ?? null,
+                email: session.user.email ?? null,
+              }
+            : null
+        }
+        authError={authError}
       />
     </main>
   );

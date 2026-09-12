@@ -38,17 +38,18 @@ export function TimelineDetailsLayer({
   active,
   labelledBy,
   selectionKey,
+  returnFocusId,
   onClose,
   children,
 }: {
   active: boolean;
   labelledBy: string;
   selectionKey: string;
+  returnFocusId?: string;
   onClose: () => void;
   children: ReactNode;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef(onClose);
   const isMobile = useMediaQuery(mobileDetailsQuery);
   const isModal = active && isMobile;
@@ -60,10 +61,11 @@ export function TimelineDetailsLayer({
   useEffect(() => {
     if (!isModal) return;
 
-    openerRef.current =
+    const opener =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    const focusId = returnFocusId;
     const page = document.querySelector<HTMLElement>(".timeline-page");
     const previousOverflow = document.body.style.overflow;
 
@@ -73,10 +75,15 @@ export function TimelineDetailsLayer({
     return () => {
       if (page) page.inert = false;
       document.body.style.overflow = previousOverflow;
-      if (openerRef.current?.isConnected) openerRef.current.focus();
-      openerRef.current = null;
+      window.setTimeout(() => {
+        const target = focusId
+          ? (document.getElementById(focusId) ??
+            document.querySelector<HTMLElement>(".timeline-day"))
+          : opener;
+        if (target?.isConnected) target.focus();
+      }, 0);
     };
-  }, [isModal]);
+  }, [isModal, returnFocusId]);
 
   useEffect(() => {
     if (!isModal) return;

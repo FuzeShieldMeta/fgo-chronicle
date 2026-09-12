@@ -27,6 +27,12 @@ import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-deta
 import { TimelineDayClickDemo } from "~/app/timeline/_components/timeline-day-click-demo";
 import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
 import {
+  TimelineAccountMenu,
+  type TimelineAccountUser,
+} from "~/app/timeline/_components/timeline-account-menu";
+import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
+import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
+import {
   buildIncomeLedger,
   findEarliestAffordableSummonDay,
   forecastBalancesOnDay,
@@ -35,10 +41,12 @@ import {
 } from "~/app/timeline/_lib/income-ledger";
 import {
   forecastResourceTypes,
+  clearPlayerForecastProfile,
   loadPlayerForecastProfile,
   savePlayerForecastProfile,
   type PlayerForecastProfile,
 } from "~/app/timeline/_lib/player-forecast";
+import { createPlannerStatePayload } from "~/app/timeline/_lib/planner-state";
 import {
   createRewardPreferences,
   loadRewardPreferences,
@@ -311,6 +319,8 @@ export function TimelineSchedule(props: {
   incomeContributions: TimelineIncomeContribution[];
   initialCalendar: LocalCalendar;
   stories?: StoryChapter[];
+  user?: TimelineAccountUser | null;
+  authError?: boolean;
 }) {
   return (
     <StoryCatalogueContext.Provider value={props.stories ?? storyChapters}>
@@ -323,10 +333,14 @@ function TimelineScheduleContent({
   entries,
   incomeContributions,
   initialCalendar,
+  user,
+  authError = false,
 }: {
   entries: TimelineEntry[];
   incomeContributions: TimelineIncomeContribution[];
   initialCalendar: LocalCalendar;
+  user?: TimelineAccountUser | null;
+  authError?: boolean;
 }) {
   const catalogue = useStoryCatalogue();
   const router = useRouter();
@@ -350,6 +364,7 @@ function TimelineScheduleContent({
     string | null
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+  const [localPlannerReady, setLocalPlannerReady] = useState(false);
   const [planDemo, setPlanDemo] = useState<PlanDemo | null>(null);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
@@ -358,6 +373,21 @@ function TimelineScheduleContent({
   const ledgerRef = useRef<HTMLDivElement>(null);
   const dateAxisRef = useRef<HTMLElement>(null);
   const planDemoRunRef = useRef(0);
+  const plannerPayload = useMemo(
+    () =>
+      createPlannerStatePayload({
+        profile: playerProfile,
+        rewardPreferences,
+        summonSessions,
+      }),
+    [playerProfile, rewardPreferences, summonSessions],
+  );
+  const plannerSync = usePlannerStateSync({
+    userId: user?.id ?? null,
+    localReady: localPlannerReady,
+    payload: plannerPayload,
+    replaceLocal: replaceLocalPlannerState,
+  });
 
   useEffect(() => {
     const localCalendar = readLocalCalendar();
@@ -375,6 +405,8 @@ function TimelineScheduleContent({
       setSummonStorageWarning(loadedSessions.warnings[0] ?? null);
     } catch {
       setRewardStorageError(true);
+    } finally {
+      setLocalPlannerReady(true);
     }
   }, []);
 
@@ -575,6 +607,25 @@ function TimelineScheduleContent({
     router.refresh();
   }
 
+  function replaceLocalPlannerState(payload: typeof plannerPayload) {
+    setPlayerProfile(payload.profile);
+    setRewardPreferences(payload.rewardPreferences);
+    setSummonSessions(payload.summonSessions);
+    setSummonStorageWarning(null);
+    try {
+      if (payload.profile) {
+        savePlayerForecastProfile(window.localStorage, payload.profile);
+      } else {
+        clearPlayerForecastProfile(window.localStorage);
+      }
+      saveRewardPreferences(window.localStorage, payload.rewardPreferences);
+      saveSummonSessions(window.localStorage, payload.summonSessions);
+      setRewardStorageError(false);
+    } catch {
+      setRewardStorageError(true);
+    }
+  }
+
   function saveRewardInclusion(rewardId: string, included: boolean | null) {
     const next = setRewardInclusion(rewardPreferences, rewardId, included);
     setRewardPreferences(next);
@@ -635,9 +686,14 @@ function TimelineScheduleContent({
     setSelectedDay(null);
     setSelectedDayBannerId(null);
     if (day) {
-      requestAnimationFrame(() =>
-        document.getElementById(`timeline-day-${day}`)?.focus(),
-      );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const target =
+            document.getElementById(`timeline-day-${day}`) ??
+            document.querySelector<HTMLElement>(".timeline-day");
+          target?.focus();
+        });
+      });
     }
   }
 
@@ -712,14 +768,6 @@ function TimelineScheduleContent({
 
   function hideRailTooltip(key: string) {
     setRailTooltip((current) => (current?.key === key ? null : current));
-  }
-
-  if (entries.length === 0) {
-    return (
-      <section className="timeline-empty">
-        <p>No schedule entries are available for the next two years.</p>
-      </section>
-    );
   }
 
   const timelineStyle = {
@@ -867,6 +915,13 @@ function TimelineScheduleContent({
           >
             Today
           </button>
+
+          <TimelineAccountMenu
+            user={user ?? null}
+            syncStatus={plannerSync.status}
+            onSyncNow={plannerSync.syncNow}
+            onOpenConflict={plannerSync.openConflict}
+          />
         </div>
       </div>
 
@@ -874,6 +929,17 @@ function TimelineScheduleContent({
         <p className="timeline-preference-notice" role="status">
           Your browser could not save forecast settings. Changes apply until you
           reload this page.
+        </p>
+      ) : null}
+      {authError ? (
+        <p className="timeline-preference-notice" role="alert">
+          Google sign-in could not be completed. Try again.
+        </p>
+      ) : null}
+      {entries.length === 0 ? (
+        <p className="timeline-preference-notice" role="status">
+          No events or summoning campaigns are available for this period.
+          Balances and summon planning are still available.
         </p>
       ) : null}
       {summonStorageWarning ? (
@@ -1064,6 +1130,9 @@ function TimelineScheduleContent({
           active={hasDetailsSelection}
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
+          returnFocusId={
+            selectedDay ? `timeline-day-${selectedDay}` : undefined
+          }
           onClose={closeActiveDetails}
         >
           {selectedDay && selectedDayBalances ? (
@@ -1171,6 +1240,15 @@ function TimelineScheduleContent({
             document.body,
           )
         : null}
+      {plannerSync.conflict?.open ? (
+        <PlannerSyncConflictDialog
+          localPayload={plannerPayload}
+          cloud={plannerSync.conflict.cloud}
+          onKeepDevice={() => void plannerSync.keepDeviceCopy()}
+          onKeepCloud={() => void plannerSync.keepCloudCopy()}
+          onClose={plannerSync.dismissConflict}
+        />
+      ) : null}
     </section>
   );
 }

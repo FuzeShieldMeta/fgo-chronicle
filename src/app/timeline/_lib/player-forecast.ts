@@ -167,3 +167,8 @@ export function savePlayerForecastProfile(
 ) {
   storage.setItem(playerForecastStorageKey, JSON.stringify(profile));
 }
+
+export function clearPlayerForecastProfile(storage: Storage) {
+  storage.removeItem(playerForecastStorageKey);
+  storage.removeItem(versionOnePlayerForecastStorageKey);
+}

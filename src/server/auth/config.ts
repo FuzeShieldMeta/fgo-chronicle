@@ -33,6 +33,9 @@ declare module "next-auth" {
 export const authConfig = {
   providers: [GoogleProvider],
   adapter: PrismaAdapter(db),
+  pages: {
+    error: "/timeline",
+  },
   callbacks: {
     session: ({ session, user }) => ({
       ...session,
