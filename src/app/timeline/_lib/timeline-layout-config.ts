@@ -4,7 +4,6 @@ export const timelineLayout = {
   dayWidth: 52,
   categoryLabelWidth: 112,
   minimumScheduleCategoryHeight: 144,
-  minimumIncomeResourceRowHeight: 44,
   incomeResourceCount: 5,
   incomeResourceIconSize: 24,
   railHorizontalInset: 3,
@@ -18,8 +17,6 @@ export const timelineLayout = {
   eventRailArtworkSizes: "(max-width: 768px) 120px, 160px",
   eventDetailsArtworkSizes: "(max-width: 768px) 100vw, 520px",
   stickyLabelInset: 4,
-  wheelSmoothingFactor: 0.35,
-  wheelStopThreshold: 0.5,
 } as const;
 
 export const timelineSchedule = {
@@ -27,12 +24,3 @@ export const timelineSchedule = {
   queryBoundaryPaddingDays: 2,
   detailsStaleTimeMs: 5 * 60 * 1_000,
 } as const;
-
-export const minimumCategoryStackHeight =
-  timelineLayout.minimumScheduleCategoryHeight * 2 +
-  timelineLayout.minimumIncomeResourceRowHeight *
-    timelineLayout.incomeResourceCount;
-
-export const minimumIncomeCategoryHeight =
-  timelineLayout.minimumIncomeResourceRowHeight *
-  timelineLayout.incomeResourceCount;

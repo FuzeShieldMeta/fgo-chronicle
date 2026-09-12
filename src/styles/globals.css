@@ -166,6 +166,11 @@ button {
 }
 
 .timeline-shell {
+  --timeline-min-income-row-height: 44px;
+  --timeline-min-income-category-height: 220px;
+  --timeline-min-category-stack-height: 508px;
+  --timeline-income-icon-size: 24px;
+  --timeline-horizontal-scrollbar-height: 12px;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -574,7 +579,8 @@ button {
   position: relative;
   height: 100%;
   min-height: calc(
-    var(--timeline-date-axis-height) + var(--timeline-min-category-stack-height)
+    var(--timeline-date-axis-height) + var(--timeline-min-category-stack-height) +
+      var(--timeline-horizontal-scrollbar-height)
   );
   min-width: 0;
   overflow: hidden;
@@ -593,10 +599,15 @@ button {
   right: 0;
   bottom: 0;
   left: var(--timeline-category-label-width);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
   scrollbar-color: var(--md-outline) var(--md-surface-low);
   scrollbar-width: thin;
+}
+
+.timeline-scroll::-webkit-scrollbar {
+  height: var(--timeline-horizontal-scrollbar-height);
 }
 
 .timeline-scroll-frame:has(.timeline-scroll:focus-visible) {
@@ -608,12 +619,9 @@ button {
   position: relative;
   display: grid;
   min-width: 100%;
-  min-height: max(
-    100%,
-    calc(
-      var(--timeline-date-axis-height) +
-        var(--timeline-min-category-stack-height)
-    )
+  height: calc(100% - var(--timeline-horizontal-scrollbar-height));
+  min-height: calc(
+    var(--timeline-date-axis-height) + var(--timeline-min-category-stack-height)
   );
   grid-template-rows:
     var(--timeline-date-axis-height)
@@ -841,7 +849,7 @@ button {
   position: absolute;
   z-index: 60;
   top: var(--timeline-date-axis-height);
-  bottom: 0;
+  bottom: var(--timeline-horizontal-scrollbar-height);
   left: 0;
   width: var(--timeline-category-label-width);
   overflow: hidden;
@@ -850,18 +858,51 @@ button {
 
 .timeline-frozen-category-track {
   display: grid;
-  height: max(
-    100%,
+  height: calc(
     var(
-      --timeline-category-track-height,
-      var(--timeline-min-category-stack-height)
-    )
+        --timeline-event-track-height,
+        var(--timeline-min-schedule-category-height)
+      ) +
+      var(
+        --timeline-summon-track-height,
+        var(--timeline-min-schedule-category-height)
+      ) +
+      var(
+        --timeline-income-track-height,
+        var(--timeline-min-income-category-height)
+      )
   );
   grid-template-rows:
-    minmax(var(--timeline-min-schedule-category-height), 1fr)
-    minmax(var(--timeline-min-schedule-category-height), 1fr)
-    minmax(var(--timeline-min-income-category-height), 1fr);
-  transform: translateY(var(--timeline-scroll-y, 0px));
+    var(
+      --timeline-event-track-height,
+      var(--timeline-min-schedule-category-height)
+    )
+    var(
+      --timeline-summon-track-height,
+      var(--timeline-min-schedule-category-height)
+    )
+    var(
+      --timeline-income-track-height,
+      var(--timeline-min-income-category-height)
+    );
+}
+
+@media (max-height: 760px) {
+  .timeline-shell {
+    --timeline-min-income-row-height: 34px;
+    --timeline-min-income-category-height: 170px;
+    --timeline-min-category-stack-height: 458px;
+    --timeline-income-icon-size: 20px;
+  }
+
+  .timeline-income-labels span {
+    justify-content: center;
+    padding: 2px 4px;
+  }
+
+  .timeline-income-labels b {
+    display: none;
+  }
 }
 
 .timeline-category-label {
@@ -2239,7 +2280,8 @@ button {
     height: 100%;
     min-height: calc(
       var(--timeline-date-axis-height) +
-        var(--timeline-min-category-stack-height)
+        var(--timeline-min-category-stack-height) +
+        var(--timeline-horizontal-scrollbar-height)
     );
     border-radius: 4px;
   }

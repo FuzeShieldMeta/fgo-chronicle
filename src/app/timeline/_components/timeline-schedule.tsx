@@ -9,6 +9,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -75,8 +76,6 @@ import {
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
 import {
-  minimumIncomeCategoryHeight,
-  minimumCategoryStackHeight,
   timelineLayout,
   timelineSchedule,
 } from "~/app/timeline/_lib/timeline-layout-config";
@@ -371,7 +370,6 @@ function TimelineScheduleContent({
   const scrollFrameRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const ledgerRef = useRef<HTMLDivElement>(null);
-  const dateAxisRef = useRef<HTMLElement>(null);
   const planDemoRunRef = useRef(0);
   const plannerPayload = useMemo(
     () =>
@@ -434,29 +432,35 @@ function TimelineScheduleContent({
     };
   }, [planDemo]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollFrame = scrollFrameRef.current;
     const ledger = ledgerRef.current;
-    const dateAxis = dateAxisRef.current;
+    if (!scrollFrame || !ledger) return;
 
-    if (!scrollFrame || !ledger || !dateAxis) return;
+    const categories = [
+      ...ledger.querySelectorAll<HTMLElement>(":scope > .timeline-category"),
+    ];
+    if (categories.length !== 3) return;
 
-    const updateCategoryTrackHeight = () => {
-      const categoryTrackHeight =
-        ledger.getBoundingClientRect().height -
-        dateAxis.getBoundingClientRect().height;
-
+    const updateCategoryRows = () => {
+      const [eventRow, summonRow, incomeRow] = categories;
       scrollFrame.style.setProperty(
-        "--timeline-category-track-height",
-        `${Math.max(0, categoryTrackHeight)}px`,
+        "--timeline-event-track-height",
+        `${eventRow?.getBoundingClientRect().height ?? 0}px`,
+      );
+      scrollFrame.style.setProperty(
+        "--timeline-summon-track-height",
+        `${summonRow?.getBoundingClientRect().height ?? 0}px`,
+      );
+      scrollFrame.style.setProperty(
+        "--timeline-income-track-height",
+        `${incomeRow?.getBoundingClientRect().height ?? 0}px`,
       );
     };
 
-    updateCategoryTrackHeight();
-
-    const resizeObserver = new ResizeObserver(updateCategoryTrackHeight);
-    resizeObserver.observe(ledger);
-    resizeObserver.observe(dateAxis);
+    updateCategoryRows();
+    const resizeObserver = new ResizeObserver(updateCategoryRows);
+    for (const category of categories) resizeObserver.observe(category);
 
     return () => resizeObserver.disconnect();
   }, []);
@@ -466,34 +470,6 @@ function TimelineScheduleContent({
     if (!scroll) return;
 
     const finePointer = window.matchMedia("(any-pointer: fine)");
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let animationFrame: number | null = null;
-    let targetScrollLeft: number | null = null;
-
-    const stopAnimation = () => {
-      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
-      animationFrame = null;
-      targetScrollLeft = null;
-    };
-
-    const animateScroll = () => {
-      if (targetScrollLeft === null) {
-        animationFrame = null;
-        return;
-      }
-
-      const remainingDistance = targetScrollLeft - scroll.scrollLeft;
-      if (Math.abs(remainingDistance) <= timelineLayout.wheelStopThreshold) {
-        scroll.scrollLeft = targetScrollLeft;
-        animationFrame = null;
-        targetScrollLeft = null;
-        return;
-      }
-
-      scroll.scrollLeft +=
-        remainingDistance * timelineLayout.wheelSmoothingFactor;
-      animationFrame = requestAnimationFrame(animateScroll);
-    };
 
     const handleWheel = (event: WheelEvent) => {
       if (!finePointer.matches) return;
@@ -503,44 +479,20 @@ function TimelineScheduleContent({
         deltaY: event.deltaY,
         isZoomGesture: event.ctrlKey,
         scrollLeft: scroll.scrollLeft,
-        scrollTop: scroll.scrollTop,
         scrollWidth: scroll.scrollWidth,
-        scrollHeight: scroll.scrollHeight,
         clientWidth: scroll.clientWidth,
-        clientHeight: scroll.clientHeight,
       });
 
-      if (delta === 0) {
-        stopAnimation();
-        return;
-      }
+      if (delta === 0) return;
 
       event.preventDefault();
-      const maximumScrollLeft = Math.max(
-        0,
-        scroll.scrollWidth - scroll.clientWidth,
-      );
-      targetScrollLeft = Math.min(
-        maximumScrollLeft,
-        Math.max(0, (targetScrollLeft ?? scroll.scrollLeft) + delta),
-      );
-
-      if (reducedMotion.matches) {
-        scroll.scrollLeft = targetScrollLeft;
-        targetScrollLeft = null;
-        return;
-      }
-
-      animationFrame ??= requestAnimationFrame(animateScroll);
+      scroll.scrollLeft += delta;
     };
 
     scroll.addEventListener("wheel", handleWheel, { passive: false });
-    scroll.addEventListener("pointerdown", stopAnimation);
 
     return () => {
-      stopAnimation();
       scroll.removeEventListener("wheel", handleWheel);
-      scroll.removeEventListener("pointerdown", stopAnimation);
     };
   }, []);
 
@@ -775,11 +727,7 @@ function TimelineScheduleContent({
     "--day-width": `${timelineLayout.dayWidth}px`,
     "--timeline-category-label-width": `${timelineLayout.categoryLabelWidth}px`,
     "--timeline-min-schedule-category-height": `${timelineLayout.minimumScheduleCategoryHeight}px`,
-    "--timeline-min-income-category-height": `${minimumIncomeCategoryHeight}px`,
-    "--timeline-min-income-row-height": `${timelineLayout.minimumIncomeResourceRowHeight}px`,
     "--timeline-income-resource-count": timelineLayout.incomeResourceCount,
-    "--timeline-income-icon-size": `${timelineLayout.incomeResourceIconSize}px`,
-    "--timeline-min-category-stack-height": `${minimumCategoryStackHeight}px`,
     "--timeline-sticky-label-inset": `${timelineLayout.stickyLabelInset}px`,
   } as CSSProperties;
   const gridStyle = {
@@ -962,11 +910,7 @@ function TimelineScheduleContent({
             role="region"
             aria-label="Two-year schedule. Scroll horizontally through dates."
             tabIndex={0}
-            onScroll={(event) => {
-              event.currentTarget.parentElement?.style.setProperty(
-                "--timeline-scroll-y",
-                `${-event.currentTarget.scrollTop}px`,
-              );
+            onScroll={() => {
               setRailTooltip(null);
             }}
           >
@@ -981,7 +925,7 @@ function TimelineScheduleContent({
                   aria-hidden="true"
                 />
               ) : null}
-              <header ref={dateAxisRef} className="timeline-date-axis">
+              <header className="timeline-date-axis">
                 <div
                   className="timeline-date-track"
                   aria-label="Calendar dates"
