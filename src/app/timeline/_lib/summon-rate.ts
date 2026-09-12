@@ -7,25 +7,25 @@ export const standardSummonRates = [
   },
   {
     id: "SOLO_SR",
-    label: "Solo SR",
+    label: "Solo SR · 2.1%",
     rate: 0.021,
     guaranteedEligible: false,
   },
   {
     id: "TWO_SHARED_SR",
-    label: "Two shared SRs",
+    label: "Two shared SRs · 1.4%",
     rate: 0.014,
     guaranteedEligible: false,
   },
   {
     id: "THREE_SHARED_SR",
-    label: "Three shared SRs",
+    label: "Three shared SRs · 0.8%",
     rate: 0.008,
     guaranteedEligible: false,
   },
   {
     id: "SOLO_R",
-    label: "Solo R",
+    label: "Solo R · 4%",
     rate: 0.04,
     guaranteedEligible: false,
   },
@@ -42,6 +42,11 @@ export type AutomaticSummonRate = {
   guaranteedEligible: boolean;
 };
 
+function rateLabel(label: string, rate: number) {
+  const percentage = Number((rate * 100).toFixed(2));
+  return `${label} · ${percentage}%`;
+}
+
 export function resolveAutomaticSummonRate({
   rarity,
   soloRateUp,
@@ -56,7 +61,7 @@ export function resolveAutomaticSummonRate({
   if (rarity === 5) {
     const rate = 0.008 / count;
     return {
-      label: count === 1 ? "Solo SSR · 0.8%" : "Shared SSR",
+      label: rateLabel(count === 1 ? "Solo SSR" : "Shared SSR", rate),
       rate,
       guaranteedEligible: count === 1,
     };
@@ -72,7 +77,7 @@ export function resolveAutomaticSummonRate({
   if (rarity === 3) {
     const rate = 0.04 / count;
     return {
-      label: count === 1 ? "Solo R" : "Shared R",
+      label: rateLabel(count === 1 ? "Solo R" : "Shared R", rate),
       rate,
       guaranteedEligible: false,
     };
