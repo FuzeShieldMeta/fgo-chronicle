@@ -99,6 +99,13 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
       allowZero: true,
     },
   );
+  const transactionTimeout = parseIntegerSetting(
+    env.EVENT_SCHEDULE_TRANSACTION_TIMEOUT_MS,
+    {
+      name: "EVENT_SCHEDULE_TRANSACTION_TIMEOUT_MS",
+      defaultValue: 240_000,
+    },
+  );
   for (const name of [
     "JP_EVENT_SYNC_MAX_UPDATES",
     "JP_EVENT_SYNC_MAX_REWARD_CHANGES",
@@ -279,7 +286,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
           });
           return result;
         },
-        { maxWait: 10_000, timeout: 240_000 },
+        { maxWait: 10_000, timeout: transactionTimeout },
       );
     } catch (error) {
       await db.syncRun.update({
