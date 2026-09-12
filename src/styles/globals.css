@@ -306,18 +306,6 @@ button {
   align-items: center;
 }
 
-.timeline-account {
-  position: relative;
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  padding-left: 12px;
-  border-left: 1px solid var(--md-outline-variant);
-  color: var(--md-on-surface-variant);
-  font-size: var(--timeline-type-label);
-}
-
-.timeline-account button,
 .planner-conflict-actions button {
   display: inline-flex;
   min-height: 44px;
@@ -334,21 +322,24 @@ button {
   text-decoration: none;
 }
 
-.timeline-account button:hover,
 .planner-conflict-actions button:hover {
   background: var(--md-primary-container);
 }
 
-.timeline-account button:focus-visible,
 .planner-conflict-actions button:focus-visible,
 .planner-conflict-close:focus-visible {
   outline: 3px solid var(--md-primary);
   outline-offset: 3px;
 }
 
-.timeline-account button:disabled {
-  cursor: wait;
-  opacity: 0.62;
+.timeline-toolbar-action-label {
+  display: flex;
+}
+
+.timeline-toolbar-action-label > span {
+  width: max-content;
+  min-width: max-content;
+  margin-inline: auto;
 }
 
 .planner-conflict-backdrop {
@@ -2251,14 +2242,22 @@ button {
     gap: 10px;
   }
 
-  .timeline-account {
+  .timeline-toolbar-action {
+    min-width: 0;
+    flex: 1 1 0;
+    align-self: stretch;
+    padding-inline: 10px;
+  }
+
+  .timeline-toolbar-action-label {
     width: 100%;
-    padding-top: 8px;
-    padding-left: 0;
-    border-top: 1px solid var(--md-outline-variant);
-    border-left: 0;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    min-width: 0;
+    overflow: hidden;
+    container-type: inline-size;
+  }
+
+  .timeline-toolbar-action-label > span {
+    animation: timeline-toolbar-label-pan 8s ease-in-out infinite;
   }
 
   .planner-conflict-copies {
@@ -2281,7 +2280,7 @@ button {
     flex: 0 0 auto;
   }
 
-  .timeline-tonal-button {
+  .timeline-tonal-button:not(.timeline-toolbar-action) {
     align-self: flex-start;
   }
 
@@ -2302,6 +2301,31 @@ button {
     max-height: 76dvh;
     padding: 18px;
   }
+}
+
+@keyframes timeline-toolbar-label-pan {
+  0%,
+  28%,
+  100% {
+    transform: translateX(0);
+  }
+
+  48%,
+  76% {
+    transform: translateX(min(0px, calc(100cqw - 100%)));
+  }
+}
+
+@media (max-width: 420px) {
+  .timeline-toolbar-actions {
+    gap: 8px;
+  }
+
+  .timeline-toolbar-action {
+    padding-inline: 6px;
+    font-size: 0.7rem;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2337,6 +2361,17 @@ button {
     opacity: 0.85;
     animation: none;
     transform: translate(-50%, -50%) scale(0.9);
+  }
+}
+
+@media (max-width: 420px) and (prefers-reduced-motion: reduce) {
+  .timeline-toolbar-action-label > span {
+    display: none;
+  }
+
+  .timeline-toolbar-action-label::after {
+    margin-inline: auto;
+    content: attr(data-short-label);
   }
 }
 

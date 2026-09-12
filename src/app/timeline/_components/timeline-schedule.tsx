@@ -854,16 +854,23 @@ function TimelineScheduleContent({
 
           <button
             type="button"
-            className="timeline-tonal-button"
+            className="timeline-tonal-button timeline-toolbar-action"
             aria-label="Show how to select a summon planning date"
             onClick={demonstrateDaySelection}
           >
-            Plan summons
+            <span
+              className="timeline-toolbar-action-label"
+              data-short-label="Plan"
+              aria-hidden="true"
+            >
+              <span>Plan summons</span>
+            </span>
           </button>
 
           <button
             type="button"
-            className="timeline-tonal-button"
+            className="timeline-tonal-button timeline-toolbar-action"
+            aria-label="Balances"
             data-attention={playerProfile ? undefined : "true"}
             onClick={() => {
               setPlanDemo(null);
@@ -873,18 +880,31 @@ function TimelineScheduleContent({
               setProfilePanelOpen(true);
             }}
           >
-            Balances
+            <span
+              className="timeline-toolbar-action-label"
+              data-short-label="Balance"
+              aria-hidden="true"
+            >
+              <span>Balances</span>
+            </span>
           </button>
 
           <button
             type="button"
-            className="timeline-tonal-button"
+            className="timeline-tonal-button timeline-toolbar-action"
+            aria-label="Today"
             onClick={() => {
               setPlanDemo(null);
               returnToToday();
             }}
           >
-            Today
+            <span
+              className="timeline-toolbar-action-label"
+              data-short-label="Today"
+              aria-hidden="true"
+            >
+              <span>Today</span>
+            </span>
           </button>
 
           <TimelineAccountMenu

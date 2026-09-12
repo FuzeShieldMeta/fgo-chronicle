@@ -9,11 +9,23 @@ export function TimelineAccountMenu({
   user: TimelineAccountUser | null;
   onOpen: () => void;
 }) {
+  const label = user ? "Account" : "Sync";
+
   return (
-    <div className="timeline-account">
-      <button id="timeline-account-button" type="button" onClick={onOpen}>
-        {user ? "Account" : "Sync"}
-      </button>
-    </div>
+    <button
+      id="timeline-account-button"
+      type="button"
+      className="timeline-tonal-button timeline-toolbar-action"
+      aria-label={label}
+      onClick={onOpen}
+    >
+      <span
+        className="timeline-toolbar-action-label"
+        data-short-label={label}
+        aria-hidden="true"
+      >
+        <span>{label}</span>
+      </span>
+    </button>
   );
 }
