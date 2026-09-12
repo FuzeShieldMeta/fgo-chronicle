@@ -31,6 +31,7 @@ import {
   TimelineAccountMenu,
   type TimelineAccountUser,
 } from "~/app/timeline/_components/timeline-account-menu";
+import { TimelineAccountDetails } from "~/app/timeline/_components/timeline-account-details";
 import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
 import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
 import {
@@ -363,6 +364,7 @@ function TimelineScheduleContent({
     string | null
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+  const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const [localPlannerReady, setLocalPlannerReady] = useState(false);
   const [planDemo, setPlanDemo] = useState<PlanDemo | null>(null);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
@@ -431,6 +433,17 @@ function TimelineScheduleContent({
       window.clearTimeout(clearTimer);
     };
   }, [planDemo]);
+
+  useEffect(() => {
+    if (
+      selectedKey !== null ||
+      selectedIncomeKey !== null ||
+      selectedDay !== null ||
+      profilePanelOpen
+    ) {
+      setAccountPanelOpen(false);
+    }
+  }, [profilePanelOpen, selectedDay, selectedIncomeKey, selectedKey]);
 
   useLayoutEffect(() => {
     const scrollFrame = scrollFrameRef.current;
@@ -783,26 +796,35 @@ function TimelineScheduleContent({
     selectedEntry !== null ||
     selectedIncomeCell !== null ||
     selectedDay !== null ||
-    profilePanelOpen,
+    profilePanelOpen ||
+    accountPanelOpen,
   );
   const detailsSelectionKey = selectedDay
     ? `day:${selectedDay}`
     : profilePanelOpen
       ? "profile"
-      : selectedIncomeCell
-        ? `income:${selectedIncomeCell.key}`
-        : selectedEntry
-          ? `entry:${selectedEntry.key}`
-          : "placeholder";
+      : accountPanelOpen
+        ? "account"
+        : selectedIncomeCell
+          ? `income:${selectedIncomeCell.key}`
+          : selectedEntry
+            ? `entry:${selectedEntry.key}`
+            : "placeholder";
   const detailsHeadingId = selectedDay
     ? "timeline-day-heading"
     : profilePanelOpen
       ? "timeline-profile-heading"
-      : "timeline-details-heading";
+      : accountPanelOpen
+        ? "timeline-account-heading"
+        : "timeline-details-heading";
 
   function closeActiveDetails() {
     if (selectedDay) {
       closeSelectedDay();
+      return;
+    }
+    if (accountPanelOpen) {
+      setAccountPanelOpen(false);
       return;
     }
     setProfilePanelOpen(false);
@@ -815,6 +837,7 @@ function TimelineScheduleContent({
       ref={scheduleRef}
       className="timeline-shell"
       aria-label="Two-year schedule"
+      data-sync-status={plannerSync.status}
       style={timelineStyle}
     >
       <h2 className="sr-only">Two-year schedule</h2>
@@ -866,9 +889,14 @@ function TimelineScheduleContent({
 
           <TimelineAccountMenu
             user={user ?? null}
-            syncStatus={plannerSync.status}
-            onSyncNow={plannerSync.syncNow}
-            onOpenConflict={plannerSync.openConflict}
+            onOpen={() => {
+              setPlanDemo(null);
+              setSelectedKey(null);
+              setSelectedIncomeKey(null);
+              setSelectedDay(null);
+              setProfilePanelOpen(false);
+              setAccountPanelOpen(true);
+            }}
           />
         </div>
       </div>
@@ -879,10 +907,20 @@ function TimelineScheduleContent({
           reload this page.
         </p>
       ) : null}
-      {authError ? (
-        <p className="timeline-preference-notice" role="alert">
-          Google sign-in could not be completed. Try again.
+      {user && plannerSync.status === "LOCAL_ONLY" ? (
+        <p className="timeline-preference-notice" role="status">
+          Cloud sync is unavailable. Changes are still saved in this browser.
         </p>
+      ) : null}
+      {user &&
+      plannerSync.status === "CONFLICT" &&
+      !plannerSync.conflict?.open ? (
+        <div className="timeline-preference-notice" role="status">
+          <span>Cloud sync is paused until you choose which copy to keep.</span>
+          <button type="button" onClick={plannerSync.openConflict}>
+            Choose a copy
+          </button>
+        </div>
       ) : null}
       {entries.length === 0 ? (
         <p className="timeline-preference-notice" role="status">
@@ -898,7 +936,11 @@ function TimelineScheduleContent({
       <div
         className="timeline-workspace"
         data-has-selection={
-          selectedEntry || selectedIncomeCell || selectedDay || profilePanelOpen
+          selectedEntry ||
+          selectedIncomeCell ||
+          selectedDay ||
+          profilePanelOpen ||
+          accountPanelOpen
             ? "true"
             : "false"
         }
@@ -1075,7 +1117,11 @@ function TimelineScheduleContent({
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
           returnFocusId={
-            selectedDay ? `timeline-day-${selectedDay}` : undefined
+            selectedDay
+              ? `timeline-day-${selectedDay}`
+              : accountPanelOpen
+                ? "timeline-account-button"
+                : undefined
           }
           onClose={closeActiveDetails}
         >
@@ -1105,6 +1151,12 @@ function TimelineScheduleContent({
               today={calendar.today}
               onSaveProfile={saveProfile}
               onClose={() => setProfilePanelOpen(false)}
+            />
+          ) : accountPanelOpen ? (
+            <TimelineAccountDetails
+              signedIn={Boolean(user)}
+              authError={authError}
+              onClose={() => setAccountPanelOpen(false)}
             />
           ) : selectedIncomeCell ? (
             <TimelineIncomeDetails

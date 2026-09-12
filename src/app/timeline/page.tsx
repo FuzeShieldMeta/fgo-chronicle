@@ -38,7 +38,6 @@ export default async function TimelinePage({
     timeZone: "UTC",
   };
   const authError = Boolean((await searchParams)?.error);
-
   return (
     <main id="main-content" className="timeline-page">
       <header className="timeline-app-bar">
@@ -62,8 +61,6 @@ export default async function TimelinePage({
           session?.user
             ? {
                 id: session.user.id,
-                name: session.user.name ?? null,
-                email: session.user.email ?? null,
               }
             : null
         }

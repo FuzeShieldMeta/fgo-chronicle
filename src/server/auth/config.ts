@@ -3,6 +3,11 @@ import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
 import { db } from "~/server/db";
+import {
+  createPrivateGoogleUser,
+  googleIdentityScope,
+  omitGoogleTokens,
+} from "~/server/auth/privacy";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -31,7 +36,17 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
-  providers: [GoogleProvider],
+  providers: [
+    GoogleProvider({
+      authorization: {
+        params: {
+          scope: googleIdentityScope,
+        },
+      },
+      profile: createPrivateGoogleUser,
+      account: omitGoogleTokens,
+    }),
+  ],
   adapter: PrismaAdapter(db),
   pages: {
     error: "/timeline",

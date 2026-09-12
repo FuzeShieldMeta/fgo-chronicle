@@ -226,19 +226,6 @@ export function usePlannerStateSync({
     await saveCloud(userId, payloadRef.current, conflict.cloud.revision);
   }
 
-  async function syncNow() {
-    if (!userId) return;
-    if (status === "CONFLICT" && conflict) {
-      setConflict((current) =>
-        current ? { ...current, open: true } : current,
-      );
-      return;
-    }
-    setStatus("LOADING");
-    reconciledUserRef.current = null;
-    await cloudQuery.refetch();
-  }
-
   return {
     status,
     conflict,
@@ -248,6 +235,5 @@ export function usePlannerStateSync({
       setConflict((current) => (current ? { ...current, open: true } : null)),
     keepCloudCopy,
     keepDeviceCopy,
-    syncNow,
   };
 }
