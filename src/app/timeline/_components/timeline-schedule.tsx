@@ -6,7 +6,6 @@ import {
 import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import {
   useEffect,
   useLayoutEffect,
@@ -336,7 +335,6 @@ function TimelineScheduleContent({
   authError?: boolean;
 }) {
   const catalogue = useStoryCatalogue();
-  const router = useRouter();
   const [calendar, setCalendar] = useState(initialCalendar);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedIncomeKey, setSelectedIncomeKey] = useState<string | null>(
@@ -375,6 +373,15 @@ function TimelineScheduleContent({
       }),
     [playerProfile, rewardPreferences, summonSessions],
   );
+  const summonSessionsByDay = useMemo(() => {
+    const sessionsByDay = new Map<string, SummonSession[]>();
+    for (const session of summonSessions) {
+      const daySessions = sessionsByDay.get(session.day);
+      if (daySessions) daySessions.push(session);
+      else sessionsByDay.set(session.day, [session]);
+    }
+    return sessionsByDay;
+  }, [summonSessions]);
   const plannerSync = usePlannerStateSync({
     userId: user?.id ?? null,
     localReady: localPlannerReady,
@@ -533,6 +540,10 @@ function TimelineScheduleContent({
       }),
     [],
   );
+  const dayLabels = useMemo(
+    () => new Map(view.days.map((day) => [day, dateLabel(day, formatter)])),
+    [formatter, view.days],
+  );
 
   const selectedEntry = useMemo(
     () => entries.find((entry) => entry.key === selectedKey) ?? null,
@@ -551,7 +562,6 @@ function TimelineScheduleContent({
       setRewardStorageError(true);
     }
     setProfilePanelOpen(false);
-    router.refresh();
   }
 
   function replaceLocalPlannerState(payload: typeof plannerPayload) {
@@ -743,7 +753,7 @@ function TimelineScheduleContent({
       })
     : [];
   const selectedDaySessions = selectedDay
-    ? summonSessions.filter((session) => session.day === selectedDay)
+    ? (summonSessionsByDay.get(selectedDay) ?? [])
     : [];
   const selectedDayBalances = selectedDay
     ? forecastBalancesOnDay(
@@ -977,11 +987,10 @@ function TimelineScheduleContent({
                   data-choosing-date={isChoosingSummonDate}
                 >
                   {view.days.map((day) => {
-                    const label = dateLabel(day, formatter);
+                    const label = dayLabels.get(day);
+                    if (!label) return null;
                     const isMonthStart = day.endsWith("-01");
-                    const daySessions = summonSessions.filter(
-                      (session) => session.day === day,
-                    );
+                    const daySessions = summonSessionsByDay.get(day) ?? [];
                     const hasSessions = daySessions.length > 0;
                     const hasPlanned = daySessions.some(
                       (session) => session.status === "PLANNED",

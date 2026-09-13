@@ -1,9 +1,12 @@
 import storyChapters from "~/data/story-chapters.json";
 import { TRPCError } from "@trpc/server";
+import { unstable_cache } from "next/cache";
+import superjson from "superjson";
 import { z } from "zod";
 
 import type { Prisma } from "../../../../generated/prisma";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { db } from "~/server/db";
 
 const MAX_TIMELINE_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
 const timelineCategories = [
@@ -228,6 +231,32 @@ function intervalWhere(from: Date, to: Date) {
 
 type TimelineListInput = z.infer<typeof timelineRangeSchema>;
 
+type TimelineDatabase = Pick<
+  typeof db,
+  "banner" | "event" | "rewardDefinition" | "storyChapter"
+>;
+
+type CachedTimelineListInput = Omit<TimelineListInput, "from" | "to"> & {
+  from: string;
+  to: string;
+};
+
+function cacheInput(input: TimelineListInput): CachedTimelineListInput {
+  return {
+    ...input,
+    from: input.from.toISOString(),
+    to: input.to.toISOString(),
+  };
+}
+
+function restoreCacheInput(input: CachedTimelineListInput): TimelineListInput {
+  return {
+    ...input,
+    from: new Date(input.from),
+    to: new Date(input.to),
+  };
+}
+
 function commonWhere(input: TimelineListInput) {
   return {
     ...intervalWhere(input.from, input.to),
@@ -310,86 +339,147 @@ function relatedEntries(family: {
   ].sort(compareTimelineEntries);
 }
 
+async function queryStories(database: TimelineDatabase) {
+  const chapters = await database.storyChapter.findMany({
+    orderBy: [{ sortOrder: "asc" }, { warId: "asc" }],
+  });
+  return chapters.length ? chapters : storyChapters;
+}
+
+async function queryTimelineList(
+  database: TimelineDatabase,
+  input: TimelineListInput,
+) {
+  const includeEvents =
+    input.servantId === undefined &&
+    (selectedCategory(input.categories, "EVENT") ||
+      selectedCategory(input.categories, "INCOME_SOURCE"));
+  const includeBanners = selectedCategory(
+    input.categories,
+    "SUMMONING_CAMPAIGN",
+  );
+  const [events, banners] = await Promise.all([
+    includeEvents
+      ? database.event.findMany({
+          where: {
+            ...commonWhere(input),
+            ...eventTypeWhere(input.categories),
+          },
+          select: eventSelect,
+          orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+        })
+      : Promise.resolve([]),
+    includeBanners
+      ? database.banner.findMany({
+          where: {
+            ...commonWhere(input),
+            ...(input.servantId
+              ? { featured: { some: { servantId: input.servantId } } }
+              : {}),
+          },
+          select: bannerSelect,
+          orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return [
+    ...events.map((event) => ({
+      ...event,
+      key: `event:${event.id}`,
+      kind: "EVENT" as const,
+      category: eventCategory(event.type),
+      confidence: null,
+      sourceLastCheckedAt: event.lastSyncedAt,
+    })),
+    ...banners.map((banner) => ({
+      ...banner,
+      key: `banner:${banner.id}`,
+      kind: "BANNER" as const,
+      category: "SUMMONING_CAMPAIGN" as const,
+      confidence: null,
+    })),
+  ].sort(compareTimelineEntries);
+}
+
+async function queryIncome(
+  database: TimelineDatabase,
+  input: TimelineListInput,
+) {
+  const contributions = await database.rewardDefinition.findMany({
+    where: {
+      expectedAt: {
+        gte: input.from,
+        lte: input.to,
+      },
+    },
+    select: incomeContributionSelect,
+    orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
+  });
+
+  return contributions.flatMap((contribution) =>
+    contribution.expectedAt
+      ? [{ ...contribution, expectedAt: contribution.expectedAt }]
+      : [],
+  );
+}
+
+const publicTimelineCacheOptions = {
+  revalidate: 60 * 60,
+  tags: ["timeline-public-data"],
+};
+
+const cachedStoriesPayload = unstable_cache(
+  async () => superjson.stringify(await queryStories(db)),
+  ["timeline-stories-v1"],
+  publicTimelineCacheOptions,
+);
+
+const cachedTimelineListPayload = unstable_cache(
+  async (input: CachedTimelineListInput) =>
+    superjson.stringify(await queryTimelineList(db, restoreCacheInput(input))),
+  ["timeline-list-v1"],
+  publicTimelineCacheOptions,
+);
+
+const cachedIncomePayload = unstable_cache(
+  async (input: CachedTimelineListInput) =>
+    superjson.stringify(await queryIncome(db, restoreCacheInput(input))),
+  ["timeline-income-v1"],
+  publicTimelineCacheOptions,
+);
+
+export async function getCachedTimelineStories() {
+  return superjson.parse<Awaited<ReturnType<typeof queryStories>>>(
+    await cachedStoriesPayload(),
+  );
+}
+
+export async function getCachedTimelineList(input: TimelineListInput) {
+  return superjson.parse<Awaited<ReturnType<typeof queryTimelineList>>>(
+    await cachedTimelineListPayload(cacheInput(input)),
+  );
+}
+
+export async function getCachedTimelineIncome(input: TimelineListInput) {
+  return superjson.parse<Awaited<ReturnType<typeof queryIncome>>>(
+    await cachedIncomePayload(cacheInput(input)),
+  );
+}
+
 export const timelineRouter = createTRPCRouter({
   stories: publicProcedure.query(async ({ ctx }) => {
-    const chapters = await ctx.db.storyChapter.findMany({
-      orderBy: [{ sortOrder: "asc" }, { warId: "asc" }],
-    });
-    return chapters.length ? chapters : storyChapters;
+    return queryStories(ctx.db);
   }),
   list: publicProcedure
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {
-      const includeEvents =
-        input.servantId === undefined &&
-        (selectedCategory(input.categories, "EVENT") ||
-          selectedCategory(input.categories, "INCOME_SOURCE"));
-      const includeBanners = selectedCategory(
-        input.categories,
-        "SUMMONING_CAMPAIGN",
-      );
-      const [events, banners] = await Promise.all([
-        includeEvents
-          ? ctx.db.event.findMany({
-              where: {
-                ...commonWhere(input),
-                ...eventTypeWhere(input.categories),
-              },
-              select: eventSelect,
-              orderBy: [{ startsAt: "asc" }, { id: "asc" }],
-            })
-          : Promise.resolve([]),
-        includeBanners
-          ? ctx.db.banner.findMany({
-              where: {
-                ...commonWhere(input),
-                ...(input.servantId
-                  ? { featured: { some: { servantId: input.servantId } } }
-                  : {}),
-              },
-              select: bannerSelect,
-              orderBy: [{ startsAt: "asc" }, { id: "asc" }],
-            })
-          : Promise.resolve([]),
-      ]);
-
-      return [
-        ...events.map((event) => ({
-          ...event,
-          key: `event:${event.id}`,
-          kind: "EVENT" as const,
-          category: eventCategory(event.type),
-          confidence: null,
-          sourceLastCheckedAt: event.lastSyncedAt,
-        })),
-        ...banners.map((banner) => ({
-          ...banner,
-          key: `banner:${banner.id}`,
-          kind: "BANNER" as const,
-          category: "SUMMONING_CAMPAIGN" as const,
-          confidence: null,
-        })),
-      ].sort(compareTimelineEntries);
+      return queryTimelineList(ctx.db, input);
     }),
   income: publicProcedure
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {
-      const contributions = await ctx.db.rewardDefinition.findMany({
-        where: {
-          expectedAt: {
-            gte: input.from,
-            lte: input.to,
-          },
-        },
-        select: incomeContributionSelect,
-        orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
-      });
-
-      return contributions.flatMap((contribution) =>
-        contribution.expectedAt
-          ? [{ ...contribution, expectedAt: contribution.expectedAt }]
-          : [],
-      );
+      return queryIncome(ctx.db, input);
     }),
   details: publicProcedure
     .input(timelineDetailSchema)

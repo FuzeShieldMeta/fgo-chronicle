@@ -1,7 +1,11 @@
 import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { auth } from "~/server/auth";
-import { api } from "~/trpc/server";
+import {
+  getCachedTimelineIncome,
+  getCachedTimelineList,
+  getCachedTimelineStories,
+} from "~/server/api/routers/timeline";
 
 function paddedTwoYearWindow(now: Date) {
   const from = new Date(now);
@@ -28,9 +32,9 @@ export default async function TimelinePage({
   const now = new Date();
   const range = paddedTwoYearWindow(now);
   const [entries, incomeContributions, stories, session] = await Promise.all([
-    api.timeline.list(range),
-    api.timeline.income(range),
-    api.timeline.stories(),
+    getCachedTimelineList(range),
+    getCachedTimelineIncome(range),
+    getCachedTimelineStories(),
     auth(),
   ]);
   const initialCalendar = {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 
 import {
   incomeResourceLabels,
@@ -26,7 +26,20 @@ export function TimelineIncomeLedger({
   selectedKey: string | null;
   onSelect: (cell: IncomeLedgerCell) => void;
 }) {
-  const dayIndexes = new Map(days.map((day, index) => [day, index]));
+  const dayIndexes = useMemo(
+    () => new Map(days.map((day, index) => [day, index])),
+    [days],
+  );
+  const cellsByResource = useMemo(() => {
+    const grouped = new Map(
+      forecastResourceTypes.map((itemType) => [
+        itemType,
+        [] as IncomeLedgerCell[],
+      ]),
+    );
+    for (const cell of cells.values()) grouped.get(cell.itemType)?.push(cell);
+    return grouped;
+  }, [cells]);
 
   return (
     <section
@@ -35,9 +48,7 @@ export function TimelineIncomeLedger({
       aria-label="Resource changes by resource and date"
     >
       {forecastResourceTypes.map((itemType) => {
-        const resourceCells = [...cells.values()].filter(
-          (cell) => cell.itemType === itemType,
-        );
+        const resourceCells = cellsByResource.get(itemType) ?? [];
 
         return (
           <div

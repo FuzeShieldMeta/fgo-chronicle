@@ -568,6 +568,7 @@ button {
 .timeline-day {
   position: relative;
   display: flex;
+  content-visibility: auto;
   width: var(--day-width);
   height: var(--timeline-date-axis-height);
   flex-direction: column;
@@ -857,6 +858,7 @@ button {
   top: 0;
   bottom: 0;
   display: grid;
+  content-visibility: auto;
   min-width: 0;
   min-height: var(--timeline-min-income-row-height);
   cursor: pointer;
@@ -1014,6 +1016,7 @@ button {
 
 .timeline-rail {
   position: absolute;
+  content-visibility: auto;
   min-width: 0;
   margin: 0;
   padding: 0;
