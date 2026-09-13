@@ -25,7 +25,6 @@ import {
 } from "~/app/timeline/_components/timeline-entry-details";
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
 import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
-import { TimelineDayClickDemo } from "~/app/timeline/_components/timeline-day-click-demo";
 import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
 import {
   TimelineAccountMenu,
@@ -72,7 +71,6 @@ import {
   calendarDays,
   laneSharePercent,
   layoutSchedule,
-  visibleDayIndex,
   type ScheduleCategoryLayout,
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
@@ -115,11 +113,6 @@ type RailTooltip = {
   x: number;
   y: number;
   placement: "above" | "below";
-};
-
-type PlanDemo = {
-  day: string;
-  runId: number;
 };
 
 function scheduleEndDay(dayKey: string) {
@@ -366,13 +359,13 @@ function TimelineScheduleContent({
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const [localPlannerReady, setLocalPlannerReady] = useState(false);
-  const [planDemo, setPlanDemo] = useState<PlanDemo | null>(null);
+  const [isChoosingSummonDate, setIsChoosingSummonDate] = useState(false);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
   const scrollFrameRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const ledgerRef = useRef<HTMLDivElement>(null);
-  const planDemoRunRef = useRef(0);
+  const planButtonRef = useRef<HTMLButtonElement>(null);
   const plannerPayload = useMemo(
     () =>
       createPlannerStatePayload({
@@ -411,28 +404,17 @@ function TimelineScheduleContent({
   }, []);
 
   useEffect(() => {
-    if (!planDemo) return;
+    if (!isChoosingSummonDate) return;
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    const selectTimer = window.setTimeout(
-      () => {
-        setSelectedDayBannerId(null);
-        setSelectedDay(planDemo.day);
-      },
-      reduceMotion ? 400 : 850,
-    );
-    const clearTimer = window.setTimeout(
-      () => setPlanDemo(null),
-      reduceMotion ? 700 : 1_350,
-    );
+    function cancelDateSelection(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setIsChoosingSummonDate(false);
+      planButtonRef.current?.focus();
+    }
 
-    return () => {
-      window.clearTimeout(selectTimer);
-      window.clearTimeout(clearTimer);
-    };
-  }, [planDemo]);
+    window.addEventListener("keydown", cancelDateSelection);
+    return () => window.removeEventListener("keydown", cancelDateSelection);
+  }, [isChoosingSummonDate]);
 
   useEffect(() => {
     if (
@@ -677,26 +659,19 @@ function TimelineScheduleContent({
     });
   }
 
-  function demonstrateDaySelection() {
-    const scroll = scrollRef.current;
-    if (!scroll) return;
+  function toggleSummonDateSelection() {
+    if (isChoosingSummonDate) {
+      setIsChoosingSummonDate(false);
+      return;
+    }
 
-    const index = visibleDayIndex({
-      scrollLeft: scroll.scrollLeft,
-      viewportWidth: scroll.clientWidth,
-      dayWidth: timelineLayout.dayWidth,
-      dayCount: view.days.length,
-    });
-    const day = view.days[index];
-    if (!day) return;
-
-    planDemoRunRef.current += 1;
     setProfilePanelOpen(false);
     setSelectedKey(null);
     setSelectedIncomeKey(null);
     setSelectedDayBannerId(null);
     setSelectedDay(null);
-    setPlanDemo({ day, runId: planDemoRunRef.current });
+    setAccountPanelOpen(false);
+    setIsChoosingSummonDate(true);
   }
 
   function showRailTooltip(
@@ -853,17 +828,25 @@ function TimelineScheduleContent({
           </div>
 
           <button
+            ref={planButtonRef}
             type="button"
             className="timeline-tonal-button timeline-toolbar-action"
-            aria-label="Show how to select a summon planning date"
-            onClick={demonstrateDaySelection}
+            aria-label={
+              isChoosingSummonDate
+                ? "Cancel choosing a summon planning date"
+                : "Choose a summon planning date"
+            }
+            aria-pressed={isChoosingSummonDate}
+            onClick={toggleSummonDateSelection}
           >
             <span
               className="timeline-toolbar-action-label"
-              data-short-label="Plan"
+              data-short-label={isChoosingSummonDate ? "Choose" : "Plan"}
               aria-hidden="true"
             >
-              <span>Plan summons</span>
+              <span>
+                {isChoosingSummonDate ? "Choose a date" : "Plan summons"}
+              </span>
             </span>
           </button>
 
@@ -873,7 +856,7 @@ function TimelineScheduleContent({
             aria-label="Balances"
             data-attention={playerProfile ? undefined : "true"}
             onClick={() => {
-              setPlanDemo(null);
+              setIsChoosingSummonDate(false);
               setSelectedKey(null);
               setSelectedIncomeKey(null);
               setSelectedDay(null);
@@ -894,7 +877,7 @@ function TimelineScheduleContent({
             className="timeline-tonal-button timeline-toolbar-action"
             aria-label="Today"
             onClick={() => {
-              setPlanDemo(null);
+              setIsChoosingSummonDate(false);
               returnToToday();
             }}
           >
@@ -910,7 +893,7 @@ function TimelineScheduleContent({
           <TimelineAccountMenu
             user={user ?? null}
             onOpen={() => {
-              setPlanDemo(null);
+              setIsChoosingSummonDate(false);
               setSelectedKey(null);
               setSelectedIncomeKey(null);
               setSelectedDay(null);
@@ -991,6 +974,7 @@ function TimelineScheduleContent({
                 <div
                   className="timeline-date-track"
                   aria-label="Calendar dates"
+                  data-choosing-date={isChoosingSummonDate}
                 >
                   {view.days.map((day) => {
                     const label = dateLabel(day, formatter);
@@ -1031,7 +1015,7 @@ function TimelineScheduleContent({
                         aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel} Select this date to plan summons.`}
                         aria-pressed={selectedDay === day}
                         onClick={() => {
-                          setPlanDemo(null);
+                          setIsChoosingSummonDate(false);
                           setProfilePanelOpen(false);
                           setSelectedKey(null);
                           setSelectedIncomeKey(null);
@@ -1044,9 +1028,6 @@ function TimelineScheduleContent({
                           <strong>{label.day}</strong>
                           <small>{label.weekday}</small>
                         </time>
-                        {planDemo?.day === day ? (
-                          <TimelineDayClickDemo key={planDemo.runId} />
-                        ) : null}
                         {hasSessions ? (
                           <i
                             className="timeline-day-session-marker"
@@ -1068,7 +1049,7 @@ function TimelineScheduleContent({
                     cells={view.incomeCells}
                     selectedKey={selectedIncomeKey}
                     onSelect={(cell) => {
-                      setPlanDemo(null);
+                      setIsChoosingSummonDate(false);
                       setProfilePanelOpen(false);
                       setSelectedKey(null);
                       setSelectedDay(null);
@@ -1082,7 +1063,7 @@ function TimelineScheduleContent({
                     selectedKey={selectedKey}
                     timeZone={calendar.timeZone}
                     onSelect={(entry) => {
-                      setPlanDemo(null);
+                      setIsChoosingSummonDate(false);
                       setProfilePanelOpen(false);
                       setSelectedIncomeKey(null);
                       setSelectedDay(null);

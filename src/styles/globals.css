@@ -250,6 +250,15 @@ button {
     var(--timeline-balance-attention-duration) ease-in-out infinite;
 }
 
+.timeline-toolbar-action[aria-pressed="true"] {
+  background: var(--md-primary-container);
+  box-shadow:
+    inset 0 0 0 2px var(--md-primary),
+    0 2px 2px rgb(0 0 0 / 14%),
+    0 3px 1px -2px rgb(0 0 0 / 20%);
+  color: var(--md-on-primary-container);
+}
+
 @keyframes timeline-balance-attention {
   0%,
   100% {
@@ -568,6 +577,8 @@ button {
   padding: 3px 2px;
   border-left: 1px solid var(--md-outline-variant);
   background: var(--md-surface);
+  box-shadow: inset 0 -1px
+    color-mix(in srgb, var(--md-primary) 28%, var(--md-outline-variant));
   color: var(--md-on-surface-variant);
   font-size: var(--timeline-type-micro);
   font-variant-numeric: tabular-nums;
@@ -582,8 +593,12 @@ button {
 }
 
 .timeline-day:hover {
-  background: var(--md-surface-high);
-  box-shadow: inset 0 -3px var(--md-secondary);
+  background: color-mix(
+    in srgb,
+    var(--md-primary-container) 68%,
+    var(--md-surface)
+  );
+  box-shadow: inset 0 -3px var(--md-primary);
 }
 
 .timeline-day:focus-visible,
@@ -616,91 +631,6 @@ button {
   );
 }
 
-.timeline-day-click-demo {
-  position: absolute;
-  z-index: 5;
-  inset: 0;
-  pointer-events: none;
-}
-
-.timeline-day-click-demo-cursor {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 24px;
-  height: 28px;
-  overflow: visible;
-  fill: var(--md-on-surface);
-  filter: drop-shadow(0 1px 1px rgb(255 255 255 / 75%));
-  stroke: var(--md-surface);
-  stroke-linejoin: round;
-  stroke-width: 2px;
-  transform-origin: 4px 4px;
-  animation: timeline-demo-cursor-click 1.35s ease-out both;
-}
-
-.timeline-day-click-demo-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 22px;
-  height: 22px;
-  border: 3px solid var(--md-primary);
-  border-radius: 50%;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.25);
-  animation: timeline-demo-click-ring 1.35s ease-out both;
-}
-
-@keyframes timeline-demo-cursor-click {
-  0% {
-    opacity: 0;
-    transform: translate(18px, 18px);
-  }
-
-  15% {
-    opacity: 1;
-  }
-
-  58% {
-    opacity: 1;
-    transform: translate(-3px, -3px);
-  }
-
-  65% {
-    opacity: 1;
-    transform: translate(-2px, -2px) scale(0.86);
-  }
-
-  78% {
-    opacity: 1;
-    transform: translate(-3px, -3px) scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(-3px, -3px);
-  }
-}
-
-@keyframes timeline-demo-click-ring {
-  0%,
-  58% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.25);
-  }
-
-  65% {
-    opacity: 0.85;
-  }
-
-  88%,
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.35);
-  }
-}
-
 .timeline-selected-day-column {
   position: absolute;
   z-index: 1;
@@ -713,7 +643,7 @@ button {
 }
 
 .timeline-day strong {
-  color: var(--md-on-surface);
+  color: var(--md-primary);
   font-size: var(--timeline-type-body);
   font-weight: 650;
 }
@@ -727,6 +657,19 @@ button {
   background: var(--md-secondary-container);
   color: var(--md-on-surface);
   font-weight: 700;
+}
+
+.timeline-date-track[data-choosing-date="true"] .timeline-day {
+  background: color-mix(
+    in srgb,
+    var(--md-primary-container) 48%,
+    var(--md-surface)
+  );
+  box-shadow: inset 0 -3px var(--md-primary);
+}
+
+.timeline-date-track[data-choosing-date="true"] .timeline-day:hover {
+  background: var(--md-primary-container);
 }
 
 .timeline-category {
@@ -2325,7 +2268,6 @@ button {
     padding-inline: 6px;
     font-size: 0.7rem;
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2349,18 +2291,6 @@ button {
       0 0 var(--timeline-balance-attention-halo-size)
         color-mix(in srgb, var(--md-attention) 72%, transparent),
       0 3px 5px rgb(0 0 0 / 18%);
-  }
-
-  .timeline-day-click-demo-cursor {
-    opacity: 1;
-    animation: none;
-    transform: translate(-2px, -2px) scale(0.86);
-  }
-
-  .timeline-day-click-demo-ring {
-    opacity: 0.85;
-    animation: none;
-    transform: translate(-50%, -50%) scale(0.9);
   }
 }
 
