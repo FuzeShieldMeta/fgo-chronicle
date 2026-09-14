@@ -95,6 +95,10 @@ const timelineWindowSchema = z
     }
   });
 
+export function parseTimelineWindowInput(input: unknown) {
+  return timelineWindowSchema.safeParse(input);
+}
+
 const familySelect = {
   id: true,
   name: true,
@@ -398,6 +402,7 @@ async function queryTimelineList(
   const [events, banners] = await Promise.all([
     includeEvents
       ? database.event.findMany({
+          relationLoadStrategy: "join",
           where: {
             ...commonWhere(input),
             ...eventTypeWhere(input.categories),
@@ -408,6 +413,7 @@ async function queryTimelineList(
       : Promise.resolve([]),
     includeBanners
       ? database.banner.findMany({
+          relationLoadStrategy: "join",
           where: {
             ...commonWhere(input),
             ...(input.servantId
@@ -444,6 +450,7 @@ async function queryIncome(
   input: TimelineListInput,
 ) {
   const contributions = await database.rewardDefinition.findMany({
+    relationLoadStrategy: "join",
     where: {
       expectedAt: {
         gte: input.from,
@@ -556,13 +563,6 @@ export const timelineRouter = createTRPCRouter({
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {
       return queryIncome(ctx.db, input);
-    }),
-  window: publicProcedure
-    .input(timelineWindowSchema)
-    .query(async ({ ctx, input }) => {
-      return ctx.db === db
-        ? getCachedTimelineWindow(input)
-        : queryTimelineWindow(ctx.db, input);
     }),
   details: publicProcedure
     .input(timelineDetailSchema)

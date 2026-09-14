@@ -79,16 +79,20 @@ import {
   mergeContiguousTimelineWindows,
   prioritiseTimelineWindowIndexes,
 } from "~/app/timeline/_lib/progressive-timeline";
+import {
+  fetchTimelineWindow,
+  type PublicTimelineWindow,
+} from "~/app/timeline/_lib/timeline-window-client";
 import { horizontalWheelDelta } from "~/app/timeline/_lib/timeline-wheel";
 import {
   artworkUrlAfterFailure,
   railArtworkUrl,
 } from "~/app/timeline/_lib/timeline-rail-artwork";
 import { positionViewportTooltip } from "~/app/timeline/_lib/viewport-tooltip";
-import { api, type RouterOutputs } from "~/trpc/react";
+import type { RouterOutputs } from "~/trpc/react";
 
 type TimelineEntry = RouterOutputs["timeline"]["list"][number];
-type TimelineWindow = RouterOutputs["timeline"]["window"];
+type TimelineWindow = PublicTimelineWindow;
 type LedgerEntry = TimelineEntry & ScheduleInterval;
 
 const categoryNames = {
@@ -371,7 +375,6 @@ function TimelineScheduleContent({
   const scrollRef = useRef<HTMLDivElement>(null);
   const ledgerRef = useRef<HTMLDivElement>(null);
   const planButtonRef = useRef<HTMLButtonElement>(null);
-  const apiUtils = api.useUtils();
   const plannerPayload = useMemo(
     () =>
       createPlannerStatePayload({
@@ -423,10 +426,13 @@ function TimelineScheduleContent({
   useEffect(() => {
     if (nextWindowIndex === null || timelineLoadError) return;
     let active = true;
+    const controller = new AbortController();
     setLoadingWindowIndex(nextWindowIndex);
 
-    void apiUtils.timeline.window
-      .fetch({ scheduleStartDay, index: nextWindowIndex })
+    void fetchTimelineWindow(
+      { scheduleStartDay, index: nextWindowIndex },
+      { signal: controller.signal },
+    )
       .then((window) => {
         if (!active) return;
         startTransition(() => {
@@ -446,8 +452,9 @@ function TimelineScheduleContent({
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [apiUtils, nextWindowIndex, scheduleStartDay, timelineLoadError]);
+  }, [nextWindowIndex, scheduleStartDay, timelineLoadError]);
 
   useEffect(() => {
     const localCalendar = readLocalCalendar();

@@ -1,5 +1,8 @@
 import { env } from "~/env";
+import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
+import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
 import { db } from "~/server/db";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
@@ -31,8 +34,21 @@ type CronDependencies = {
     database: PipelineDatabase,
     options: PipelineOptions,
   ) => Promise<unknown>;
+  invalidateCache?: () => void | Promise<void>;
+  warmCache?: (asOf: Date) => Promise<void>;
   secret?: string;
 };
+
+function invalidateTimelineCache() {
+  revalidateTag("timeline-public-data");
+}
+
+async function warmTimelineCache(asOf: Date) {
+  const scheduleStartDay = asOf.toISOString().slice(0, 10);
+  for (const { index } of timelineWindows(scheduleStartDay)) {
+    await getCachedTimelineWindow({ scheduleStartDay, index });
+  }
+}
 
 function json(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status });
@@ -76,15 +92,25 @@ export async function handleEventScheduleCron(
 
   const runSync = dependencies.runSync ?? runEventSchedulePipeline;
   try {
+    const asOf = (dependencies.now ?? (() => new Date()))();
     const rawReport: unknown = await runSync(dependencies.database ?? db, {
       dryRun: false,
-      asOf: (dependencies.now ?? (() => new Date()))(),
+      asOf,
       sourceFile: null,
       warSourceFile: null,
       masterMissionSourceFile: null,
       outputPath: null,
     });
     const report = syncReportSchema.parse(rawReport);
+    try {
+      await (dependencies.invalidateCache ?? invalidateTimelineCache)();
+      await (dependencies.warmCache ?? warmTimelineCache)(asOf);
+    } catch (error) {
+      console.warn(
+        "The event schedule synced, but its public cache could not warm.",
+        error,
+      );
+    }
     return json({ ok: true, ...conciseReport(report) });
   } catch (error) {
     console.error("Scheduled event synchronisation failed.", error);
