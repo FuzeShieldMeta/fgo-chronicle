@@ -5,6 +5,8 @@ import superjson from "superjson";
 import { z } from "zod";
 
 import type { Prisma } from "../../../../generated/prisma";
+import { timelineWindowAt } from "~/app/timeline/_lib/progressive-timeline";
+import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 
@@ -57,6 +59,41 @@ const timelineDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("EVENT"), id: z.string().trim().min(1) }),
   z.object({ kind: z.literal("BANNER"), id: z.string().trim().min(1) }),
 ]);
+
+const timelineWindowSchema = z
+  .object({
+    scheduleStartDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    index: z.number().int().nonnegative(),
+  })
+  .superRefine(({ scheduleStartDay, index }, ctx) => {
+    const start = Date.parse(`${scheduleStartDay}T00:00:00.000Z`);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const distanceFromToday = Math.abs(start - today.getTime());
+
+    if (
+      !Number.isFinite(start) ||
+      new Date(start).toISOString().slice(0, 10) !== scheduleStartDay ||
+      distanceFromToday > 2 * 24 * 60 * 60 * 1_000
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The schedule start date is outside the current timeline.",
+        path: ["scheduleStartDay"],
+      });
+      return;
+    }
+
+    try {
+      timelineWindowAt(scheduleStartDay, index);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The requested window is outside the two-year schedule.",
+        path: ["index"],
+      });
+    }
+  });
 
 const familySelect = {
   id: true,
@@ -424,6 +461,32 @@ async function queryIncome(
   );
 }
 
+type TimelineWindowInput = z.infer<typeof timelineWindowSchema>;
+
+function timelineWindowRange(input: TimelineWindowInput) {
+  const definition = timelineWindowAt(input.scheduleStartDay, input.index);
+  const from = new Date(`${definition.fromDay}T00:00:00.000Z`);
+  from.setUTCDate(
+    from.getUTCDate() - timelineSchedule.queryBoundaryPaddingDays,
+  );
+  const to = new Date(`${definition.throughDay}T23:59:59.999Z`);
+  to.setUTCDate(to.getUTCDate() + timelineSchedule.queryBoundaryPaddingDays);
+  return { definition, range: { from, to } };
+}
+
+async function queryTimelineWindow(
+  database: TimelineDatabase,
+  input: TimelineWindowInput,
+) {
+  const { definition, range } = timelineWindowRange(input);
+  const [entries, incomeContributions] = await Promise.all([
+    queryTimelineList(database, range),
+    queryIncome(database, range),
+  ]);
+
+  return { ...definition, entries, incomeContributions };
+}
+
 const publicTimelineCacheOptions = {
   revalidate: 60 * 60,
   tags: ["timeline-public-data"],
@@ -449,6 +512,13 @@ const cachedIncomePayload = unstable_cache(
   publicTimelineCacheOptions,
 );
 
+const cachedTimelineWindowPayload = unstable_cache(
+  async (input: TimelineWindowInput) =>
+    superjson.stringify(await queryTimelineWindow(db, input)),
+  ["timeline-window-v1"],
+  publicTimelineCacheOptions,
+);
+
 export async function getCachedTimelineStories() {
   return superjson.parse<Awaited<ReturnType<typeof queryStories>>>(
     await cachedStoriesPayload(),
@@ -467,6 +537,12 @@ export async function getCachedTimelineIncome(input: TimelineListInput) {
   );
 }
 
+export async function getCachedTimelineWindow(input: TimelineWindowInput) {
+  return superjson.parse<Awaited<ReturnType<typeof queryTimelineWindow>>>(
+    await cachedTimelineWindowPayload(input),
+  );
+}
+
 export const timelineRouter = createTRPCRouter({
   stories: publicProcedure.query(async ({ ctx }) => {
     return queryStories(ctx.db);
@@ -480,6 +556,13 @@ export const timelineRouter = createTRPCRouter({
     .input(timelineRangeSchema)
     .query(async ({ ctx, input }) => {
       return queryIncome(ctx.db, input);
+    }),
+  window: publicProcedure
+    .input(timelineWindowSchema)
+    .query(async ({ ctx, input }) => {
+      return ctx.db === db
+        ? getCachedTimelineWindow(input)
+        : queryTimelineWindow(ctx.db, input);
     }),
   details: publicProcedure
     .input(timelineDetailSchema)

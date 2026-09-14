@@ -7,6 +7,7 @@ import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
 import {
+  startTransition,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -73,20 +74,21 @@ import {
   type ScheduleCategoryLayout,
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
+import { timelineLayout } from "~/app/timeline/_lib/timeline-layout-config";
 import {
-  timelineLayout,
-  timelineSchedule,
-} from "~/app/timeline/_lib/timeline-layout-config";
+  mergeContiguousTimelineWindows,
+  prioritiseTimelineWindowIndexes,
+} from "~/app/timeline/_lib/progressive-timeline";
 import { horizontalWheelDelta } from "~/app/timeline/_lib/timeline-wheel";
 import {
   artworkUrlAfterFailure,
   railArtworkUrl,
 } from "~/app/timeline/_lib/timeline-rail-artwork";
 import { positionViewportTooltip } from "~/app/timeline/_lib/viewport-tooltip";
-import type { RouterOutputs } from "~/trpc/react";
+import { api, type RouterOutputs } from "~/trpc/react";
 
 type TimelineEntry = RouterOutputs["timeline"]["list"][number];
-type TimelineIncomeContribution = RouterOutputs["timeline"]["income"][number];
+type TimelineWindow = RouterOutputs["timeline"]["window"];
 type LedgerEntry = TimelineEntry & ScheduleInterval;
 
 const categoryNames = {
@@ -113,12 +115,6 @@ type RailTooltip = {
   y: number;
   placement: "above" | "below";
 };
-
-function scheduleEndDay(dayKey: string) {
-  const value = new Date(`${dayKey}T00:00:00.000Z`);
-  value.setUTCFullYear(value.getUTCFullYear() + timelineSchedule.yearsAhead);
-  return value.toISOString().slice(0, 10);
-}
 
 function readLocalCalendar(): LocalCalendar {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -307,8 +303,9 @@ function CategoryRow({
 }
 
 export function TimelineSchedule(props: {
-  entries: TimelineEntry[];
-  incomeContributions: TimelineIncomeContribution[];
+  initialWindow: TimelineWindow;
+  scheduleStartDay: string;
+  scheduleEndDay: string;
   initialCalendar: LocalCalendar;
   stories?: StoryChapter[];
   user?: TimelineAccountUser | null;
@@ -322,14 +319,16 @@ export function TimelineSchedule(props: {
 }
 
 function TimelineScheduleContent({
-  entries,
-  incomeContributions,
+  initialWindow,
+  scheduleStartDay,
+  scheduleEndDay,
   initialCalendar,
   user,
   authError = false,
 }: {
-  entries: TimelineEntry[];
-  incomeContributions: TimelineIncomeContribution[];
+  initialWindow: TimelineWindow;
+  scheduleStartDay: string;
+  scheduleEndDay: string;
   initialCalendar: LocalCalendar;
   user?: TimelineAccountUser | null;
   authError?: boolean;
@@ -357,6 +356,14 @@ function TimelineScheduleContent({
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const [localPlannerReady, setLocalPlannerReady] = useState(false);
+  const [loadedWindows, setLoadedWindows] = useState(
+    () =>
+      new Map<number, TimelineWindow>([[initialWindow.index, initialWindow]]),
+  );
+  const [timelineLoadError, setTimelineLoadError] = useState(false);
+  const [loadingWindowIndex, setLoadingWindowIndex] = useState<number | null>(
+    null,
+  );
   const [isChoosingSummonDate, setIsChoosingSummonDate] = useState(false);
   const [railTooltip, setRailTooltip] = useState<RailTooltip | null>(null);
   const scheduleRef = useRef<HTMLElement>(null);
@@ -364,6 +371,7 @@ function TimelineScheduleContent({
   const scrollRef = useRef<HTMLDivElement>(null);
   const ledgerRef = useRef<HTMLDivElement>(null);
   const planButtonRef = useRef<HTMLButtonElement>(null);
+  const apiUtils = api.useUtils();
   const plannerPayload = useMemo(
     () =>
       createPlannerStatePayload({
@@ -388,6 +396,58 @@ function TimelineScheduleContent({
     payload: plannerPayload,
     replaceLocal: replaceLocalPlannerState,
   });
+  const loadedTimeline = useMemo(
+    () => mergeContiguousTimelineWindows(loadedWindows),
+    [loadedWindows],
+  );
+  const loadedWindowIndexes = useMemo(
+    () => new Set(loadedWindows.keys()),
+    [loadedWindows],
+  );
+  const pendingWindowIndexes = useMemo(
+    () =>
+      prioritiseTimelineWindowIndexes({
+        scheduleStartDay,
+        loadedIndexes: loadedWindowIndexes,
+        sessionDays: summonSessions.map(({ day }) => day),
+      }),
+    [loadedWindowIndexes, scheduleStartDay, summonSessions],
+  );
+  const nextWindowIndex = localPlannerReady
+    ? (pendingWindowIndexes[0] ?? null)
+    : null;
+  const entries = loadedTimeline.entries;
+  const incomeContributions = loadedTimeline.incomeContributions;
+  const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
+
+  useEffect(() => {
+    if (nextWindowIndex === null || timelineLoadError) return;
+    let active = true;
+    setLoadingWindowIndex(nextWindowIndex);
+
+    void apiUtils.timeline.window
+      .fetch({ scheduleStartDay, index: nextWindowIndex })
+      .then((window) => {
+        if (!active) return;
+        startTransition(() => {
+          setLoadedWindows((current) => {
+            const next = new Map(current);
+            next.set(window.index, window);
+            return next;
+          });
+          setLoadingWindowIndex(null);
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setTimelineLoadError(true);
+        setLoadingWindowIndex(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiUtils, nextWindowIndex, scheduleStartDay, timelineLoadError]);
 
   useEffect(() => {
     const localCalendar = readLocalCalendar();
@@ -499,7 +559,7 @@ function TimelineScheduleContent({
   }, []);
 
   const view = useMemo(() => {
-    const endDay = scheduleEndDay(calendar.today);
+    const endDay = loadedTimeline.throughDay;
     const days = calendarDays(calendar.today, endDay);
     const scheduleEntries = entries.filter(
       (entry) => entry.category !== "INCOME_SOURCE",
@@ -528,6 +588,7 @@ function TimelineScheduleContent({
     playerProfile,
     rewardPreferences,
     summonSessions,
+    loadedTimeline.throughDay,
   ]);
 
   const formatter = useMemo(
@@ -946,6 +1007,30 @@ function TimelineScheduleContent({
           {summonStorageWarning} Other saved sessions remain available.
         </p>
       ) : null}
+      {timelineLoadError ? (
+        <div className="timeline-preference-notice" role="status">
+          <span>
+            The timeline is available through{" "}
+            <time dateTime={loadedTimeline.throughDay}>
+              {loadedTimeline.throughDay}
+            </time>
+            . Later dates could not load.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setTimelineLoadError(false);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {loadingWindowIndex !== null ? (
+        <p className="sr-only" role="status">
+          Loading later timeline dates.
+        </p>
+      ) : null}
       <div
         className="timeline-workspace"
         data-has-selection={
@@ -964,12 +1049,16 @@ function TimelineScheduleContent({
             className="timeline-scroll"
             role="region"
             aria-label="Two-year schedule. Scroll horizontally through dates."
+            aria-busy={loadingWindowIndex !== null}
             tabIndex={0}
             onScroll={() => {
               setRailTooltip(null);
             }}
           >
             <div ref={ledgerRef} className="timeline-ledger" style={gridStyle}>
+              {!timelineLoadingComplete && loadingWindowIndex !== null ? (
+                <span className="timeline-loading-edge" aria-hidden="true" />
+              ) : null}
               {selectedDayIndex >= 0 ? (
                 <span
                   className="timeline-selected-day-column"
