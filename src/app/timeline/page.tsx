@@ -1,4 +1,7 @@
-import Link from "next/link";
+import {
+  TimelineMethodologyProvider,
+  TimelineMethodologyButton,
+} from "~/app/timeline/_components/timeline-methodology";
 
 import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
@@ -28,38 +31,40 @@ export default async function TimelinePage({
   };
   const authError = Boolean((await searchParams)?.error);
   return (
-    <main id="main-content" className="timeline-page">
-      <header className="timeline-app-bar">
-        <span className="timeline-brand-mark" aria-hidden="true" />
-        <div className="timeline-app-title">
-          <h1>FGO Chronicle</h1>
-          <p>Global schedule planner</p>
-        </div>
+    <TimelineMethodologyProvider>
+      <main id="main-content" className="timeline-page">
+        <header className="timeline-app-bar">
+          <span className="timeline-brand-mark" aria-hidden="true" />
+          <div className="timeline-app-title">
+            <h1>FGO Chronicle</h1>
+            <p>Global schedule planner</p>
+          </div>
 
-        <div className="timeline-intro">
-          <span>
-            Events, summoning campaigns, and dated rewards for the next two
-            years.
-          </span>
-          <Link href="/methodology">How the forecast works</Link>
-        </div>
-      </header>
+          <div className="timeline-intro">
+            <span>
+              Events, summoning campaigns, and dated rewards for the next two
+              years.
+            </span>
+            <TimelineMethodologyButton />
+          </div>
+        </header>
 
-      <TimelineSchedule
-        stories={stories}
-        initialWindow={initialWindow}
-        scheduleStartDay={scheduleStartDay}
-        scheduleEndDay={scheduleEndDay}
-        initialCalendar={initialCalendar}
-        user={
-          session?.user
-            ? {
-                id: session.user.id,
-              }
-            : null
-        }
-        authError={authError}
-      />
-    </main>
+        <TimelineSchedule
+          stories={stories}
+          initialWindow={initialWindow}
+          scheduleStartDay={scheduleStartDay}
+          scheduleEndDay={scheduleEndDay}
+          initialCalendar={initialCalendar}
+          user={
+            session?.user
+              ? {
+                  id: session.user.id,
+                }
+              : null
+          }
+          authError={authError}
+        />
+      </main>
+    </TimelineMethodologyProvider>
   );
 }

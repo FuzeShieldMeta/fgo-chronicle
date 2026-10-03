@@ -31,6 +31,10 @@ import {
   type TimelineAccountUser,
 } from "~/app/timeline/_components/timeline-account-menu";
 import { TimelineAccountDetails } from "~/app/timeline/_components/timeline-account-details";
+import {
+  TimelineMethodologyDetails,
+  useTimelineMethodology,
+} from "./timeline-methodology";
 import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
 import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
 import {
@@ -359,6 +363,8 @@ function TimelineScheduleContent({
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
+  const { open: methodologyPanelOpen, setOpen: setMethodologyPanelOpen } =
+    useTimelineMethodology();
   const [localPlannerReady, setLocalPlannerReady] = useState(false);
   const [loadedWindows, setLoadedWindows] = useState(
     () =>
@@ -500,6 +506,35 @@ function TimelineScheduleContent({
       setAccountPanelOpen(false);
     }
   }, [profilePanelOpen, selectedDay, selectedIncomeKey, selectedKey]);
+
+  useEffect(() => {
+    if (!methodologyPanelOpen) return;
+    setIsChoosingSummonDate(false);
+    setSelectedKey(null);
+    setSelectedIncomeKey(null);
+    setSelectedDay(null);
+    setProfilePanelOpen(false);
+    setAccountPanelOpen(false);
+  }, [methodologyPanelOpen]);
+
+  useEffect(() => {
+    if (
+      selectedKey ||
+      selectedIncomeKey ||
+      selectedDay ||
+      profilePanelOpen ||
+      accountPanelOpen
+    ) {
+      setMethodologyPanelOpen(false);
+    }
+  }, [
+    selectedKey,
+    selectedIncomeKey,
+    selectedDay,
+    profilePanelOpen,
+    accountPanelOpen,
+    setMethodologyPanelOpen,
+  ]);
 
   useLayoutEffect(() => {
     const scrollFrame = scrollFrameRef.current;
@@ -850,28 +885,38 @@ function TimelineScheduleContent({
     selectedIncomeCell !== null ||
     selectedDay !== null ||
     profilePanelOpen ||
-    accountPanelOpen,
+    accountPanelOpen ||
+    methodologyPanelOpen,
   );
-  const detailsSelectionKey = selectedDay
-    ? `day:${selectedDay}`
-    : profilePanelOpen
-      ? "profile"
-      : accountPanelOpen
-        ? "account"
-        : selectedIncomeCell
-          ? `income:${selectedIncomeCell.key}`
-          : selectedEntry
-            ? `entry:${selectedEntry.key}`
-            : "placeholder";
-  const detailsHeadingId = selectedDay
-    ? "timeline-day-heading"
-    : profilePanelOpen
-      ? "timeline-profile-heading"
-      : accountPanelOpen
-        ? "timeline-account-heading"
-        : "timeline-details-heading";
+  const detailsSelectionKey = methodologyPanelOpen
+    ? "methodology"
+    : selectedDay
+      ? `day:${selectedDay}`
+      : profilePanelOpen
+        ? "profile"
+        : accountPanelOpen
+          ? "account"
+          : selectedIncomeCell
+            ? `income:${selectedIncomeCell.key}`
+            : selectedEntry
+              ? `entry:${selectedEntry.key}`
+              : "placeholder";
+  const detailsHeadingId = methodologyPanelOpen
+    ? "timeline-methodology-heading"
+    : selectedDay
+      ? "timeline-day-heading"
+      : profilePanelOpen
+        ? "timeline-profile-heading"
+        : accountPanelOpen
+          ? "timeline-account-heading"
+          : "timeline-details-heading";
 
   function closeActiveDetails() {
+    if (methodologyPanelOpen) {
+      setMethodologyPanelOpen(false);
+      document.getElementById("timeline-methodology-button")?.focus();
+      return;
+    }
     if (selectedDay) {
       closeSelectedDay();
       return;
@@ -1045,7 +1090,8 @@ function TimelineScheduleContent({
           selectedIncomeCell ||
           selectedDay ||
           profilePanelOpen ||
-          accountPanelOpen
+          accountPanelOpen ||
+          methodologyPanelOpen
             ? "true"
             : "false"
         }
@@ -1223,15 +1269,19 @@ function TimelineScheduleContent({
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
           returnFocusId={
-            selectedDay
-              ? `timeline-day-${selectedDay}`
-              : accountPanelOpen
-                ? "timeline-account-button"
-                : undefined
+            methodologyPanelOpen
+              ? "timeline-methodology-button"
+              : selectedDay
+                ? `timeline-day-${selectedDay}`
+                : accountPanelOpen
+                  ? "timeline-account-button"
+                  : undefined
           }
           onClose={closeActiveDetails}
         >
-          {selectedDay && selectedDayBalances ? (
+          {methodologyPanelOpen ? (
+            <TimelineMethodologyDetails onClose={closeActiveDetails} />
+          ) : selectedDay && selectedDayBalances ? (
             <TimelineDayDetails
               key={selectedDay}
               day={selectedDay}

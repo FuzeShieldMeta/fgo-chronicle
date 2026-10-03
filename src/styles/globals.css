@@ -161,10 +161,54 @@ button {
   text-align: right;
 }
 
-.timeline-intro a {
+.timeline-intro a,
+.timeline-intro button {
   flex: 0 0 auto;
   color: #ffffff;
   font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+.timeline-intro button {
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.timeline-intro button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+
+.timeline-methodology-content {
+  color: var(--md-on-surface-variant);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.timeline-methodology-content section {
+  margin-top: 24px;
+}
+
+.timeline-methodology-content h2 {
+  color: var(--md-on-surface);
+  font-size: 1.125rem;
+  margin: 0 0 12px;
+}
+
+.timeline-methodology-content .content-lead {
+  margin: 0 0 16px;
+  font-size: 1rem;
+}
+
+.timeline-methodology-content a {
+  color: var(--md-primary);
   text-underline-offset: 3px;
 }
 
