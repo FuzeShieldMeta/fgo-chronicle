@@ -6,6 +6,10 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
+import {
+  safeSyncFailure,
+  summariseEventSchedule,
+} from "../../../scripts/lib/event-schedule-monitoring.mjs";
 
 const syncReportSchema = z.object({
   atlas: z.unknown(),
@@ -54,27 +58,6 @@ function json(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status });
 }
 
-function conciseReport(report: z.infer<typeof syncReportSchema>) {
-  return {
-    atlas: report.atlas,
-    masterMissions: report.masterMissions,
-    fandom: {
-      atlasFetched: report.fandom.atlasFetched,
-      atlasSelected: report.fandom.atlasSelected,
-      fandomListEntries: report.fandom.fandomListEntries,
-      matchedAtlas: report.fandom.matchedAtlas,
-      reviewCandidates: report.fandom.reviewCandidates,
-      heldMatchedRewardSources: report.fandom.heldMatchedRewardSources.length,
-      explicitExclusions: report.fandom.explicitExclusions.length,
-      unresolved: report.fandom.unresolved.length,
-      missingUpcoming: report.fandom.upcoming.filter(
-        ({ status }) => status === "MISSING_SOURCE_EVENT",
-      ).length,
-      publication: report.fandom.publication,
-    },
-  };
-}
-
 export async function handleEventScheduleCron(
   request: Request,
   dependencies: CronDependencies = {},
@@ -91,8 +74,15 @@ export async function handleEventScheduleCron(
   }
 
   const runSync = dependencies.runSync ?? runEventSchedulePipeline;
+  const started = performance.now();
+  const startedAt = (dependencies.now ?? (() => new Date()))().toISOString();
+  const durationMs = () => Math.round(performance.now() - started);
+  console.info(
+    JSON.stringify({ event: "event_schedule_sync_started", startedAt }),
+  );
+  let stage = "pipeline";
   try {
-    const asOf = (dependencies.now ?? (() => new Date()))();
+    const asOf = new Date(startedAt);
     const rawReport: unknown = await runSync(dependencies.database ?? db, {
       dryRun: false,
       asOf,
@@ -101,19 +91,47 @@ export async function handleEventScheduleCron(
       masterMissionSourceFile: null,
       outputPath: null,
     });
-    const report = syncReportSchema.parse(rawReport);
+    stage = "summary";
+    const report = summariseEventSchedule(syncReportSchema.parse(rawReport));
+    let cacheWarmed = true;
     try {
       await (dependencies.invalidateCache ?? invalidateTimelineCache)();
       await (dependencies.warmCache ?? warmTimelineCache)(asOf);
     } catch (error) {
+      cacheWarmed = false;
       console.warn(
-        "The event schedule synced, but its public cache could not warm.",
-        error,
+        JSON.stringify({
+          event: "event_schedule_cache_failed",
+          startedAt,
+          durationMs: durationMs(),
+          error: safeSyncFailure(error),
+        }),
       );
     }
-    return json({ ok: true, ...conciseReport(report) });
+    const status =
+      report.totals.warningCount > 0 || !cacheWarmed ? "warning" : "success";
+    const completion = {
+      startedAt,
+      durationMs: durationMs(),
+      status,
+      cacheWarmed,
+      ...report,
+    };
+    const log = status === "warning" ? console.warn : console.info;
+    log(
+      JSON.stringify({ event: `event_schedule_sync_${status}`, ...completion }),
+    );
+    return json({ ok: true, ...completion });
   } catch (error) {
-    console.error("Scheduled event synchronisation failed.", error);
+    console.error(
+      JSON.stringify({
+        event: "event_schedule_sync_failed",
+        stage,
+        startedAt,
+        durationMs: durationMs(),
+        error: safeSyncFailure(error),
+      }),
+    );
     return json(
       { ok: false, error: "Event schedule synchronisation failed." },
       500,

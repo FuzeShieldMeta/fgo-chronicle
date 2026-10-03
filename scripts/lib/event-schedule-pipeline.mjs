@@ -7,6 +7,10 @@ import { buildProjectedEventDataset } from "./jp-event-sync.mjs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import {
+  safeSyncFailure,
+  summariseEventSchedule,
+} from "./event-schedule-monitoring.mjs";
 
 import { buildFandomCoverage } from "./fandom-coverage.mjs";
 import { reconcileProjectedFandomEvents } from "./fandom-event-reconciler.mjs";
@@ -74,6 +78,7 @@ export async function writeDatasetAtomically(outputPath, dataset) {
  * }} [dependencies]
  */
 export async function runEventSchedulePipeline(db, options, dependencies = {}) {
+  const startedAt = new Date();
   const env = dependencies.env ?? process.env;
   const masterMissionMaxUpdates = parseIntegerSetting(
     env.JP_MASTER_MISSION_SYNC_MAX_UPDATES,
@@ -257,6 +262,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
         source: "EVENT_SCHEDULE_PIPELINE",
         status: "RUNNING",
         dryRun: false,
+        startedAt,
       },
     });
     try {
@@ -282,7 +288,19 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
           const result = await publish(publicationDb);
           await transaction.syncRun.update({
             where: { id: syncRun.id },
-            data: { status: "SUCCEEDED", completedAt: new Date() },
+            data: {
+              status: "SUCCEEDED",
+              completedAt: new Date(),
+              ...summariseEventSchedule({
+                atlas: result.atlasReport,
+                masterMissions: result.masterMissionReport,
+                fandom: {
+                  ...coverage.report,
+                  ...fandomPublicationDataset.report,
+                  publication: result.fandomPublication,
+                },
+              }).totals,
+            },
           });
           return result;
         },
@@ -294,10 +312,7 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
         data: {
           status: "FAILED",
           completedAt: new Date(),
-          errorMessage: (error instanceof Error
-            ? error.message
-            : String(error)
-          ).slice(0, 2000),
+          errorMessage: safeSyncFailure(error),
         },
       });
       throw error;
