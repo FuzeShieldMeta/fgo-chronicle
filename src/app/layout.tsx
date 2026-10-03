@@ -4,12 +4,35 @@ import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 
+import { siteUrl } from "~/app/_lib/site";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
   applicationName: "FGO Chronicle",
-  title: "FGO Chronicle",
-  description: "Plan around the Fate/Grand Order Global schedule.",
+  metadataBase: siteUrl,
+  title: {
+    default: "FGO Global Schedule and Saint Quartz Planner | FGO Chronicle",
+    template: "%s | FGO Chronicle",
+  },
+  description:
+    "View upcoming Fate/Grand Order Global events and banners. Estimate Saint Quartz income and plan summons over the next two years.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "FGO Chronicle",
+    title: "FGO Chronicle | Global schedule and Saint Quartz planner",
+    description:
+      "View upcoming FGO Global events and banners, estimate your income, and plan summons.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "FGO Chronicle | Global schedule and Saint Quartz planner",
+    description:
+      "View upcoming FGO Global events and banners, estimate your income, and plan summons.",
+  },
   icons: {
     icon: [
       {

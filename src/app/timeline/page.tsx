@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
 import { auth } from "~/server/auth";
@@ -34,9 +36,13 @@ export default async function TimelinePage({
           <p>Global schedule planner</p>
         </div>
 
-        <p className="timeline-intro">
-          Events, summoning campaigns, and dated rewards for the next two years.
-        </p>
+        <div className="timeline-intro">
+          <span>
+            Events, summoning campaigns, and dated rewards for the next two
+            years.
+          </span>
+          <Link href="/methodology">How the forecast works</Link>
+        </div>
       </header>
 
       <TimelineSchedule
