@@ -231,7 +231,8 @@ function obsoleteManagedRewardSourceIds(event, desiredSources) {
         source.status === "PROJECTED" &&
         !desiredKeys.has(source.sourceKey) &&
         (source.rewards ?? []).every(
-          (/** @type {Record<string, any>} */ reward) => !reward.reviewedAt,
+          (/** @type {Record<string, any>} */ reward) =>
+            !reward.reviewedAt && !reward.curation,
         )
       );
     })
@@ -274,7 +275,8 @@ export async function reconcileProjectedFandomEvents(
     },
     include: {
       family: true,
-      rewardSources: { include: { rewards: true } },
+      curation: true,
+      rewardSources: { include: { rewards: { include: { curation: true } } } },
     },
   });
   const plan = planEventReconciliation(
@@ -295,7 +297,11 @@ export async function reconcileProjectedFandomEvents(
   const externalEvents = externalKeys.length
     ? await db.event.findMany({
         where: { sourceKey: { in: externalKeys } },
-        include: { rewardSources: { include: { rewards: true } } },
+        include: {
+          rewardSources: {
+            include: { rewards: { include: { curation: true } } },
+          },
+        },
       })
     : [];
   const externalByKey = new Map(
@@ -316,7 +322,10 @@ export async function reconcileProjectedFandomEvents(
         where: { sourceKey: { in: supersededSourceKeys } },
         include: {
           family: true,
-          rewardSources: { include: { rewards: true } },
+          curation: true,
+          rewardSources: {
+            include: { rewards: { include: { curation: true } } },
+          },
         },
       })
     : [];
@@ -351,12 +360,14 @@ export async function reconcileProjectedFandomEvents(
     const target = supersededTargetByKey.get(match.targetEventKey);
     const isUnreviewedProjection =
       existing.status === "PROJECTED" &&
+      !existing.curation &&
       !existing.family?.artworkReviewedAt &&
       (existing.rewardSources ?? []).every(
         (/** @type {Record<string, any>} */ source) =>
           source.status === "PROJECTED" &&
           (source.rewards ?? []).every(
-            (/** @type {Record<string, any>} */ reward) => !reward.reviewedAt,
+            (/** @type {Record<string, any>} */ reward) =>
+              !reward.reviewedAt && !reward.curation,
           ),
       );
     const targetIsAvailable = Boolean(target) || Boolean(options.dryRun);

@@ -50,6 +50,7 @@ model User {
   email         String?       @unique
   emailVerified DateTime?
   image         String?
+  isCurator     Boolean       @default(false)
   accounts      Account[]
   sessions      Session[]
   plannerState  PlannerState?
@@ -161,6 +162,7 @@ model Event {
   sourceContentHash String?
   family            EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
   rewardSources     RewardSource[]
+  curation          EventCuration?
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -188,8 +190,8 @@ model RewardSource {
 }
 
 model RewardDefinition {
-  id              String         @id @default(cuid())
-  sourceKey       String         @unique
+  id              String          @id @default(cuid())
+  sourceKey       String          @unique
   rewardSourceId  String
   itemType        RewardItemType
   amount          Int
@@ -198,14 +200,63 @@ model RewardDefinition {
   eligibility     String?
   storyWarId      Int?
   storyReleaseAt  DateTime?
-  defaultIncluded Boolean        @default(true)
+  defaultIncluded Boolean         @default(true)
   reviewedAt      DateTime?
-  rewardSource    RewardSource   @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  rewardSource    RewardSource    @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  curation        RewardCuration?
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
+}
+
+model EventCuration {
+  eventId           String                 @id
+  active            Boolean                @default(true)
+  revision          Int                    @default(1)
+  name              String
+  startsAt          DateTime
+  startsAtPrecision ScheduleTimePrecision
+  endsAt            DateTime?
+  endsAtPrecision   ScheduleTimePrecision?
+  hidden            Boolean                @default(false)
+  shiftRewardDates  Boolean                @default(true)
+  updatedAt         DateTime               @updatedAt
+  event             Event                  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([active, startsAt])
+}
+
+model RewardCuration {
+  rewardId        String           @id
+  active          Boolean          @default(true)
+  revision        Int              @default(1)
+  itemType        RewardItemType
+  amount          Int
+  expectedAt      DateTime?
+  nature          RewardNature
+  eligibility     String?
+  defaultIncluded Boolean
+  updatedAt       DateTime         @updatedAt
+  reward          RewardDefinition @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+
+  @@index([active, expectedAt])
+}
+
+model CuratorChange {
+  id         String   @id @default(cuid())
+  actorId    String
+  targetKind String
+  targetId   String
+  action     String
+  reason     String
+  before     Json
+  after      Json
+  createdAt  DateTime @default(now())
+
+  @@index([targetKind, targetId, createdAt])
+  @@index([createdAt])
 }
 
 model SyncRun {

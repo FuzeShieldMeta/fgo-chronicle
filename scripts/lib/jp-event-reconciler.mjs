@@ -149,7 +149,8 @@ function obsoleteAtlasRewardSourceIds(event, desiredSources) {
         !isProtectedRewardSource(source) &&
         !desiredKeys.has(source.sourceKey) &&
         (source.rewards ?? []).every(
-          (/** @type {Record<string, any>} */ reward) => !reward.reviewedAt,
+          (/** @type {Record<string, any>} */ reward) =>
+            !reward.reviewedAt && !reward.curation,
         ),
     )
     .flatMap((/** @type {Record<string, any>} */ source) =>
@@ -191,7 +192,9 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
       },
       include: {
         family: true,
-        rewardSources: { include: { rewards: true } },
+        rewardSources: {
+          include: { rewards: { include: { curation: true } } },
+        },
       },
     })
   );

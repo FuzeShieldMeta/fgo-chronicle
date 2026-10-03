@@ -9,6 +9,13 @@ import { timelineWindowAt } from "~/app/timeline/_lib/progressive-timeline";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
+import {
+  effectiveEvent,
+  effectiveReward,
+  eventIsHidden,
+  overlapsRange,
+  rewardDateShift,
+} from "~/server/services/effective-schedule";
 
 const MAX_TIMELINE_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
 const timelineCategories = [
@@ -109,6 +116,7 @@ const familySelect = {
 } as const;
 
 const eventSelect = {
+  curation: true,
   id: true,
   name: true,
   type: true,
@@ -142,6 +150,7 @@ const bannerSelect = {
 } as const;
 
 const relatedEventSelect = {
+  curation: true,
   id: true,
   name: true,
   type: true,
@@ -194,6 +203,7 @@ const rewardSourceSelect = {
   updatedAt: true,
   rewards: {
     select: {
+      curation: true,
       id: true,
       itemType: true,
       amount: true,
@@ -210,6 +220,7 @@ const rewardSourceSelect = {
 } satisfies Prisma.RewardSourceSelect;
 
 const incomeContributionSelect = {
+  curation: true,
   id: true,
   itemType: true,
   amount: true,
@@ -231,6 +242,8 @@ const incomeContributionSelect = {
         select: {
           id: true,
           name: true,
+          startsAt: true,
+          curation: true,
         },
       },
     },
@@ -354,6 +367,7 @@ type RelatedScheduleEntry = {
   projectionMethod?: "TWO_CALENDAR_YEARS" | null;
   lastSyncedAt?: Date | null;
   updatedAt: Date;
+  curation?: Prisma.EventCurationGetPayload<Record<string, never>> | null;
 };
 
 function relatedEntries(family: {
@@ -361,14 +375,16 @@ function relatedEntries(family: {
   banners: RelatedScheduleEntry[];
 }) {
   return [
-    ...family.events.map((event) => ({
-      ...event,
-      key: `event:${event.id}`,
-      kind: "EVENT" as const,
-      category: eventCategory(event.type),
-      confidence: null,
-      sourceLastCheckedAt: event.lastSyncedAt ?? null,
-    })),
+    ...family.events
+      .filter((event) => !eventIsHidden(event))
+      .map((event) => ({
+        ...effectiveEvent(event),
+        key: `event:${event.id}`,
+        kind: "EVENT" as const,
+        category: eventCategory(event.type),
+        confidence: null,
+        sourceLastCheckedAt: event.lastSyncedAt ?? null,
+      })),
     ...family.banners.map((banner) => ({
       ...banner,
       key: `banner:${banner.id}`,
@@ -404,7 +420,13 @@ async function queryTimelineList(
       ? database.event.findMany({
           relationLoadStrategy: "join",
           where: {
-            ...commonWhere(input),
+            OR: [
+              intervalWhere(input.from, input.to),
+              { curation: { is: { active: true } } },
+            ],
+            ...(input.sourceRegions
+              ? { sourceRegion: { in: input.sourceRegions } }
+              : {}),
             ...eventTypeWhere(input.categories),
           },
           select: eventSelect,
@@ -427,14 +449,22 @@ async function queryTimelineList(
   ]);
 
   return [
-    ...events.map((event) => ({
-      ...event,
-      key: `event:${event.id}`,
-      kind: "EVENT" as const,
-      category: eventCategory(event.type),
-      confidence: null,
-      sourceLastCheckedAt: event.lastSyncedAt,
-    })),
+    ...events
+      .filter((event) => !eventIsHidden(event))
+      .map(effectiveEvent)
+      .filter(
+        (event) =>
+          overlapsRange(event, input.from, input.to) &&
+          (!input.statuses || input.statuses.includes(event.status)),
+      )
+      .map((event) => ({
+        ...event,
+        key: `event:${event.id}`,
+        kind: "EVENT" as const,
+        category: eventCategory(event.type),
+        confidence: null,
+        sourceLastCheckedAt: event.lastSyncedAt,
+      })),
     ...banners.map((banner) => ({
       ...banner,
       key: `banner:${banner.id}`,
@@ -452,20 +482,53 @@ async function queryIncome(
   const contributions = await database.rewardDefinition.findMany({
     relationLoadStrategy: "join",
     where: {
-      expectedAt: {
-        gte: input.from,
-        lte: input.to,
-      },
+      OR: [
+        { expectedAt: { gte: input.from, lte: input.to } },
+        { curation: { is: { active: true } } },
+        { rewardSource: { event: { curation: { is: { active: true } } } } },
+      ],
     },
     select: incomeContributionSelect,
     orderBy: [{ expectedAt: "asc" }, { id: "asc" }],
   });
 
-  return contributions.flatMap((contribution) =>
-    contribution.expectedAt
-      ? [{ ...contribution, expectedAt: contribution.expectedAt }]
-      : [],
-  );
+  return contributions
+    .flatMap((contribution) => {
+      const event = contribution.rewardSource.event;
+      if (event && eventIsHidden(event)) return [];
+      const effective = effectiveReward(contribution, rewardDateShift(event));
+      if (
+        !effective.expectedAt ||
+        effective.expectedAt < input.from ||
+        effective.expectedAt > input.to
+      )
+        return [];
+      return [
+        {
+          ...effective,
+          expectedAt: effective.expectedAt,
+          rewardSource: {
+            ...effective.rewardSource,
+            status: contribution.curation?.active
+              ? ("CURATED" as const)
+              : contribution.rewardSource.status,
+            event: event
+              ? {
+                  id: event.id,
+                  name: event.curation?.active
+                    ? event.curation.name
+                    : event.name,
+                }
+              : null,
+          },
+        },
+      ];
+    })
+    .sort(
+      (a, b) =>
+        a.expectedAt.getTime() - b.expectedAt.getTime() ||
+        a.id.localeCompare(b.id),
+    );
 }
 
 type TimelineWindowInput = z.infer<typeof timelineWindowSchema>;
@@ -636,14 +699,14 @@ export const timelineRouter = createTRPCRouter({
         },
       });
 
-      if (!event) {
+      if (!event || eventIsHidden(event)) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Timeline entry not found.",
         });
       }
 
-      const { family, rewardSources, ...schedule } = event;
+      const { family, rewardSources, ...schedule } = effectiveEvent(event);
 
       return {
         ...schedule,
@@ -656,7 +719,15 @@ export const timelineRouter = createTRPCRouter({
           rewardSources.length > 0
             ? ("AVAILABLE" as const)
             : ("UNKNOWN" as const),
-        rewardSources,
+        rewardSources: rewardSources.map((source) => ({
+          ...source,
+          status: source.rewards.some((reward) => reward.curation?.active)
+            ? ("CURATED" as const)
+            : source.status,
+          rewards: source.rewards.map((reward) =>
+            effectiveReward(reward, rewardDateShift(event)),
+          ),
+        })),
         family: family
           ? {
               id: family.id,

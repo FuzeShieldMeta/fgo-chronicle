@@ -102,7 +102,7 @@ export async function reconcileProjectedMasterMissions(
   );
   const existingSources = await db.rewardSource.findMany({
     where: { sourceKey: { startsWith: "atlas:JP:mm:" } },
-    include: { rewards: true },
+    include: { rewards: { include: { curation: true } } },
   });
   const existingByKey = new Map(
     existingSources.map((/** @type {Record<string, any>} */ source) => [
@@ -153,6 +153,13 @@ export async function reconcileProjectedMasterMissions(
           (/** @type {Record<string, any>} */ reward) => reward.sourceKey,
         ),
       );
+      const retainedCuratorRewards = existing.rewards.filter(
+        (/** @type {Record<string, any>} */ reward) =>
+          !reward.reviewedAt &&
+          reward.curation &&
+          !desiredRewards.has(reward.sourceKey),
+      );
+      protectedRewardDifferences += retainedCuratorRewards.length;
       const effectiveSource = {
         ...source,
         rewards: [
@@ -160,6 +167,7 @@ export async function reconcileProjectedMasterMissions(
             (reward) => !reviewedKeys.has(reward.sourceKey),
           ),
           ...reviewedRewards,
+          ...retainedCuratorRewards,
         ],
       };
       const contentChanged =
@@ -170,7 +178,9 @@ export async function reconcileProjectedMasterMissions(
           existing.rewards
             .filter(
               (/** @type {Record<string, any>} */ reward) =>
-                !reward.reviewedAt && !desiredRewards.has(reward.sourceKey),
+                !reward.reviewedAt &&
+                !reward.curation &&
+                !desiredRewards.has(reward.sourceKey),
             )
             .map(
               (/** @type {Record<string, any>} */ reward) => reward.sourceKey,
@@ -301,6 +311,7 @@ export async function reconcileProjectedMasterMissions(
                 rewardSourceId: savedSource.id,
                 sourceKey: { in: obsoleteKeys },
                 reviewedAt: null,
+                curation: { is: null },
               },
             });
           }

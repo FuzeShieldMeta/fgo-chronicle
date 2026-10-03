@@ -3,6 +3,7 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 import { bannerRouter } from "~/server/api/routers/banner";
 import { plannerStateRouter } from "~/server/api/routers/planner-state";
 import { timelineRouter } from "~/server/api/routers/timeline";
+import { curatorRouter } from "~/server/api/routers/curator";
 
 /**
  * This is the primary router for your server.
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   banner: bannerRouter,
   plannerState: plannerStateRouter,
   timeline: timelineRouter,
+  curator: curatorRouter,
 });
 
 // export type definition of API

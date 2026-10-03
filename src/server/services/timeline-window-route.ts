@@ -5,8 +5,8 @@ import {
   parseTimelineWindowInput,
 } from "~/server/api/routers/timeline";
 
-const successCacheControl =
-  "public, s-maxage=3600, stale-while-revalidate=86400";
+// Keep the tagged Next.js cache authoritative after curator corrections.
+const successCacheControl = "public, max-age=0, must-revalidate";
 const failureCacheControl = "private, no-store";
 
 type TimelineWindowGetter = typeof getCachedTimelineWindow;

@@ -6,6 +6,7 @@
   "scripts": {
     "build": "next build",
     "check": "eslint . && tsc --noEmit",
+    "curator:access": "node --env-file=.env scripts/curator-access.mjs",
     "data:import-banners": "node --env-file=.env scripts/import-banner-estimates.mjs",
     "data:import-events": "node --env-file=.env scripts/import-events.mjs",
     "data:prepare-event-review": "node --env-file=.env scripts/prepare-event-review.mjs",
