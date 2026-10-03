@@ -47,4 +47,6 @@ If another curator changed the record, the dashboard rejects the stale save. Rel
 
 The dashboard has no public navigation link or search-engine listing. Page checks and API permission checks enforce access independently. The new tables have forced RLS and no grants to Supabase `anon` or `authenticated` roles. The server's Prisma connection remains privileged.
 
-Public windows still use the tagged Next.js data cache. Their HTTP responses do not retain a separate stale CDN copy. This allows saved corrections to appear after cache invalidation. It increases function requests compared with the previous CDN cache, but keeps database reads cached.
+Public windows use the tagged Next.js data cache. Each request also checks the number of saved event and reward corrections. This number forms part of the cache key, so a save or reset selects fresh data even if tag invalidation fails. The check adds one small database query per request. The larger schedule queries remain cached. Correction history must not be deleted.
+
+HTTP responses do not retain a separate stale CDN copy. An already-open timeline still needs a reload to fetch corrections. Deployments running older code do not gain this behaviour until they are updated.

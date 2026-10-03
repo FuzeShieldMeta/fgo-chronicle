@@ -569,23 +569,23 @@ const cachedStoriesPayload = unstable_cache(
 );
 
 const cachedTimelineListPayload = unstable_cache(
-  async (input: CachedTimelineListInput) =>
+  async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineList(db, restoreCacheInput(input))),
-  ["timeline-list-v1"],
+  ["timeline-list-v2"],
   publicTimelineCacheOptions,
 );
 
 const cachedIncomePayload = unstable_cache(
-  async (input: CachedTimelineListInput) =>
+  async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryIncome(db, restoreCacheInput(input))),
-  ["timeline-income-v1"],
+  ["timeline-income-v2"],
   publicTimelineCacheOptions,
 );
 
 const cachedTimelineWindowPayload = unstable_cache(
-  async (input: TimelineWindowInput) =>
+  async (input: TimelineWindowInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineWindow(db, input)),
-  ["timeline-window-v1"],
+  ["timeline-window-v2"],
   publicTimelineCacheOptions,
 );
 
@@ -595,21 +595,32 @@ export async function getCachedTimelineStories() {
   );
 }
 
+async function getCuratorRevision() {
+  // Keep this outside unstable_cache: missed tag invalidation must not hide edits.
+  // Audit rows are appended in the same transaction as corrections and resets.
+  return db.curatorChange.count({
+    where: { targetKind: { in: ["EVENT", "REWARD"] } },
+  });
+}
+
 export async function getCachedTimelineList(input: TimelineListInput) {
   return superjson.parse<Awaited<ReturnType<typeof queryTimelineList>>>(
-    await cachedTimelineListPayload(cacheInput(input)),
+    await cachedTimelineListPayload(
+      cacheInput(input),
+      await getCuratorRevision(),
+    ),
   );
 }
 
 export async function getCachedTimelineIncome(input: TimelineListInput) {
   return superjson.parse<Awaited<ReturnType<typeof queryIncome>>>(
-    await cachedIncomePayload(cacheInput(input)),
+    await cachedIncomePayload(cacheInput(input), await getCuratorRevision()),
   );
 }
 
 export async function getCachedTimelineWindow(input: TimelineWindowInput) {
   return superjson.parse<Awaited<ReturnType<typeof queryTimelineWindow>>>(
-    await cachedTimelineWindowPayload(input),
+    await cachedTimelineWindowPayload(input, await getCuratorRevision()),
   );
 }
 
