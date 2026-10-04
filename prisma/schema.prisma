@@ -167,6 +167,8 @@ model Event {
   reviews           EventReview[]
   dateEvidence      EventDateEvidence[]
   globalCandidates  GlobalEventCandidate[]
+  globalBaseline    EventGlobalBaseline?
+  globalRewards     RewardGlobalBaseline[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -194,8 +196,8 @@ model RewardSource {
 }
 
 model RewardDefinition {
-  id              String          @id @default(cuid())
-  sourceKey       String          @unique
+  id              String                @id @default(cuid())
+  sourceKey       String                @unique
   rewardSourceId  String
   itemType        RewardItemType
   amount          Int
@@ -204,13 +206,14 @@ model RewardDefinition {
   eligibility     String?
   storyWarId      Int?
   storyReleaseAt  DateTime?
-  defaultIncluded Boolean         @default(true)
+  defaultIncluded Boolean               @default(true)
   reviewedAt      DateTime?
-  rewardSource    RewardSource    @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  rewardSource    RewardSource          @relation(fields: [rewardSourceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
   curation        RewardCuration?
   reviews         RewardReview[]
+  globalBaseline  RewardGlobalBaseline?
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
@@ -292,26 +295,68 @@ model EventDateEvidence {
 }
 
 model GlobalEventCandidate {
-  id             String    @id @default(cuid())
-  sourceKind     String
-  sourceRecordId String
-  sourceUrl      String
-  retrievedAt    DateTime
-  contentHash    String
-  assessmentHash String
-  name           String
-  startsAt       DateTime?
-  endsAt         DateTime?
-  targetEventId  String?
-  reasons        String[]
-  snapshot       Json
-  createdAt      DateTime  @default(now())
-  targetEvent    Event?    @relation(fields: [targetEventId], references: [id], onDelete: Restrict)
+  id              String                 @id @default(cuid())
+  sourceKind      String
+  sourceRecordId  String
+  sourceUrl       String
+  retrievedAt     DateTime
+  contentHash     String
+  assessmentHash  String
+  name            String
+  startsAt        DateTime?
+  endsAt          DateTime?
+  targetEventId   String?
+  reasons         String[]
+  snapshot        Json
+  createdAt       DateTime               @default(now())
+  targetEvent     Event?                 @relation(fields: [targetEventId], references: [id], onDelete: Restrict)
+  eventBaselines  EventGlobalBaseline[]
+  rewardBaselines RewardGlobalBaseline[]
 
   @@unique([sourceKind, sourceRecordId, contentHash, assessmentHash], map: "GlobalEventCandidate_source_assessment_key")
   @@index([createdAt, id])
   @@index([startsAt, id])
   @@index([targetEventId, createdAt])
+}
+
+model EventGlobalBaseline {
+  eventId           String                 @id
+  candidateId       String
+  baselineHash      String
+  name              String
+  startsAt          DateTime
+  startsAtPrecision ScheduleTimePrecision
+  endsAt            DateTime?
+  endsAtPrecision   ScheduleTimePrecision?
+  sourceUrl         String
+  retrievedAt       DateTime
+  updatedAt         DateTime               @updatedAt
+  event             Event                  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  candidate         GlobalEventCandidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId])
+  @@index([startsAt])
+}
+
+model RewardGlobalBaseline {
+  rewardId        String               @id
+  eventId         String
+  candidateId     String
+  itemType        RewardItemType
+  amount          Int
+  expectedAt      DateTime?
+  eventStartsAt   DateTime
+  nature          RewardNature
+  eligibility     String?
+  defaultIncluded Boolean
+  updatedAt       DateTime             @updatedAt
+  reward          RewardDefinition     @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  candidate       GlobalEventCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([candidateId])
+  @@index([expectedAt])
 }
 
 model RewardReview {

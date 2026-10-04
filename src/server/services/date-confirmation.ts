@@ -49,7 +49,7 @@ export const dateEvidenceSchema = z
     }
   });
 
-type Evidence = Pick<
+export type DateConfirmationEvidence = Pick<
   EventDateEvidence,
   | "id"
   | "sourceKind"
@@ -71,7 +71,7 @@ export function describeDateConfirmation(
     endsAtPrecision: "EXACT" | "DATE_ONLY" | null;
     curation?: { active: boolean; ownedFields?: string[] } | null;
   },
-  evidence: readonly Evidence[],
+  evidence: readonly DateConfirmationEvidence[],
 ) {
   const ordered = [...evidence].sort(
     (a, b) =>

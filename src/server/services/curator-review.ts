@@ -17,11 +17,17 @@ const latestReview = {
 
 export const reviewEventInclude = {
   curation: true,
+  globalBaseline: true,
+  dateEvidence: true,
   reviews: latestReview,
   rewardSources: {
     include: {
       rewards: {
-        include: { curation: true, reviews: latestReview },
+        include: {
+          curation: true,
+          globalBaseline: true,
+          reviews: latestReview,
+        },
         orderBy: { id: "asc" },
       },
     },
@@ -58,7 +64,13 @@ export function eventReviewSnapshot(event: ReviewEvent) {
   return {
     targetKind: "EVENT" as const,
     targetId: event.id,
-    sourceHash: fingerprint({ ...fields(event), hidden: false }),
+    sourceHash: fingerprint({
+      ...fields(event),
+      hidden: false,
+      ...(event.globalBaseline
+        ? { global: fields(effectiveEvent({ ...event, curation: null })) }
+        : {}),
+    }),
     effectiveHash: fingerprint({
       ...fields(effectiveEvent(event)),
       hidden: eventIsHidden(event),
@@ -86,7 +98,10 @@ type SnapshotReward = Pick<
   | "storyReleaseAt"
   | "defaultIncluded"
   | "reviewedAt"
-> & { curation?: ReviewReward["curation"] };
+> & {
+  curation?: ReviewReward["curation"];
+  globalBaseline?: Parameters<typeof effectiveReward>[0]["globalBaseline"];
+};
 
 export function rewardReviewSnapshotForSource(
   reward: SnapshotReward,
@@ -111,9 +126,14 @@ export function rewardReviewSnapshotForSource(
   return {
     targetKind: "REWARD" as const,
     targetId: reward.id,
-    sourceHash: fingerprint(fields(reward)),
+    sourceHash: fingerprint({
+      ...fields(reward),
+      ...(reward.globalBaseline
+        ? { global: fields(effectiveReward({ ...reward, curation: null })) }
+        : {}),
+    }),
     effectiveHash: fingerprint({
-      ...fields(effectiveReward(reward, rewardDateShift(event))),
+      ...fields(effectiveReward(reward, rewardDateShift(event, reward))),
       hidden: event ? eventIsHidden(event) : false,
     }),
   };

@@ -9,7 +9,11 @@ import { timelineWindowAt } from "~/app/timeline/_lib/progressive-timeline";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
-import { ownsField } from "~/server/services/curation-ownership";
+import {
+  publicEventGlobalBaselineSelect,
+  publicRewardGlobalBaselineSelect,
+  publicDateEvidenceSelect,
+} from "~/server/services/global-baseline-select";
 import {
   publicReward,
   publicRewardReviewSelect,
@@ -122,6 +126,8 @@ const familySelect = {
 
 const eventSelect = {
   curation: true,
+  globalBaseline: publicEventGlobalBaselineSelect,
+  dateEvidence: publicDateEvidenceSelect,
   id: true,
   name: true,
   type: true,
@@ -156,6 +162,8 @@ const bannerSelect = {
 
 const relatedEventSelect = {
   curation: true,
+  globalBaseline: publicEventGlobalBaselineSelect,
+  dateEvidence: publicDateEvidenceSelect,
   id: true,
   name: true,
   type: true,
@@ -209,6 +217,7 @@ const rewardSourceSelect = {
   rewards: {
     select: {
       curation: true,
+      globalBaseline: publicRewardGlobalBaselineSelect,
       reviews: publicRewardReviewSelect,
       rewardSourceId: true,
       id: true,
@@ -228,6 +237,7 @@ const rewardSourceSelect = {
 
 const incomeContributionSelect = {
   curation: true,
+  globalBaseline: publicRewardGlobalBaselineSelect,
   reviews: publicRewardReviewSelect,
   rewardSourceId: true,
   id: true,
@@ -248,12 +258,7 @@ const incomeContributionSelect = {
       status: true,
       evidenceUrl: true,
       event: {
-        select: {
-          id: true,
-          name: true,
-          startsAt: true,
-          curation: true,
-        },
+        select: relatedEventSelect,
       },
     },
   },
@@ -377,6 +382,8 @@ type RelatedScheduleEntry = {
   lastSyncedAt?: Date | null;
   updatedAt: Date;
   curation?: Prisma.EventCurationGetPayload<Record<string, never>> | null;
+  globalBaseline?: Parameters<typeof effectiveEvent>[0]["globalBaseline"];
+  dateEvidence?: Parameters<typeof effectiveEvent>[0]["dateEvidence"];
 };
 
 function relatedEntries(family: {
@@ -431,6 +438,7 @@ async function queryTimelineList(
           where: {
             OR: [
               intervalWhere(input.from, input.to),
+              { globalBaseline: { is: intervalWhere(input.from, input.to) } },
               { curation: { is: { active: true } } },
             ],
             ...(input.sourceRegions
@@ -495,6 +503,11 @@ async function queryIncome(
     where: {
       OR: [
         { expectedAt: { gte: input.from, lte: input.to } },
+        {
+          globalBaseline: {
+            is: { expectedAt: { gte: input.from, lte: input.to } },
+          },
+        },
         { curation: { is: { active: true } } },
         { rewardSource: { event: { curation: { is: { active: true } } } } },
       ],
@@ -530,10 +543,7 @@ async function queryIncome(
             event: event
               ? {
                   id: event.id,
-                  name:
-                    event.curation?.active && ownsField(event.curation, "name")
-                      ? event.curation.name
-                      : event.name,
+                  name: effectiveEvent(event).name,
                 }
               : null,
           },
@@ -587,21 +597,21 @@ const cachedStoriesPayload = unstable_cache(
 const cachedTimelineListPayload = unstable_cache(
   async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineList(db, restoreCacheInput(input))),
-  ["timeline-list-v2"],
+  ["timeline-list-v3"],
   publicTimelineCacheOptions,
 );
 
 const cachedIncomePayload = unstable_cache(
   async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryIncome(db, restoreCacheInput(input))),
-  ["timeline-income-v3"],
+  ["timeline-income-v4"],
   publicTimelineCacheOptions,
 );
 
 const cachedTimelineWindowPayload = unstable_cache(
   async (input: TimelineWindowInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineWindow(db, input)),
-  ["timeline-window-v3"],
+  ["timeline-window-v4"],
   publicTimelineCacheOptions,
 );
 

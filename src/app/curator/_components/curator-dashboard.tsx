@@ -112,7 +112,7 @@ export function CuratorEditor({
   );
   const displayedHistory = historyPage ? olderHistory : history;
   const effective = reward
-    ? effectiveReward(reward, rewardDateShift(event))
+    ? effectiveReward(reward, rewardDateShift(event, reward))
     : null;
   const schedule = effectiveEvent(event);
 
@@ -855,9 +855,14 @@ export function CuratorDashboard() {
                       onClick={() => select(event.id, value.id)}
                     >
                       {itemName(
-                        effectiveReward(value, rewardDateShift(event)).itemType,
+                        effectiveReward(value, rewardDateShift(event, value))
+                          .itemType,
                       )}{" "}
-                      · {effectiveReward(value, rewardDateShift(event)).amount}{" "}
+                      ·{" "}
+                      {
+                        effectiveReward(value, rewardDateShift(event, value))
+                          .amount
+                      }{" "}
                       · {reviewLabel(value.review.status)}
                     </button>
                   ))}

@@ -111,6 +111,17 @@ type Choice = z.infer<typeof globalEventPreviewSchema>;
 const fingerprint = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+export function readGlobalEventSnapshot(candidate: GlobalEventCandidate) {
+  const snapshot = snapshotSchema.safeParse(candidate.snapshot);
+  if (!snapshot.success)
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "This assessment lacks verified reward-source data. Collect the source again.",
+    });
+  return snapshot.data;
+}
+
 function indexSourceRewards(sources: z.infer<typeof sourceRewards>) {
   const entries = new Map<
     string,
@@ -131,14 +142,7 @@ export function buildGlobalEventPreview(
   input: Choice,
   latestCandidateId: string,
 ) {
-  const snapshot = snapshotSchema.safeParse(candidate.snapshot);
-  if (!snapshot.success)
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message:
-        "This assessment lacks verified reward-source data. Collect the source again.",
-    });
-  const source = snapshot.data;
+  const source = readGlobalEventSnapshot(candidate);
   const problems: string[] = [];
   if (candidate.id !== latestCandidateId)
     problems.push("SOURCE_ASSESSMENT_SUPERSEDED");
@@ -199,6 +203,8 @@ export function buildGlobalEventPreview(
     : null;
   const baseline = {
     ...event,
+    globalBaseline: null,
+    dateEvidence: [],
     name: source.globalName,
     startsAt: evidence.confirmedStartsAt!,
     endsAt: evidence.confirmedEndsAt,
@@ -230,7 +236,7 @@ export function buildGlobalEventPreview(
   const usedSourceKeys = new Set<string>();
   const rewards = event.rewardSources.flatMap((rewardSource) =>
     rewardSource.rewards.map((reward) => {
-      const before = effectiveReward(reward, rewardDateShift(event));
+      const before = effectiveReward(reward, rewardDateShift(event, reward));
       const originalKey = reward.sourceKey.endsWith(":projection:NA")
         ? reward.sourceKey.slice(0, -":projection:NA".length)
         : null;
@@ -275,6 +281,7 @@ export function buildGlobalEventPreview(
       const nextSource = {
         ...reward,
         ...incomingReward,
+        globalBaseline: null,
         id: reward.id,
         sourceKey: reward.sourceKey,
         expectedAt: incomingReward.expectedAt
@@ -345,7 +352,7 @@ export function buildGlobalEventPreview(
     jpEvidence: source.jpEvidence,
     coverageWarning:
       "Quest rewards were not inspected. Unmatched rewards remain unchanged and no new reward is created.",
-    published: false as const,
+    published: event.globalBaseline?.candidateId === candidate.id,
   };
   return {
     ...preview,

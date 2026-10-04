@@ -111,6 +111,7 @@ async function importRewardSource(source, eventIds, externalEventIds) {
       where: {
         rewardSourceId: savedSource.id,
         sourceKey: { notIn: source.rewards.map(({ sourceKey }) => sourceKey) },
+        globalBaseline: { is: null },
       },
     });
 

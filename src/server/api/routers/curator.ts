@@ -31,8 +31,28 @@ import {
   getGlobalEventPreview,
   globalEventPreviewSchema,
 } from "~/server/services/global-event-preview";
+import { globalPublicationInputSchema } from "~/server/services/global-publication-plan";
+import { publishGlobalEvent } from "~/server/services/global-event-publication";
 
 export const curatorRouter = createTRPCRouter({
+  publishGlobalEvent: curatorProcedure
+    .input(globalPublicationInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await publishGlobalEvent(
+        ctx.db,
+        ctx.session.user.id,
+        input,
+      );
+      try {
+        if (result.changed) revalidateTag("timeline-public-data");
+        return { ...result, cacheInvalidated: true };
+      } catch {
+        console.warn(
+          "Global values were published, but the timeline cache could not refresh.",
+        );
+        return { ...result, cacheInvalidated: false };
+      }
+    }),
   previewGlobalEvent: curatorProcedure
     .input(globalEventPreviewSchema)
     .query(({ ctx, input }) => getGlobalEventPreview(ctx.db, input)),
@@ -113,6 +133,16 @@ export const curatorRouter = createTRPCRouter({
       const where = input.search
         ? {
             OR: [
+              {
+                globalBaseline: {
+                  is: {
+                    name: {
+                      contains: input.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
               {
                 name: { contains: input.search, mode: "insensitive" as const },
               },

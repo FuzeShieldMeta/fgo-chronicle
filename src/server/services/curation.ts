@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { PrismaClient, Prisma } from "../../../generated/prisma";
 import { requireCurator } from "~/server/auth/curator";
+import { effectiveEvent } from "./effective-schedule";
 import {
   eventCurationFields,
   rewardCurationFields,
@@ -112,7 +113,11 @@ export async function saveCuration(
       const source = eventTarget
         ? await tx.event.findUnique({
             where: { id: input.targetId },
-            include: { curation: true },
+            include: {
+              curation: true,
+              globalBaseline: true,
+              dateEvidence: true,
+            },
           })
         : await tx.rewardDefinition.findUnique({
             where: { id: input.targetId },
@@ -148,12 +153,13 @@ export async function saveCuration(
             ...eventCurationFields,
           ];
         if (values && "startsAt" in source) {
+          const baseline = effectiveEvent({ ...source, curation: null });
           const start = ownedFields.includes("startsAt")
             ? values.startsAt
-            : source.startsAt;
+            : baseline.startsAt;
           const end = ownedFields.includes("endsAt")
             ? values.endsAt
-            : source.endsAt;
+            : baseline.endsAt;
           if (end && end < start)
             throw new TRPCError({
               code: "BAD_REQUEST",

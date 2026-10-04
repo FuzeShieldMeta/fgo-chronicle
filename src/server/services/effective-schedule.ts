@@ -1,5 +1,9 @@
 import type { EventCuration, RewardCuration } from "../../../generated/prisma";
 import { ownsField } from "./curation-ownership";
+import {
+  describeDateConfirmation,
+  type DateConfirmationEvidence,
+} from "./date-confirmation";
 type CompatibleOwnership<T> = Omit<T, "ownedFields"> & {
   ownedFields?: string[];
 };
@@ -23,6 +27,17 @@ type EventRecord = {
   status: "PROJECTED" | "CURATED" | "OFFICIAL";
   updatedAt: Date;
   curation?: CompatibleOwnership<EventCuration> | null;
+  globalBaseline?: {
+    name: string;
+    startsAt: Date;
+    endsAt: Date | null;
+    startsAtPrecision: "DATE_ONLY" | "EXACT";
+    endsAtPrecision: "DATE_ONLY" | "EXACT" | null;
+    sourceUrl: string;
+    retrievedAt: Date;
+    updatedAt: Date;
+  } | null;
+  dateEvidence?: DateConfirmationEvidence[];
 };
 
 export function eventIsHidden(event: {
@@ -38,26 +53,69 @@ export function eventIsHidden(event: {
 }
 
 export function effectiveEvent<T extends EventRecord>(event: T) {
-  const { curation, ...source } = event;
-  if (!curation?.active) return source;
+  const { curation, globalBaseline, dateEvidence, ...imported } = event;
+  const source = {
+    ...imported,
+    ...(globalBaseline
+      ? {
+          name: globalBaseline.name,
+          startsAt: globalBaseline.startsAt,
+          endsAt: globalBaseline.endsAt,
+          startsAtPrecision: globalBaseline.startsAtPrecision,
+          endsAtPrecision: globalBaseline.endsAtPrecision,
+          updatedAt: new Date(
+            Math.max(
+              imported.updatedAt.getTime(),
+              globalBaseline.updatedAt.getTime(),
+            ),
+          ),
+        }
+      : {}),
+  };
+  const effective = !curation?.active
+    ? source
+    : {
+        ...source,
+        name: ownsField(curation, "name") ? curation.name : source.name,
+        startsAt: ownsField(curation, "startsAt")
+          ? curation.startsAt
+          : source.startsAt,
+        endsAt: ownsField(curation, "endsAt") ? curation.endsAt : source.endsAt,
+        startsAtPrecision: ownsField(curation, "startsAt")
+          ? curation.startsAtPrecision
+          : source.startsAtPrecision,
+        endsAtPrecision: ownsField(curation, "endsAt")
+          ? curation.endsAtPrecision
+          : source.endsAtPrecision,
+        status:
+          ownsField(curation, "startsAt") || ownsField(curation, "endsAt")
+            ? ("CURATED" as const)
+            : source.status,
+        updatedAt: new Date(
+          Math.max(source.updatedAt.getTime(), curation.updatedAt.getTime()),
+        ),
+      };
+  const confirmation =
+    globalBaseline || dateEvidence?.length
+      ? describeDateConfirmation({ ...effective, curation }, dateEvidence ?? [])
+      : {
+          status: effective.status,
+          startsAt:
+            curation?.active && ownsField(curation, "startsAt")
+              ? ("CURATED" as const)
+              : source.status,
+          endsAt: effective.endsAt
+            ? curation?.active && ownsField(curation, "endsAt")
+              ? ("CURATED" as const)
+              : source.status
+            : null,
+        };
   return {
-    ...source,
-    name: ownsField(curation, "name") ? curation.name : source.name,
-    startsAt: ownsField(curation, "startsAt")
-      ? curation.startsAt
-      : source.startsAt,
-    endsAt: ownsField(curation, "endsAt") ? curation.endsAt : source.endsAt,
-    startsAtPrecision: ownsField(curation, "startsAt")
-      ? curation.startsAtPrecision
-      : source.startsAtPrecision,
-    endsAtPrecision: ownsField(curation, "endsAt")
-      ? curation.endsAtPrecision
-      : source.endsAtPrecision,
-    status:
-      ownsField(curation, "startsAt") || ownsField(curation, "endsAt")
-        ? ("CURATED" as const)
-        : source.status,
-    updatedAt: curation.updatedAt,
+    ...effective,
+    status: confirmation.status,
+    dateConfirmation: confirmation,
+    globalSourceUrl: globalBaseline?.sourceUrl ?? null,
+    globalRetrievedAt: globalBaseline?.retrievedAt ?? null,
   };
 }
 
@@ -66,12 +124,14 @@ export function rewardDateShift(
     startsAt: Date;
     curation?: CompatibleOwnership<EventCuration> | null;
   } | null,
+  reward?: Pick<RewardRecord, "expectedAt" | "globalBaseline">,
 ) {
   return event?.curation?.active &&
     ownsField(event.curation, "startsAt") &&
     ownsField(event.curation, "shiftRewardDates") &&
     event.curation.shiftRewardDates
-    ? event.curation.startsAt.getTime() - event.startsAt.getTime()
+    ? event.curation.startsAt.getTime() -
+        (reward?.globalBaseline?.eventStartsAt ?? event.startsAt).getTime()
     : 0;
 }
 
@@ -84,13 +144,35 @@ type RewardRecord = {
   defaultIncluded: boolean;
   reviewedAt: Date | null;
   curation?: CompatibleOwnership<RewardCuration> | null;
+  globalBaseline?: {
+    itemType: string;
+    amount: number;
+    expectedAt: Date | null;
+    eventStartsAt: Date;
+    nature: string;
+    eligibility: string | null;
+    defaultIncluded: boolean;
+  } | null;
 };
 
 export function effectiveReward<T extends RewardRecord>(
   reward: T,
   shiftMs = 0,
 ) {
-  const { curation, ...source } = reward;
+  const { curation, globalBaseline, ...imported } = reward;
+  const source = {
+    ...imported,
+    ...(globalBaseline
+      ? {
+          itemType: globalBaseline.itemType,
+          amount: globalBaseline.amount,
+          expectedAt: globalBaseline.expectedAt,
+          nature: globalBaseline.nature,
+          eligibility: globalBaseline.eligibility,
+          defaultIncluded: globalBaseline.defaultIncluded,
+        }
+      : {}),
+  };
   if (!curation?.active)
     return {
       ...source,

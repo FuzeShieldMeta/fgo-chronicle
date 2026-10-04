@@ -8,6 +8,8 @@ export const GLOBAL_SOURCE_LIMITS = {
   maxPage: 10_000,
   maxBatchRecords: 1_000,
   maxSnapshotBytes: 64 * 1_024,
+  minPublicationReasonLength: 3,
+  maxPublicationReasonLength: 1_000,
   transactionMaxWaitMs: 5_000,
   transactionTimeoutMs: 15_000,
 } as const;

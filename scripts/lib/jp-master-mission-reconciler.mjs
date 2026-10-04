@@ -104,7 +104,11 @@ export async function reconcileProjectedMasterMissions(
     where: { sourceKey: { startsWith: "atlas:JP:mm:" } },
     include: {
       rewards: {
-        include: { curation: true, reviews: { select: { id: true }, take: 1 } },
+        include: {
+          curation: true,
+          globalBaseline: { select: { rewardId: true } },
+          reviews: { select: { id: true }, take: 1 },
+        },
       },
     },
   });
@@ -160,7 +164,9 @@ export async function reconcileProjectedMasterMissions(
       const retainedCuratorRewards = existing.rewards.filter(
         (/** @type {Record<string, any>} */ reward) =>
           !reward.reviewedAt &&
-          (reward.curation || reward.reviews?.length) &&
+          (reward.curation ||
+            reward.reviews?.length ||
+            reward.globalBaseline) &&
           !desiredRewards.has(reward.sourceKey),
       );
       protectedRewardDifferences += retainedCuratorRewards.length;
@@ -185,6 +191,7 @@ export async function reconcileProjectedMasterMissions(
                 !reward.reviewedAt &&
                 !reward.curation &&
                 !reward.reviews?.length &&
+                !reward.globalBaseline &&
                 !desiredRewards.has(reward.sourceKey),
             )
             .map(
@@ -318,6 +325,7 @@ export async function reconcileProjectedMasterMissions(
                 reviewedAt: null,
                 curation: { is: null },
                 reviews: { none: {} },
+                globalBaseline: { is: null },
               },
             });
           }

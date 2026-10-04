@@ -169,7 +169,9 @@ export function CuratorGlobalQueue({
                   </p>
                   <p>
                     {entry.targetEventId
-                      ? "Matched to an existing event. Not published."
+                      ? entry.published
+                        ? "Current published Global source."
+                        : "Matched to an existing event. Not published."
                       : "Unresolved. Not published."}
                   </p>
                   {entry.reasons.length ? (

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, type RouterInputs } from "~/trpc/react";
+import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 
 type Choices = RouterInputs["curator"]["previewGlobalEvent"];
 const labels: Record<string, string> = {
@@ -51,6 +52,33 @@ export function CuratorGlobalPreview({ candidateId }: { candidateId: string }) {
   const preview = api.curator.previewGlobalEvent.useQuery(choices, {
     enabled: open,
   });
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState("");
+  const utils = api.useUtils();
+  const publish = api.curator.publishGlobalEvent.useMutation({
+    onSuccess: async (result) => {
+      setReason("");
+      setNotice(
+        result.changed
+          ? "Published."
+          : "These Global values are already published.",
+      );
+      const refresh = await Promise.allSettled([
+        utils.curator.previewGlobalEvent.invalidate(),
+        utils.curator.globalCandidates.invalidate(),
+        utils.curator.events.invalidate(),
+        utils.curator.event.invalidate(),
+        utils.curator.history.invalidate(),
+        utils.curator.dateEvidence.invalidate(),
+        utils.timeline.invalidate(),
+      ]);
+      if (
+        !result.cacheInvalidated ||
+        refresh.some((item) => item.status === "rejected")
+      )
+        setNotice("Published. Refresh the timeline to load the saved values.");
+    },
+  });
   const data = preview.data;
   return (
     <details
@@ -59,10 +87,10 @@ export function CuratorGlobalPreview({ candidateId }: { candidateId: string }) {
     >
       <summary>Preview Global values</summary>
       <p>
-        This preview does not save changes. Only this event is affected, not
-        other family members or summon banners.
+        Previewing does not save changes. Publication affects only this event,
+        not other family members or summon banners.
       </p>
-      <div aria-busy={preview.isFetching}>
+      <div aria-busy={preview.isFetching || publish.isPending}>
         {preview.isPending ? <p role="status">Loading preview…</p> : null}
         {preview.error ? (
           <p role="alert">
@@ -102,7 +130,7 @@ export function CuratorGlobalPreview({ candidateId }: { candidateId: string }) {
                     <input
                       type="checkbox"
                       checked={!field.keepCorrection}
-                      disabled={preview.isFetching}
+                      disabled={preview.isFetching || publish.isPending}
                       onChange={(event) =>
                         setChoices((current) => ({
                           ...current,
@@ -165,7 +193,7 @@ export function CuratorGlobalPreview({ candidateId }: { candidateId: string }) {
                             <input
                               type="checkbox"
                               checked={!field.keepCorrection}
-                              disabled={preview.isFetching}
+                              disabled={preview.isFetching || publish.isPending}
                               onChange={(event) =>
                                 setChoices((current) => {
                                   const selections =
@@ -218,6 +246,58 @@ export function CuratorGlobalPreview({ candidateId }: { candidateId: string }) {
               JP source evidence is retained. Family associations, reward IDs
               and player selections stay unchanged.
             </p>
+            {data.published ? (
+              <p>This is the current published Global source.</p>
+            ) : null}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (
+                  !data.ready ||
+                  preview.isFetching ||
+                  preview.error ||
+                  publish.isPending
+                )
+                  return;
+                setNotice("");
+                publish.mutate({
+                  preview: choices,
+                  expectedFingerprint: data.fingerprint,
+                  reason,
+                });
+              }}
+            >
+              <label>
+                Publication reason
+                <textarea
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  required
+                  minLength={GLOBAL_SOURCE_LIMITS.minPublicationReasonLength}
+                  maxLength={GLOBAL_SOURCE_LIMITS.maxPublicationReasonLength}
+                  disabled={publish.isPending}
+                />
+              </label>
+              {publish.error ? (
+                <p role="alert">
+                  {publish.error.message} Preview again before retrying.
+                </p>
+              ) : null}
+              {notice ? <p role="status">{notice}</p> : null}
+              <button
+                type="submit"
+                disabled={
+                  !data.ready ||
+                  preview.isFetching ||
+                  Boolean(preview.error) ||
+                  publish.isPending ||
+                  reason.trim().length <
+                    GLOBAL_SOURCE_LIMITS.minPublicationReasonLength
+                }
+              >
+                {publish.isPending ? "Publishing…" : "Publish Global values"}
+              </button>
+            </form>
           </>
         ) : null}
       </div>

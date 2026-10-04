@@ -28,7 +28,7 @@ export function publicReward<
     reviews: _reviews,
     rewardSourceId: _sourceId,
     ...effective
-  } = effectiveReward(reward, rewardDateShift(event));
+  } = effectiveReward(reward, rewardDateShift(event, reward));
   void _reviews;
   void _sourceId;
   return {

@@ -232,7 +232,10 @@ function obsoleteManagedRewardSourceIds(event, desiredSources) {
         !desiredKeys.has(source.sourceKey) &&
         (source.rewards ?? []).every(
           (/** @type {Record<string, any>} */ reward) =>
-            !reward.reviewedAt && !reward.curation && !reward.reviews?.length,
+            !reward.reviewedAt &&
+            !reward.curation &&
+            !reward.reviews?.length &&
+            !reward.globalBaseline,
         )
       );
     })
@@ -249,7 +252,12 @@ function obsoleteManagedRewardSourceIds(event, desiredSources) {
 async function removeObsoleteRewardSources(transaction, event, desiredSources) {
   const ids = obsoleteManagedRewardSourceIds(event, desiredSources);
   if (ids.length === 0) return;
-  await transaction.rewardSource.deleteMany({ where: { id: { in: ids } } });
+  await transaction.rewardSource.deleteMany({
+    where: {
+      id: { in: ids },
+      rewards: { none: { globalBaseline: { isNot: null } } },
+    },
+  });
 }
 
 /**
@@ -276,12 +284,14 @@ export async function reconcileProjectedFandomEvents(
     include: {
       family: true,
       curation: true,
+      globalBaseline: { select: { eventId: true } },
       reviews: { select: { id: true }, take: 1 },
       rewardSources: {
         include: {
           rewards: {
             include: {
               curation: true,
+              globalBaseline: { select: { rewardId: true } },
               reviews: { select: { id: true }, take: 1 },
             },
           },
@@ -313,6 +323,7 @@ export async function reconcileProjectedFandomEvents(
               rewards: {
                 include: {
                   curation: true,
+                  globalBaseline: { select: { rewardId: true } },
                   reviews: { select: { id: true }, take: 1 },
                 },
               },
@@ -340,12 +351,16 @@ export async function reconcileProjectedFandomEvents(
         include: {
           family: true,
           curation: true,
+          globalBaseline: { select: { eventId: true } },
+          dateEvidence: { select: { id: true }, take: 1 },
+          globalCandidates: { select: { id: true }, take: 1 },
           reviews: { select: { id: true }, take: 1 },
           rewardSources: {
             include: {
               rewards: {
                 include: {
                   curation: true,
+                  globalBaseline: { select: { rewardId: true } },
                   reviews: { select: { id: true }, take: 1 },
                 },
               },
@@ -386,6 +401,9 @@ export async function reconcileProjectedFandomEvents(
     const isUnreviewedProjection =
       existing.status === "PROJECTED" &&
       !existing.curation &&
+      !existing.globalBaseline &&
+      !existing.dateEvidence?.length &&
+      !existing.globalCandidates?.length &&
       !existing.reviews?.length &&
       !existing.family?.artworkReviewedAt &&
       (existing.rewardSources ?? []).every(
@@ -393,7 +411,10 @@ export async function reconcileProjectedFandomEvents(
           source.status === "PROJECTED" &&
           (source.rewards ?? []).every(
             (/** @type {Record<string, any>} */ reward) =>
-              !reward.reviewedAt && !reward.curation && !reward.reviews?.length,
+              !reward.reviewedAt &&
+              !reward.curation &&
+              !reward.reviews?.length &&
+              !reward.globalBaseline,
           ),
       );
     const targetIsAvailable = Boolean(target) || Boolean(options.dryRun);

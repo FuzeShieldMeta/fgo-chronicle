@@ -203,6 +203,7 @@ export async function getGlobalCandidateQueue(
   const [entries, total] = await Promise.all([
     database.globalEventCandidate.findMany({
       where,
+      include: { eventBaselines: { select: { eventId: true }, take: 1 } },
       orderBy:
         input.sort === "EARLIEST"
           ? [
@@ -217,7 +218,10 @@ export async function getGlobalCandidateQueue(
     database.globalEventCandidate.count({ where }),
   ]);
   return {
-    entries,
+    entries: entries.map(({ eventBaselines, ...entry }) => ({
+      ...entry,
+      published: eventBaselines.length > 0,
+    })),
     total,
     page: input.page,
     hasNext: (input.page + 1) * GLOBAL_SOURCE_LIMITS.pageSize < total,

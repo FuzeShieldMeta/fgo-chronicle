@@ -473,12 +473,18 @@ export function TimelineEntryDetails({
               entry.startsAtPrecision,
               timeZone,
             )}
+            {entry.kind === "EVENT"
+              ? ` · ${statusNames[entry.dateConfirmation.startsAt]}`
+              : null}
           </dd>
         </div>
         <div>
           <dt>Ends</dt>
           <dd>
             {formatScheduleDate(entry.endsAt, entry.endsAtPrecision, timeZone)}
+            {entry.kind === "EVENT" && entry.dateConfirmation.endsAt
+              ? ` · ${statusNames[entry.dateConfirmation.endsAt]}`
+              : null}
           </dd>
         </div>
         <div>
@@ -637,6 +643,16 @@ export function TimelineEntryDetails({
         </section>
       ) : null}
 
+      {details.data?.kind === "EVENT" && details.data.globalSourceUrl ? (
+        <a
+          className="timeline-source-link"
+          href={details.data.globalSourceUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Global game-data source
+        </a>
+      ) : null}
       {details.data?.sourceUrl ? (
         <a
           className="timeline-source-link"

@@ -150,7 +150,10 @@ function obsoleteAtlasRewardSourceIds(event, desiredSources) {
         !desiredKeys.has(source.sourceKey) &&
         (source.rewards ?? []).every(
           (/** @type {Record<string, any>} */ reward) =>
-            !reward.reviewedAt && !reward.curation && !reward.reviews?.length,
+            !reward.reviewedAt &&
+            !reward.curation &&
+            !reward.reviews?.length &&
+            !reward.globalBaseline,
         ),
     )
     .flatMap((/** @type {Record<string, any>} */ source) =>
@@ -170,7 +173,12 @@ async function removeObsoleteAtlasRewardSources(
 ) {
   const ids = obsoleteAtlasRewardSourceIds(event, desiredSources);
   if (ids.length === 0) return;
-  await transaction.rewardSource.deleteMany({ where: { id: { in: ids } } });
+  await transaction.rewardSource.deleteMany({
+    where: {
+      id: { in: ids },
+      rewards: { none: { globalBaseline: { isNot: null } } },
+    },
+  });
 }
 
 /**
@@ -197,6 +205,7 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
             rewards: {
               include: {
                 curation: true,
+                globalBaseline: { select: { rewardId: true } },
                 reviews: { select: { id: true }, take: 1 },
               },
             },

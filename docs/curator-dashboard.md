@@ -116,7 +116,7 @@ Apply the candidate-queue migration before deploying these controls.
 Open **Preview Global values** for a matched source assessment.
 The preview shows current, Global-source and proposed event values, along with the proposed date status.
 Curator-owned fields retain their corrections by default. Select **Use Global source value** to release an individual field in the preview.
-These selections do not save changes. There is no publication action yet.
+These selections do not save changes until publication.
 
 Reward matching requires the same source identity in both regional records within the verified event.
 Duplicate or missing reward identities remain unchanged. Unmatched Global rewards stay visible without creating new income.
@@ -125,7 +125,25 @@ Reward amount differences exclude player inclusion choices. Conditional rewards 
 Quest rewards are not inspected by this source assessment.
 Old assessments without both regional reward-source records require collection again.
 Superseded assessments, changed event identities and invalid mixed date ranges cannot proceed.
-Preview fingerprints include current event and reward values for the later publication check.
+Preview fingerprints include current event and reward values for the publication check.
+
+### Publish Global values
+
+Check the preview, enter a publication reason, then select **Publish Global values**.
+The server checks curator access again and rejects changed records or superseded assessments.
+Publication saves accepted source baselines, selected field releases, date evidence and an audit in one transaction.
+If a write fails, none of these changes are saved. Repeating an unchanged publication creates no duplicate evidence or audit.
+
+The JP forecast remains in its original rows. Accepted Global values provide the new source baseline for matched fields.
+Curator-owned fields remain unchanged unless explicitly released. Individually corrected reward dates stay fixed.
+Verified rewards retain their IDs and source-date anchors. Unmatched rewards keep their existing values, without extra income.
+Later importer cleanup cannot delete accepted Global reward identities.
+Publication does not move families or summon banners, grant access, or read player plans.
+
+Public event details show separate start/end confirmation and a Global game-data source link.
+Publication invalidates public timeline caches. Its event audit also advances the cache revision if tag invalidation fails.
+An already-open timeline may need a refresh.
+Apply the Global-baseline migration before deploying these controls. Both baseline tables force RLS and deny client-role access.
 
 ### Date confirmation evidence
 
@@ -139,7 +157,7 @@ Storage alone does not publish a date or change public income.
 The boundary classifier requires qualifying Global evidence that matches the displayed timestamp and precision.
 A confirmed start does not confirm a projected end. Date corrections remain Curated, including a removed end date.
 Name corrections do not change date status.
-The later publication workflow will apply this classification to the public timeline.
+Publication applies this classification to the public timeline.
 Apply the evidence migration before deploying its API. RLS is forced, and client database roles have no table privileges.
 
 ## Family names
