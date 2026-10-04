@@ -231,6 +231,30 @@
   background: var(--md-surface-high);
   padding: 12px;
 }
+.curator-global-queue {
+  grid-column: 1 / -1;
+  padding-block: 12px;
+  border-block: 1px solid var(--md-outline-variant);
+}
+.curator-global-records {
+  list-style: none;
+  padding: 0;
+}
+.curator-global-records > li {
+  border-top: 1px solid var(--md-outline-variant);
+  padding-block: 16px;
+  overflow-wrap: anywhere;
+}
+.curator-global-records h3 {
+  margin-top: 0;
+}
+.curator-global-records pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  background: var(--md-surface-high);
+  padding: 12px;
+}
 .curator-sr-only {
   position: absolute;
   width: 1px;

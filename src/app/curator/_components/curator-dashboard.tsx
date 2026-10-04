@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CuratorReviewActions, reviewLabel } from "./curator-review-actions";
 import { CuratorFamilyName } from "./curator-family-name";
+import { CuratorGlobalQueue } from "./curator-global-queue";
 import { applyReviewResult, type ReviewResult } from "../_lib/review-result";
 import type { RouterInputs } from "~/trpc/react";
 import {
@@ -639,6 +640,7 @@ export function CuratorDashboard() {
   }
   return (
     <div className="curator-workspace">
+      <CuratorGlobalQueue onSelectEvent={(id) => select(id, null)} />
       <aside className="curator-event-list" aria-label="Events">
         <form
           onSubmit={(e) => {

@@ -166,6 +166,7 @@ model Event {
   curation          EventCuration?
   reviews           EventReview[]
   dateEvidence      EventDateEvidence[]
+  globalCandidates  GlobalEventCandidate[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -288,6 +289,29 @@ model EventDateEvidence {
   event                   Event                  @relation(fields: [eventId], references: [id], onDelete: Restrict)
 
   @@index([eventId, createdAt, id])
+}
+
+model GlobalEventCandidate {
+  id             String    @id @default(cuid())
+  sourceKind     String
+  sourceRecordId String
+  sourceUrl      String
+  retrievedAt    DateTime
+  contentHash    String
+  assessmentHash String
+  name           String
+  startsAt       DateTime?
+  endsAt         DateTime?
+  targetEventId  String?
+  reasons        String[]
+  snapshot       Json
+  createdAt      DateTime  @default(now())
+  targetEvent    Event?    @relation(fields: [targetEventId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceKind, sourceRecordId, contentHash, assessmentHash], map: "GlobalEventCandidate_source_assessment_key")
+  @@index([createdAt, id])
+  @@index([startsAt, id])
+  @@index([targetEventId, createdAt])
 }
 
 model RewardReview {

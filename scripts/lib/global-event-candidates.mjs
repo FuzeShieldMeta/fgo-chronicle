@@ -231,6 +231,14 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
           ? {
               url: `https://api.atlasacademy.io/nice/JP/event/${jpEvent.id}`,
               exportHash: jp.contentHash,
+              record: {
+                id: jpEvent.id,
+                type: jpEvent.type,
+                name: jpEvent.name,
+                startedAt: jpEvent.startedAt,
+                endedAt: jpEvent.endedAt,
+                warIds: origin?.ids ?? [],
+              },
             }
           : null,
         activeCorrection:

@@ -94,6 +94,23 @@ Title similarities do not establish a match. Missing associations and conflicts 
 The report retains Global timestamps without projecting them. Embedded reward totals do not include quest rewards.
 This is a source-assessment tool, not the automatic Global publication workflow.
 
+### Global source queue
+
+Open **Global source queue** in the dashboard to collect a date range of up to 90 days.
+Collection reads the fixed Atlas JP and NA exports. Curators cannot supply arbitrary retrieval URLs or file paths through the API.
+The queue keeps matched records, unresolved identities and malformed-date issues. It does not create public events or rewards.
+Filter by matched or unresolved records. Sort by the newest assessment or earliest valid event date.
+**Open matched event** opens the existing event editor. Unresolved records have no public target.
+Source assessment details retain the JP record and Global retrieval metadata.
+
+Repeated collection preserves one assessment for the same source content and identity result.
+Changed source records create new assessments. Earlier versions remain available.
+Collection checks curator access before retrieval and again inside the transaction.
+It rechecks matched identities before saving candidates. Candidates and their collection audit save together.
+The private queue table forces RLS and grants no client-role access.
+Collection and pagination limits live in `src/shared/global-reconciliation-config.ts`, separate from timeline layout settings.
+Apply the candidate-queue migration before deploying these controls.
+
 ### Date confirmation evidence
 
 The evidence table keeps Global source records separate from reviews and corrections.

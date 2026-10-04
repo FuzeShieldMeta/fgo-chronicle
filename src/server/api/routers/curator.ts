@@ -21,8 +21,22 @@ import {
   buildCuratorQueue,
   curatorQueueSchema,
 } from "~/server/services/curator-queue";
+import {
+  collectGlobalCandidates,
+  collectGlobalCandidatesSchema,
+  getGlobalCandidateQueue,
+  globalCandidateQueueSchema,
+} from "~/server/services/global-candidate-queue";
 
 export const curatorRouter = createTRPCRouter({
+  globalCandidates: curatorProcedure
+    .input(globalCandidateQueueSchema)
+    .query(({ ctx, input }) => getGlobalCandidateQueue(ctx.db, input)),
+  collectGlobalCandidates: curatorProcedure
+    .input(collectGlobalCandidatesSchema)
+    .mutation(({ ctx, input }) =>
+      collectGlobalCandidates(ctx.db, ctx.session.user.id, input),
+    ),
   dateEvidence: curatorProcedure
     .input(
       z
