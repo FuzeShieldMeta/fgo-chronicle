@@ -11,6 +11,7 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import {
   effectiveEvent,
+  effectiveFamily,
   effectiveReward,
   eventIsHidden,
   overlapsRange,
@@ -107,6 +108,7 @@ export function parseTimelineWindowInput(input: unknown) {
 }
 
 const familySelect = {
+  curation: { select: { active: true, name: true } },
   id: true,
   name: true,
   artworkUrl: true,
@@ -459,6 +461,7 @@ async function queryTimelineList(
       )
       .map((event) => ({
         ...event,
+        family: event.family ? effectiveFamily(event.family) : null,
         key: `event:${event.id}`,
         kind: "EVENT" as const,
         category: eventCategory(event.type),
@@ -467,6 +470,7 @@ async function queryTimelineList(
       })),
     ...banners.map((banner) => ({
       ...banner,
+      family: banner.family ? effectiveFamily(banner.family) : null,
       key: `banner:${banner.id}`,
       kind: "BANNER" as const,
       category: "SUMMONING_CAMPAIGN" as const,
@@ -599,7 +603,7 @@ async function getCuratorRevision() {
   // Keep this outside unstable_cache: missed tag invalidation must not hide edits.
   // Audit rows are appended in the same transaction as corrections and resets.
   return db.curatorChange.count({
-    where: { targetKind: { in: ["EVENT", "REWARD"] } },
+    where: { targetKind: { in: ["EVENT", "REWARD", "FAMILY"] } },
   });
 }
 
@@ -687,7 +691,7 @@ export const timelineRouter = createTRPCRouter({
           family: family
             ? {
                 id: family.id,
-                name: family.name,
+                name: effectiveFamily(family).name,
                 artworkUrl: family.artworkUrl,
                 artworkSourceUrl: family.artworkSourceUrl,
                 artworkAlt: family.artworkAlt,
@@ -742,7 +746,7 @@ export const timelineRouter = createTRPCRouter({
         family: family
           ? {
               id: family.id,
-              name: family.name,
+              name: effectiveFamily(family).name,
               artworkUrl: family.artworkUrl,
               artworkSourceUrl: family.artworkSourceUrl,
               artworkAlt: family.artworkAlt,

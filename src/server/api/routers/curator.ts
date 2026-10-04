@@ -5,6 +5,13 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, curatorProcedure } from "~/server/api/trpc";
 import { curationChangeSchema, saveCuration } from "~/server/services/curation";
 import {
+  curatorFamilyInclude,
+  familyNameInputSchema,
+  previewFamilyName,
+  publishFamilyName,
+  publishFamilyNameSchema,
+} from "~/server/services/curator-family";
+import {
   describeEventReview,
   reviewEventInclude,
   reviewInputSchema,
@@ -16,6 +23,52 @@ import {
 } from "~/server/services/curator-queue";
 
 export const curatorRouter = createTRPCRouter({
+  family: curatorProcedure
+    .input(z.object({ id: z.string().min(1).max(100) }).strict())
+    .query(async ({ ctx, input }) => {
+      const family = await ctx.db.eventFamily.findUnique({
+        where: { id: input.id },
+        include: curatorFamilyInclude,
+      });
+      if (!family)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Family not found.",
+        });
+      return family;
+    }),
+  previewFamilyName: curatorProcedure
+    .input(familyNameInputSchema)
+    .query(async ({ ctx, input }) => {
+      const family = await ctx.db.eventFamily.findUnique({
+        where: { id: input.familyId },
+        include: curatorFamilyInclude,
+      });
+      if (!family)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Family not found.",
+        });
+      return previewFamilyName(family, input.name);
+    }),
+  publishFamilyName: curatorProcedure
+    .input(publishFamilyNameSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await publishFamilyName(
+        ctx.db,
+        ctx.session.user.id,
+        input,
+      );
+      try {
+        revalidateTag("timeline-public-data");
+        return { ...result, cacheInvalidated: true };
+      } catch {
+        console.warn(
+          "A family name was saved, but the timeline cache could not refresh.",
+        );
+        return { ...result, cacheInvalidated: false };
+      }
+    }),
   events: curatorProcedure
     .input(curatorQueueSchema)
     .query(async ({ ctx, input }) => {
@@ -64,7 +117,7 @@ export const curatorRouter = createTRPCRouter({
     .input(
       z
         .object({
-          targetKind: z.enum(["EVENT", "REWARD"]),
+          targetKind: z.enum(["EVENT", "REWARD", "FAMILY"]),
           targetId: z.string().min(1).max(100),
           page: z.number().int().min(0).max(10000).default(0),
         })

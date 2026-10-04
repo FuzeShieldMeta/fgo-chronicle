@@ -62,6 +62,23 @@ Hidden events are excluded by default. Select the Hidden view or change the visi
 Apply the review migration before deploying these controls.
 Tracking how long records have waited for review and dismissing importer warnings are not implemented yet.
 
+## Family names
+
+Select an event, then open **Family name** if the event belongs to a family.
+Enter the shared display name and a reason, then select **Preview name**.
+Check the current and proposed names before selecting **Save family name**.
+
+This changes only the family label. Individual event and banner names, dates, rewards, artwork and player plans remain unchanged.
+The imported family name stays available. Later imports cannot overwrite the correction.
+Select **Preview imported name** to check a reset, then **Use imported name** to publish it.
+A reset uses the latest imported name and keeps the correction history.
+
+The server rejects a preview if the imported name, correction revision or family membership changed before publication.
+Reload the family and make a new preview. Failed saves keep the form values.
+Family-name changes use the same public cache revision checks as event and reward corrections.
+
+Apply the family-name migration before deploying this editor. Family moves and banner corrections are not implemented yet.
+
 If another curator changed the record, the dashboard rejects the stale save. Reload the record and review the new values before trying again. Failed saves retain the form values. After a successful save, public timeline caches are invalidated. An already-open timeline may need a reload.
 
 The dashboard has no public navigation link or search-engine listing. Page checks and API permission checks enforce access independently. The new tables have forced RLS and no grants to Supabase `anon` or `authenticated` roles. The server's Prisma connection remains privileged.

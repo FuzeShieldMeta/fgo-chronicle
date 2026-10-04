@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CuratorReviewActions, reviewLabel } from "./curator-review-actions";
+import { CuratorFamilyName } from "./curator-family-name";
 import type { RouterInputs } from "~/trpc/react";
 import {
   effectiveEvent,
@@ -139,10 +140,8 @@ export function CuratorEditor({
     >
       <h2>{reward ? "Edit reward" : "Edit event"}</h2>
       <p>
-        {active
-          ? "Uses curator changes."
-          : "Uses imported values."}{" "}
-        Revision {revision}.
+        {active ? "Uses curator changes." : "Uses imported values."} Revision{" "}
+        {revision}.
       </p>
       <CuratorReviewActions
         event={event}
@@ -482,6 +481,8 @@ export function CuratorDashboard() {
   const [rewardId, setRewardId] = useState<string | null>(null);
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [familyDirty, setFamilyDirty] = useState(false);
+  const [familyEpoch, setFamilyEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const events = api.curator.events.useQuery(
     { search: query, page, ...filters },
@@ -506,11 +507,13 @@ export function CuratorDashboard() {
   }
   function select(id: string, reward: string | null) {
     if (
-      editorDirty &&
+      (editorDirty || familyDirty) &&
       !window.confirm("Leave this editor? Unsaved changes will be lost.")
     )
       return;
     setEditorDirty(false);
+    setFamilyDirty(false);
+    setFamilyEpoch((value) => value + 1);
     setNotice("");
     setEventId(id);
     setRewardId(reward);
@@ -708,6 +711,13 @@ export function CuratorDashboard() {
         {!eventId && <p>Select an event to review its dates and rewards.</p>}
         {event && (
           <>
+            {event.familyId && (
+              <CuratorFamilyName
+                key={`${event.id}:${event.familyId}:${familyEpoch}`}
+                familyId={event.familyId}
+                onDirtyChange={setFamilyDirty}
+              />
+            )}
             <nav className="curator-targets" aria-label="Record to edit">
               <button
                 aria-pressed={!rewardId}

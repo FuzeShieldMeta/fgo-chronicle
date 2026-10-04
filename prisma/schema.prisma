@@ -129,8 +129,8 @@ enum SyncRunStatus {
 }
 
 model EventFamily {
-  id                String    @id @default(cuid())
-  sourceKey         String    @unique
+  id                String               @id @default(cuid())
+  sourceKey         String               @unique
   name              String
   artworkUrl        String?
   artworkSourceUrl  String?
@@ -138,8 +138,9 @@ model EventFamily {
   artworkReviewedAt DateTime?
   events            Event[]
   banners           Banner[]
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  curation          EventFamilyCuration?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 }
 
 model Event {
@@ -211,6 +212,15 @@ model RewardDefinition {
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
+}
+
+model EventFamilyCuration {
+  familyId  String      @id
+  active    Boolean     @default(true)
+  revision  Int         @default(1)
+  name      String
+  updatedAt DateTime    @updatedAt
+  family    EventFamily @relation(fields: [familyId], references: [id], onDelete: Restrict)
 }
 
 model EventCuration {

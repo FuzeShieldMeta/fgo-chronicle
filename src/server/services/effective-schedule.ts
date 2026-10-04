@@ -1,5 +1,15 @@
 import type { EventCuration, RewardCuration } from "../../../generated/prisma";
 
+export function effectiveFamily<
+  T extends {
+    name: string;
+    curation?: { active: boolean; name: string } | null;
+  },
+>(family: T) {
+  const { curation, ...source } = family;
+  return { ...source, name: curation?.active ? curation.name : source.name };
+}
+
 type EventRecord = {
   name: string;
   startsAt: Date;
