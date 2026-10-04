@@ -1,4 +1,8 @@
 import type { EventCuration, RewardCuration } from "../../../generated/prisma";
+import { ownsField } from "./curation-ownership";
+type CompatibleOwnership<T> = Omit<T, "ownedFields"> & {
+  ownedFields?: string[];
+};
 
 export function effectiveFamily<
   T extends {
@@ -18,13 +22,19 @@ type EventRecord = {
   endsAtPrecision: "DATE_ONLY" | "EXACT" | null;
   status: "PROJECTED" | "CURATED" | "OFFICIAL";
   updatedAt: Date;
-  curation?: EventCuration | null;
+  curation?: CompatibleOwnership<EventCuration> | null;
 };
 
 export function eventIsHidden(event: {
-  curation?: Pick<EventCuration, "active" | "hidden"> | null;
+  curation?:
+    | (Pick<EventCuration, "active" | "hidden"> & { ownedFields?: string[] })
+    | null;
 }) {
-  return event.curation?.active === true && event.curation.hidden;
+  return (
+    event.curation?.active === true &&
+    ownsField(event.curation, "hidden") &&
+    event.curation.hidden
+  );
 }
 
 export function effectiveEvent<T extends EventRecord>(event: T) {
@@ -32,20 +42,35 @@ export function effectiveEvent<T extends EventRecord>(event: T) {
   if (!curation?.active) return source;
   return {
     ...source,
-    name: curation.name,
-    startsAt: curation.startsAt,
-    endsAt: curation.endsAt,
-    startsAtPrecision: curation.startsAtPrecision,
-    endsAtPrecision: curation.endsAtPrecision,
-    status: "CURATED" as const,
+    name: ownsField(curation, "name") ? curation.name : source.name,
+    startsAt: ownsField(curation, "startsAt")
+      ? curation.startsAt
+      : source.startsAt,
+    endsAt: ownsField(curation, "endsAt") ? curation.endsAt : source.endsAt,
+    startsAtPrecision: ownsField(curation, "startsAt")
+      ? curation.startsAtPrecision
+      : source.startsAtPrecision,
+    endsAtPrecision: ownsField(curation, "endsAt")
+      ? curation.endsAtPrecision
+      : source.endsAtPrecision,
+    status:
+      ownsField(curation, "startsAt") || ownsField(curation, "endsAt")
+        ? ("CURATED" as const)
+        : source.status,
     updatedAt: curation.updatedAt,
   };
 }
 
 export function rewardDateShift(
-  event: { startsAt: Date; curation?: EventCuration | null } | null,
+  event: {
+    startsAt: Date;
+    curation?: CompatibleOwnership<EventCuration> | null;
+  } | null,
 ) {
-  return event?.curation?.active && event.curation.shiftRewardDates
+  return event?.curation?.active &&
+    ownsField(event.curation, "startsAt") &&
+    ownsField(event.curation, "shiftRewardDates") &&
+    event.curation.shiftRewardDates
     ? event.curation.startsAt.getTime() - event.startsAt.getTime()
     : 0;
 }
@@ -58,7 +83,7 @@ type RewardRecord = {
   eligibility: string | null;
   defaultIncluded: boolean;
   reviewedAt: Date | null;
-  curation?: RewardCuration | null;
+  curation?: CompatibleOwnership<RewardCuration> | null;
 };
 
 export function effectiveReward<T extends RewardRecord>(
@@ -75,12 +100,22 @@ export function effectiveReward<T extends RewardRecord>(
     };
   return {
     ...source,
-    itemType: curation.itemType,
-    amount: curation.amount,
-    expectedAt: curation.expectedAt,
-    nature: curation.nature,
-    eligibility: curation.eligibility,
-    defaultIncluded: curation.defaultIncluded,
+    itemType: ownsField(curation, "itemType")
+      ? curation.itemType
+      : source.itemType,
+    amount: ownsField(curation, "amount") ? curation.amount : source.amount,
+    expectedAt: ownsField(curation, "expectedAt")
+      ? curation.expectedAt
+      : source.expectedAt
+        ? new Date(source.expectedAt.getTime() + shiftMs)
+        : null,
+    nature: ownsField(curation, "nature") ? curation.nature : source.nature,
+    eligibility: ownsField(curation, "eligibility")
+      ? curation.eligibility
+      : source.eligibility,
+    defaultIncluded: ownsField(curation, "defaultIncluded")
+      ? curation.defaultIncluded
+      : source.defaultIncluded,
   };
 }
 

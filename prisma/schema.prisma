@@ -227,6 +227,7 @@ model EventCuration {
   eventId           String                 @id
   active            Boolean                @default(true)
   revision          Int                    @default(1)
+  ownedFields       String[]               @default(["name", "startsAt", "endsAt", "hidden", "shiftRewardDates"])
   name              String
   startsAt          DateTime
   startsAtPrecision ScheduleTimePrecision
@@ -244,6 +245,7 @@ model RewardCuration {
   rewardId        String           @id
   active          Boolean          @default(true)
   revision        Int              @default(1)
+  ownedFields     String[]         @default(["itemType", "amount", "expectedAt", "nature", "eligibility", "defaultIncluded"])
   itemType        RewardItemType
   amount          Int
   expectedAt      DateTime?

@@ -3,6 +3,10 @@ import { z } from "zod";
 
 import type { PrismaClient, Prisma } from "../../../generated/prisma";
 import { requireCurator } from "~/server/auth/curator";
+import {
+  eventCurationFields,
+  rewardCurationFields,
+} from "./curation-ownership";
 
 const precision = z.enum(["DATE_ONLY", "EXACT"]);
 export const eventCurationSchema = z
@@ -14,6 +18,11 @@ export const eventCurationSchema = z
     endsAtPrecision: precision.nullable(),
     hidden: z.boolean(),
     shiftRewardDates: z.boolean(),
+    ownedFields: z
+      .array(z.enum(eventCurationFields))
+      .max(eventCurationFields.length)
+      .refine((fields) => new Set(fields).size === fields.length)
+      .optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -46,6 +55,11 @@ export const rewardCurationSchema = z
     nature: z.enum(["DETERMINISTIC", "CONDITIONAL", "CURATED_ESTIMATE"]),
     eligibility: z.string().trim().max(4000).nullable(),
     defaultIncluded: z.boolean(),
+    ownedFields: z
+      .array(z.enum(rewardCurationFields))
+      .max(rewardCurationFields.length)
+      .refine((fields) => new Set(fields).size === fields.length)
+      .optional(),
   })
   .strict();
 export const curationChangeSchema = z
@@ -126,19 +140,42 @@ export async function saveCuration(
       const revision = input.expectedRevision + 1;
       let next;
       if (eventTarget) {
+        const values = input.values
+          ? eventCurationSchema.parse(input.values)
+          : null;
+        const ownedFields = values?.ownedFields ??
+          (previous?.active ? previous.ownedFields : undefined) ?? [
+            ...eventCurationFields,
+          ];
+        if (values && "startsAt" in source) {
+          const start = ownedFields.includes("startsAt")
+            ? values.startsAt
+            : source.startsAt;
+          const end = ownedFields.includes("endsAt")
+            ? values.endsAt
+            : source.endsAt;
+          if (end && end < start)
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "The displayed end must not precede the displayed start.",
+            });
+        }
         next = input.values
           ? await tx.eventCuration.upsert({
               where: { eventId: input.targetId },
               create: {
                 eventId: input.targetId,
                 revision,
-                active: true,
+                active: ownedFields.length > 0,
                 ...eventCurationSchema.parse(input.values),
+                ownedFields,
               },
               update: {
                 revision,
-                active: true,
+                active: ownedFields.length > 0,
                 ...eventCurationSchema.parse(input.values),
+                ownedFields,
               },
             })
           : await tx.eventCuration.update({
@@ -146,19 +183,28 @@ export async function saveCuration(
               data: { active: false, revision },
             });
       } else {
+        const values = input.values
+          ? rewardCurationSchema.parse(input.values)
+          : null;
+        const ownedFields = values?.ownedFields ??
+          (previous?.active ? previous.ownedFields : undefined) ?? [
+            ...rewardCurationFields,
+          ];
         next = input.values
           ? await tx.rewardCuration.upsert({
               where: { rewardId: input.targetId },
               create: {
                 rewardId: input.targetId,
                 revision,
-                active: true,
+                active: ownedFields.length > 0,
                 ...rewardCurationSchema.parse(input.values),
+                ownedFields,
               },
               update: {
                 revision,
-                active: true,
+                active: ownedFields.length > 0,
                 ...rewardCurationSchema.parse(input.values),
+                ownedFields,
               },
             })
           : await tx.rewardCuration.update({

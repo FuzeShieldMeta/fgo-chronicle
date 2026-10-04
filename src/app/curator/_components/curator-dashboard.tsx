@@ -9,7 +9,12 @@ import { CuratorFamilyName } from "./curator-family-name";
 import { applyReviewResult, type ReviewResult } from "../_lib/review-result";
 import type { RouterInputs } from "~/trpc/react";
 import {
+  eventCurationFields,
+  rewardCurationFields,
+} from "~/server/services/curation-ownership";
+import {
   effectiveEvent,
+  eventIsHidden,
   effectiveReward,
   rewardDateShift,
 } from "~/server/services/effective-schedule";
@@ -57,6 +62,14 @@ export function CuratorEditor({
     reward: loadedReward,
   }));
   const { event, reward } = draft;
+  const currentCuration = reward ? reward.curation : event.curation;
+  const fields = reward ? rewardCurationFields : eventCurationFields;
+  const [ownedFields, setOwnedFields] = useState(
+    () =>
+      new Set<string>(
+        currentCuration?.active ? (currentCuration.ownedFields ?? fields) : [],
+      ),
+  );
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -107,6 +120,9 @@ export function CuratorEditor({
     const data = new FormData(e.currentTarget);
     const values = reward
       ? {
+          ownedFields: rewardCurationFields.filter((field) =>
+            ownedFields.has(field),
+          ),
           itemType: data.get("itemType") as (typeof items)[number],
           amount: Number(data.get("amount")),
           expectedAt: parseDate(data.get("expectedAt")),
@@ -116,6 +132,9 @@ export function CuratorEditor({
           defaultIncluded: data.get("defaultIncluded") === "on",
         }
       : {
+          ownedFields: eventCurationFields.filter((field) =>
+            ownedFields.has(field),
+          ),
           name: textField(data, "name"),
           startsAt: parseDate(data.get("startsAt"))!,
           startsAtPrecision: data.get("startsAtPrecision") as
@@ -215,9 +234,29 @@ export function CuratorEditor({
       </details>
       <form
         onSubmit={submit}
-        onChange={() => {
+        onChange={(e) => {
           setDirty(true);
           onDirtyChange(true);
+          const input: EventTarget = e.target;
+          if (!(
+            input instanceof HTMLInputElement ||
+            input instanceof HTMLSelectElement ||
+            input instanceof HTMLTextAreaElement
+          ))
+            return;
+          const field =
+            input.name === "startsAtPrecision"
+              ? "startsAt"
+              : input.name === "endsAtPrecision"
+                ? "endsAt"
+                : input.name;
+          if (fields.some((value) => value === field))
+            setOwnedFields((current) => {
+              const next = new Set(current);
+              next.add(field);
+              if (!reward && field === "startsAt") next.add("shiftRewardDates");
+              return next;
+            });
         }}
       >
         <fieldset disabled={save.isPending}>
@@ -354,14 +393,51 @@ export function CuratorEditor({
                 <input
                   name="hidden"
                   type="checkbox"
-                  defaultChecked={
-                    event.curation?.active && event.curation.hidden
-                  }
+                  defaultChecked={eventIsHidden(event)}
                 />
                 Hide this event and its rewards from the public timeline
               </label>
             </>
           )}
+          <fieldset>
+            <legend>Keep curator values</legend>
+            <p>
+              Edited fields are selected automatically. Clear a checkbox to use
+              the latest source value when you save.
+            </p>
+            {fields.map((field) => (
+              <label key={field} className="curator-checkbox">
+                <input
+                  type="checkbox"
+                  name="fieldOwnership"
+                  checked={ownedFields.has(field)}
+                  onChange={(e) =>
+                    setOwnedFields((current) => {
+                      const next = new Set(current);
+                      if (e.target.checked) next.add(field);
+                      else next.delete(field);
+                      return next;
+                    })
+                  }
+                />
+                {
+                  {
+                    name: "Name",
+                    startsAt: "Start and precision",
+                    endsAt: "End and precision",
+                    hidden: "Visibility",
+                    shiftRewardDates: "Reward date movement",
+                    itemType: "Reward item",
+                    amount: "Amount",
+                    expectedAt: "Reward date",
+                    nature: "Reward type",
+                    eligibility: "Eligibility",
+                    defaultIncluded: "Default inclusion",
+                  }[field]
+                }
+              </label>
+            ))}
+          </fieldset>
           <label>
             Reason
             <input
@@ -777,14 +853,9 @@ export function CuratorDashboard() {
                       onClick={() => select(event.id, value.id)}
                     >
                       {itemName(
-                        value.curation?.active
-                          ? value.curation.itemType
-                          : value.itemType,
+                        effectiveReward(value, rewardDateShift(event)).itemType,
                       )}{" "}
-                      ·{" "}
-                      {value.curation?.active
-                        ? value.curation.amount
-                        : value.amount}{" "}
+                      · {effectiveReward(value, rewardDateShift(event)).amount}{" "}
                       · {reviewLabel(value.review.status)}
                     </button>
                   ))}

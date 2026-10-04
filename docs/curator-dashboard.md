@@ -41,6 +41,17 @@ Hide an event to remove it and its rewards from the public timeline. This does n
 
 Corrections are separate from imported rows. New imports do not overwrite them. Source cleanup preserves records with curator history. Reset uses the latest imported values and retains the correction's revision and audit history.
 
+### Field ownership
+
+The **Keep curator values** checkboxes identify fields that must retain a correction.
+Editing a field selects it automatically. Clear its checkbox to use the latest source value after saving.
+Start and end dates each include their timestamp precision. Reward date movement is a separate choice.
+Older full-snapshot corrections retain all their fields until a curator releases them explicitly.
+New corrections do not retain untouched fields. Releasing every field restores source values but keeps the revision and change history.
+A name-only correction does not change the status of the dates. Individually corrected reward dates do not inherit an event date shift.
+
+Apply the field-ownership migration before deploying these controls. The curator-only tables keep their existing RLS protections.
+
 The change history records the curator account, time, reason, source snapshot, and old/new correction. No dashboard operation edits this history. Role changes also create audit records.
 
 ## Reviews and queue

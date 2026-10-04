@@ -9,6 +9,7 @@ import { timelineWindowAt } from "~/app/timeline/_lib/progressive-timeline";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
+import { ownsField } from "~/server/services/curation-ownership";
 import {
   publicReward,
   publicRewardReviewSelect,
@@ -529,9 +530,10 @@ async function queryIncome(
             event: event
               ? {
                   id: event.id,
-                  name: event.curation?.active
-                    ? event.curation.name
-                    : event.name,
+                  name:
+                    event.curation?.active && ownsField(event.curation, "name")
+                      ? event.curation.name
+                      : event.name,
                 }
               : null,
           },
