@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
+import type { ReviewResult } from "../_lib/review-result";
 
 type EventDetail = RouterOutputs["curator"]["event"];
 type Reward = EventDetail["rewardSources"][number]["rewards"][number];
@@ -21,17 +22,13 @@ export function CuratorReviewActions({
   event: EventDetail;
   reward?: Reward;
   dirty: boolean;
-  onReviewed: (notice?: string) => Promise<void>;
+  onReviewed: (result: ReviewResult, notice: string) => void;
 }) {
   const [notice, setNotice] = useState("");
-  const utils = api.useUtils();
   const mutation = api.curator.review.useMutation({
-    onSuccess: async (result) => {
-      await Promise.all([
-        utils.curator.events.invalidate(),
-        utils.curator.history.invalidate(),
-      ]);
-      await onReviewed(
+    onSuccess: (result) => {
+      onReviewed(
+        result,
         `Reviewed ${result.reviewedCount} ${result.reviewedCount === 1 ? "record" : "records"}.`,
       );
     },

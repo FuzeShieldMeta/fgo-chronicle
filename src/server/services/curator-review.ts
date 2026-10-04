@@ -3,7 +3,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
-import { requireCurator } from "~/server/auth/curator";
 import {
   effectiveEvent,
   effectiveReward,
@@ -165,13 +164,20 @@ export async function saveReview(
   const input = reviewInputSchema.parse(rawInput);
   return database.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${actorId} FOR SHARE`;
-      await requireCurator(tx, actorId);
+      const users = await tx.$queryRaw<
+        Array<{ isCurator: boolean }>
+      >`SELECT "isCurator" FROM "User" WHERE "id" = ${actorId} FOR SHARE`;
+      if (users[0]?.isCurator !== true)
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Curator access is required.",
+        });
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${input.eventId} FOR UPDATE`;
       // Lock sources before rewards. Imports cannot change this event's membership during review.
       await tx.$queryRaw`SELECT "id" FROM "RewardSource" WHERE "eventId" = ${input.eventId} ORDER BY "id" FOR UPDATE`;
       await tx.$queryRaw`SELECT r."id" FROM "RewardDefinition" r JOIN "RewardSource" s ON s."id" = r."rewardSourceId" WHERE s."eventId" = ${input.eventId} ORDER BY r."id" FOR UPDATE OF r`;
       const event = await tx.event.findUnique({
+        relationLoadStrategy: "join",
         where: { id: input.eventId },
         include: reviewEventInclude,
       });
@@ -216,6 +222,9 @@ export async function saveReview(
       }
       // Use the same review time for the event and its rewards.
       const createdAt = new Date();
+      const eventReviews: Prisma.EventReviewCreateManyInput[] = [];
+      const rewardReviews: Prisma.RewardReviewCreateManyInput[] = [];
+      const changes: Prisma.CuratorChangeCreateManyInput[] = [];
       for (const value of expected) {
         const data = {
           actorId,
@@ -224,37 +233,41 @@ export async function saveReview(
           createdAt,
         };
         if (value.targetKind === "EVENT")
-          await tx.eventReview.create({
-            data: { ...data, eventId: value.targetId },
-          });
-        else
-          await tx.rewardReview.create({
-            data: { ...data, rewardId: value.targetId },
-          });
-        await tx.curatorChange.create({
-          data: {
-            actorId,
-            targetKind: value.targetKind,
-            targetId: value.targetId,
-            action: "REVIEW",
-            reason:
-              input.scope === "ALL"
-                ? "Reviewed event and current rewards"
-                : "Reviewed current content",
-            before: {
-              sourceHash: value.sourceHash,
-              effectiveHash: value.effectiveHash,
-            },
-            after: {
-              ...value,
-              reviewedAt: createdAt.toISOString(),
-              eventId: event.id,
-              scope: input.scope,
-            },
+          eventReviews.push({ ...data, eventId: value.targetId });
+        else rewardReviews.push({ ...data, rewardId: value.targetId });
+        changes.push({
+          actorId,
+          targetKind: value.targetKind,
+          targetId: value.targetId,
+          action: "REVIEW",
+          reason:
+            input.scope === "ALL"
+              ? "Reviewed event and current rewards"
+              : "Reviewed current content",
+          before: {
+            sourceHash: value.sourceHash,
+            effectiveHash: value.effectiveHash,
+          },
+          after: {
+            ...value,
+            reviewedAt: createdAt.toISOString(),
+            eventId: event.id,
+            scope: input.scope,
           },
         });
       }
-      return { reviewedCount: expected.length };
+      if (eventReviews.length)
+        await tx.eventReview.createMany({ data: eventReviews });
+      if (rewardReviews.length)
+        await tx.rewardReview.createMany({ data: rewardReviews });
+      await tx.curatorChange.createMany({ data: changes });
+      return {
+        eventId: event.id,
+        reviewedCount: expected.length,
+        reviews: expected.map((snapshot) =>
+          reviewState(snapshot, [{ ...snapshot, createdAt }]),
+        ),
+      };
     },
     { maxWait: 5000, timeout: 15000 },
   );

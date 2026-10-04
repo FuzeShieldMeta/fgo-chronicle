@@ -92,6 +92,7 @@ export const curatorRouter = createTRPCRouter({
           }
         : {};
       const events = await ctx.db.event.findMany({
+        relationLoadStrategy: "join",
         where,
         include: reviewEventInclude,
       });
@@ -101,6 +102,7 @@ export const curatorRouter = createTRPCRouter({
     .input(z.object({ id: z.string().min(1).max(100) }).strict())
     .query(async ({ ctx, input }) => {
       const event = await ctx.db.event.findUnique({
+        relationLoadStrategy: "join",
         where: { id: input.id },
         include: reviewEventInclude,
       });

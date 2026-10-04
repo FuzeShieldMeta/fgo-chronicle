@@ -52,6 +52,7 @@ Save or discard unsaved edits before reviewing.
 Reviews store who checked the content, when, and hashes of the imported and displayed values. Changed values require another review.
 This includes imported values that change while a correction is active. Import timestamps alone do not reopen reviews.
 The dashboard keeps earlier reviews in the change history.
+The review status updates after the save succeeds. The queue and selected record's history refresh in the background.
 Older review dates do not confirm that anyone checked the current reward values.
 
 The queue shows unreviewed records, records that need re-review, source changes, missing evidence, corrections, and hidden events.

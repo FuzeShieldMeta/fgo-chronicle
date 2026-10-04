@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CuratorReviewActions, reviewLabel } from "./curator-review-actions";
 import { CuratorFamilyName } from "./curator-family-name";
+import { applyReviewResult, type ReviewResult } from "../_lib/review-result";
 import type { RouterInputs } from "~/trpc/react";
 import {
   effectiveEvent,
@@ -41,15 +42,17 @@ export function CuratorEditor({
   event: loadedEvent,
   reward: loadedReward,
   onSaved,
+  onReviewed,
   onDirtyChange,
 }: {
   event: EventDetail;
   reward?: Reward;
   onSaved: (notice?: string) => Promise<void>;
+  onReviewed?: (result: ReviewResult, notice: string) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   // Background refetches must not advance the revision of an unsaved draft.
-  const [draft] = useState(() => ({
+  const [draft, setDraft] = useState(() => ({
     event: loadedEvent,
     reward: loadedReward,
   }));
@@ -147,7 +150,19 @@ export function CuratorEditor({
         event={event}
         reward={reward}
         dirty={dirty}
-        onReviewed={onSaved}
+        onReviewed={(result, message) => {
+          setDraft((current) => {
+            const event = applyReviewResult(current.event, result);
+            const reward = current.reward
+              ? event.rewardSources
+                  .flatMap((source) => source.rewards)
+                  .find((value) => value.id === current.reward?.id)
+              : undefined;
+            return { event, reward };
+          });
+          setNotice(onReviewed ? "" : message);
+          onReviewed?.(result, message);
+        }}
       />
       <details className="curator-source">
         <summary>Imported values and evidence</summary>
@@ -484,6 +499,7 @@ export function CuratorDashboard() {
   const [familyDirty, setFamilyDirty] = useState(false);
   const [familyEpoch, setFamilyEpoch] = useState(0);
   const [notice, setNotice] = useState("");
+  const utils = api.useUtils();
   const events = api.curator.events.useQuery(
     { search: query, page, ...filters },
     { refetchOnWindowFocus: false },
@@ -504,6 +520,32 @@ export function CuratorDashboard() {
     }
     setEditorEpoch((p) => p + 1);
     setNotice(message);
+  }
+  function reviewed(result: ReviewResult, message: string) {
+    utils.curator.event.setData({ id: result.eventId }, (current) =>
+      current ? applyReviewResult(current, result) : current,
+    );
+    setNotice(message);
+    // Inactive queue pages become stale without fetching them. Only refresh this view.
+    const targetKind = rewardId ? "REWARD" : "EVENT";
+    const targetId = rewardId ?? result.eventId;
+    const selectedReviewed = result.reviews.some(
+      (review) =>
+        review.snapshot.targetKind === targetKind &&
+        review.snapshot.targetId === targetId,
+    );
+    void Promise.all([
+      utils.curator.events.invalidate(undefined, { refetchType: "none" }),
+      utils.curator.history.invalidate(undefined, { refetchType: "none" }),
+      utils.curator.events.invalidate({ search: query, page, ...filters }),
+      ...(selectedReviewed
+        ? [utils.curator.history.invalidate({ targetKind, targetId })]
+        : []),
+    ]).catch(() =>
+      setNotice(
+        "Review saved. Could not refresh the queue or history. Reload to see the latest values.",
+      ),
+    );
   }
   function select(id: string, reward: string | null) {
     if (
@@ -757,6 +799,7 @@ export function CuratorDashboard() {
               event={event}
               reward={reward}
               onSaved={reload}
+              onReviewed={reviewed}
               onDirtyChange={setEditorDirty}
             />
           </>
