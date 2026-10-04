@@ -33,8 +33,17 @@ import {
 } from "~/server/services/global-event-preview";
 import { globalPublicationInputSchema } from "~/server/services/global-publication-plan";
 import { publishGlobalEvent } from "~/server/services/global-event-publication";
+import {
+  collectAnnouncements,
+  collectAnnouncementsSchema,
+} from "~/server/services/global-announcement-collection";
 
 export const curatorRouter = createTRPCRouter({
+  collectAnnouncements: curatorProcedure
+    .input(collectAnnouncementsSchema)
+    .mutation(({ ctx, input }) =>
+      collectAnnouncements(ctx.db, ctx.session.user.id, input),
+    ),
   publishGlobalEvent: curatorProcedure
     .input(globalPublicationInputSchema)
     .mutation(async ({ ctx, input }) => {

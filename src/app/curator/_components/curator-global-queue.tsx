@@ -48,6 +48,27 @@ export function CuratorGlobalQueue({
     },
     onError: (error) => setNotice(error.message),
   });
+  const announcements = api.curator.collectAnnouncements.useMutation({
+    onSuccess: async (result) => {
+      setNotice(
+        `Collected ${result.inserted} new announcement assessments. Nothing was published.${result.coverageLimited ? " Collection reached its coverage limit." : ""}`,
+      );
+      setInput((current) => ({
+        ...current,
+        page: 0,
+        source: "PUBLISHER_ANNOUNCEMENT",
+      }));
+      try {
+        await utils.curator.globalCandidates.invalidate();
+      } catch {
+        setNotice(
+          "Announcement assessments were saved. Reload the queue to see them.",
+        );
+      }
+    },
+    onError: (error) => setNotice(error.message),
+  });
+  const collecting = collect.isPending || announcements.isPending;
   return (
     <details
       className="curator-global-queue"
@@ -59,7 +80,7 @@ export function CuratorGlobalQueue({
         change the public schedule or rewards.
       </p>
       <form
-        aria-busy={collect.isPending}
+        aria-busy={collecting}
         onSubmit={(event) => {
           event.preventDefault();
           setNotice("");
@@ -90,7 +111,7 @@ export function CuratorGlobalQueue({
             />
           </label>
         </div>
-        <button type="submit" disabled={collect.isPending}>
+        <button type="submit" disabled={collecting}>
           {collect.isPending
             ? "Collecting source records…"
             : "Collect Global candidates"}
@@ -101,12 +122,51 @@ export function CuratorGlobalQueue({
           issues.
         </p>
       </form>
+      <div aria-busy={announcements.isPending}>
+        <button
+          type="button"
+          disabled={collecting}
+          onClick={() => {
+            setNotice("");
+            announcements.mutate({});
+          }}
+        >
+          {announcements.isPending
+            ? "Collecting announcements…"
+            : "Collect publisher announcements"}
+        </button>
+        <p>
+          Checks recent official news and maintenance articles. Extracted
+          periods and unsupported formats stay private for review. Announcements
+          cannot be published from this queue. The date range above applies only
+          to Atlas records.
+        </p>
+      </div>
       {notice ? (
         <p className="curator-notice" role="status">
           {notice}
         </p>
       ) : null}
       <div className="curator-field-row">
+        <label>
+          Source type
+          <select
+            value={input.source ?? "ALL"}
+            onChange={(event) =>
+              setInput((current) => ({
+                ...current,
+                page: 0,
+                source: event.target.value as QueueInput["source"],
+              }))
+            }
+          >
+            <option value="ALL">All sources</option>
+            <option value="GLOBAL_GAME_DATA">Atlas Global game data</option>
+            <option value="PUBLISHER_ANNOUNCEMENT">
+              Publisher announcements
+            </option>
+          </select>
+        </label>
         <label>
           Candidate filter
           <select
@@ -164,6 +224,9 @@ export function CuratorGlobalQueue({
               {queue.data.entries.map((entry) => (
                 <li key={entry.id}>
                   <h3>{entry.name}</h3>
+                  {entry.sourceKind === "PUBLISHER_ANNOUNCEMENT" ? (
+                    <p>Publisher announcement. Review only.</p>
+                  ) : null}
                   <p>
                     {dateLabel(entry.startsAt)} to {dateLabel(entry.endsAt)}
                   </p>

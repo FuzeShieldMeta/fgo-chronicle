@@ -44,6 +44,7 @@
     "@vercel/analytics": "^2.0.1",
     "next": "15.5.25",
     "next-auth": "5.0.0-beta.32",
+    "parse5": "8.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",

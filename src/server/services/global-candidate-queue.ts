@@ -30,6 +30,9 @@ export const globalCandidateQueueSchema = z
     page: z.number().int().min(0).max(GLOBAL_SOURCE_LIMITS.maxPage).default(0),
     view: z.enum(["ALL", "MATCHED", "UNRESOLVED"]).default("ALL"),
     sort: z.enum(["NEWEST", "EARLIEST"]).default("NEWEST"),
+    source: z
+      .enum(["ALL", "GLOBAL_GAME_DATA", "PUBLISHER_ANNOUNCEMENT"])
+      .default("ALL"),
   })
   .strict();
 type Report = Awaited<ReturnType<typeof reportGlobalEvents>>;
@@ -200,6 +203,7 @@ export async function getGlobalCandidateQueue(
       : input.view === "UNRESOLVED"
         ? { targetEventId: null }
         : {};
+  if (input.source !== "ALL") where.sourceKind = input.source;
   const [entries, total] = await Promise.all([
     database.globalEventCandidate.findMany({
       where,

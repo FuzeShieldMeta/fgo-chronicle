@@ -108,6 +108,18 @@ Changed source records create new assessments. Earlier versions remain available
 Collection checks curator access before retrieval and again inside the transaction.
 It rechecks matched identities before saving candidates. Candidates and their collection audit save together.
 The private queue table forces RLS and grants no client-role access.
+
+### Publisher announcements
+
+Select **Collect publisher announcements** to check recent official news and maintenance articles.
+The date range controls apply only to Atlas collection. Publisher collection reads fixed feeds with separate coverage limits.
+Use **Source type** to filter the queue. Open **Source assessment details** to inspect extracted periods, surrounding text and timezone labels.
+Event, summon, exchange/shop and maintenance periods remain separate. Unsupported date formats and embedded content appear as review issues.
+Missing times, unknown timezones, conflicting offsets and invalid ranges do not become confirmed dates.
+Collection keeps earlier article revisions and saves identical assessments only once.
+Announcements remain private and unresolved. They cannot use the Atlas preview or publication workflow.
+This collection does not change events, rewards, player plans or date confirmation.
+No scheduled production importer collects these announcements.
 Collection and pagination limits live in `src/shared/global-reconciliation-config.ts`, separate from timeline layout settings.
 Apply the candidate-queue migration before deploying these controls.
 
