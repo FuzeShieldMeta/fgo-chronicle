@@ -54,6 +54,7 @@ This includes imported values that change while a correction is active. Import t
 The dashboard keeps earlier reviews in the change history.
 The review status updates after the save succeeds. The queue and selected record's history refresh in the background.
 Older review dates do not confirm that anyone checked the current reward values.
+Public reward details and income tiles use the same content checks. Changed rewards show **Needs re-review** until a curator reviews them again.
 
 The queue shows unreviewed records, records that need re-review, source changes, missing evidence, corrections, and hidden events.
 An event stays in the review queue until both the event and its rewards have current reviews.

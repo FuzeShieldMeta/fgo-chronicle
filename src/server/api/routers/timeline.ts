@@ -10,12 +10,14 @@ import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import {
+  publicReward,
+  publicRewardReviewSelect,
+} from "~/server/services/public-reward-review";
+import {
   effectiveEvent,
   effectiveFamily,
-  effectiveReward,
   eventIsHidden,
   overlapsRange,
-  rewardDateShift,
 } from "~/server/services/effective-schedule";
 
 const MAX_TIMELINE_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
@@ -206,6 +208,8 @@ const rewardSourceSelect = {
   rewards: {
     select: {
       curation: true,
+      reviews: publicRewardReviewSelect,
+      rewardSourceId: true,
       id: true,
       itemType: true,
       amount: true,
@@ -223,6 +227,8 @@ const rewardSourceSelect = {
 
 const incomeContributionSelect = {
   curation: true,
+  reviews: publicRewardReviewSelect,
+  rewardSourceId: true,
   id: true,
   itemType: true,
   amount: true,
@@ -500,7 +506,11 @@ async function queryIncome(
     .flatMap((contribution) => {
       const event = contribution.rewardSource.event;
       if (event && eventIsHidden(event)) return [];
-      const effective = effectiveReward(contribution, rewardDateShift(event));
+      const effective = publicReward(
+        contribution,
+        contribution.rewardSource,
+        event,
+      );
       if (
         !effective.expectedAt ||
         effective.expectedAt < input.from ||
@@ -582,14 +592,14 @@ const cachedTimelineListPayload = unstable_cache(
 const cachedIncomePayload = unstable_cache(
   async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryIncome(db, restoreCacheInput(input))),
-  ["timeline-income-v2"],
+  ["timeline-income-v3"],
   publicTimelineCacheOptions,
 );
 
 const cachedTimelineWindowPayload = unstable_cache(
   async (input: TimelineWindowInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineWindow(db, input)),
-  ["timeline-window-v2"],
+  ["timeline-window-v3"],
   publicTimelineCacheOptions,
 );
 
@@ -740,7 +750,7 @@ export const timelineRouter = createTRPCRouter({
             ? ("CURATED" as const)
             : source.status,
           rewards: source.rewards.map((reward) =>
-            effectiveReward(reward, rewardDateShift(event)),
+            publicReward(reward, source, event),
           ),
         })),
         family: family

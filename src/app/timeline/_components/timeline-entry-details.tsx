@@ -289,7 +289,11 @@ export function TimelineIncomeDetails({
                     ? ` · ${contribution.rewardSource.event.name}`
                     : ""}
                   {contribution.included ? " · Included" : " · Excluded"}
-                  {contribution.reviewedAt ? "" : " · Unreviewed"}
+                  {contribution.reviewStatus === "NEEDS_REVIEW"
+                    ? " · Needs re-review"
+                    : contribution.reviewedAt
+                      ? ""
+                      : " · Unreviewed"}
                 </small>
                 {needsDecision ? (
                   <small className="timeline-reward-decision-status">
@@ -564,7 +568,11 @@ export function TimelineEntryDetails({
                             </span>
                             <small>
                               {inclusion.included ? "Included" : "Excluded"}
-                              {reward.reviewedAt ? "" : " · Unreviewed"}
+                              {reward.reviewStatus === "NEEDS_REVIEW"
+                                ? " · Needs re-review"
+                                : reward.reviewedAt
+                                  ? ""
+                                  : " · Unreviewed"}
                             </small>
                             {!inclusion.inclusionResolved ? (
                               <small className="timeline-reward-decision-status">

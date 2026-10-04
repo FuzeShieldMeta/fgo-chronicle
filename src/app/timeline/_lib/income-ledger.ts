@@ -49,6 +49,7 @@ export type IncomeContribution = {
   storyReleaseAt?: Date | null;
   defaultIncluded: boolean;
   reviewedAt: Date | null;
+  reviewStatus?: "UNREVIEWED" | "REVIEWED" | "NEEDS_REVIEW";
   assumption?: string | null;
   rewardSource: {
     id: string;

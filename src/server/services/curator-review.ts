@@ -70,8 +70,31 @@ export function rewardReviewSnapshot(event: ReviewEvent, reward: ReviewReward) {
   const source = event.rewardSources.find(
     (value) => value.id === reward.rewardSourceId,
   );
+  return rewardReviewSnapshotForSource(reward, source, event);
+}
+
+type SnapshotReward = Pick<
+  ReviewReward,
+  | "id"
+  | "rewardSourceId"
+  | "itemType"
+  | "amount"
+  | "expectedAt"
+  | "nature"
+  | "eligibility"
+  | "storyWarId"
+  | "storyReleaseAt"
+  | "defaultIncluded"
+  | "reviewedAt"
+> & { curation?: ReviewReward["curation"] };
+
+export function rewardReviewSnapshotForSource(
+  reward: SnapshotReward,
+  source: { type: string; evidenceUrl: string } | undefined,
+  event: Parameters<typeof rewardDateShift>[0],
+) {
   const fields = (
-    value: ReviewReward | ReturnType<typeof effectiveReward<ReviewReward>>,
+    value: SnapshotReward | ReturnType<typeof effectiveReward<SnapshotReward>>,
   ) => ({
     itemType: value.itemType,
     amount: value.amount,
@@ -91,7 +114,7 @@ export function rewardReviewSnapshot(event: ReviewEvent, reward: ReviewReward) {
     sourceHash: fingerprint(fields(reward)),
     effectiveHash: fingerprint({
       ...fields(effectiveReward(reward, rewardDateShift(event))),
-      hidden: eventIsHidden(event),
+      hidden: event ? eventIsHidden(event) : false,
     }),
   };
 }
