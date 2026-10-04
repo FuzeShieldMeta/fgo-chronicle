@@ -232,7 +232,7 @@ function obsoleteManagedRewardSourceIds(event, desiredSources) {
         !desiredKeys.has(source.sourceKey) &&
         (source.rewards ?? []).every(
           (/** @type {Record<string, any>} */ reward) =>
-            !reward.reviewedAt && !reward.curation,
+            !reward.reviewedAt && !reward.curation && !reward.reviews?.length,
         )
       );
     })
@@ -276,7 +276,17 @@ export async function reconcileProjectedFandomEvents(
     include: {
       family: true,
       curation: true,
-      rewardSources: { include: { rewards: { include: { curation: true } } } },
+      reviews: { select: { id: true }, take: 1 },
+      rewardSources: {
+        include: {
+          rewards: {
+            include: {
+              curation: true,
+              reviews: { select: { id: true }, take: 1 },
+            },
+          },
+        },
+      },
     },
   });
   const plan = planEventReconciliation(
@@ -299,7 +309,14 @@ export async function reconcileProjectedFandomEvents(
         where: { sourceKey: { in: externalKeys } },
         include: {
           rewardSources: {
-            include: { rewards: { include: { curation: true } } },
+            include: {
+              rewards: {
+                include: {
+                  curation: true,
+                  reviews: { select: { id: true }, take: 1 },
+                },
+              },
+            },
           },
         },
       })
@@ -323,8 +340,16 @@ export async function reconcileProjectedFandomEvents(
         include: {
           family: true,
           curation: true,
+          reviews: { select: { id: true }, take: 1 },
           rewardSources: {
-            include: { rewards: { include: { curation: true } } },
+            include: {
+              rewards: {
+                include: {
+                  curation: true,
+                  reviews: { select: { id: true }, take: 1 },
+                },
+              },
+            },
           },
         },
       })
@@ -361,13 +386,14 @@ export async function reconcileProjectedFandomEvents(
     const isUnreviewedProjection =
       existing.status === "PROJECTED" &&
       !existing.curation &&
+      !existing.reviews?.length &&
       !existing.family?.artworkReviewedAt &&
       (existing.rewardSources ?? []).every(
         (/** @type {Record<string, any>} */ source) =>
           source.status === "PROJECTED" &&
           (source.rewards ?? []).every(
             (/** @type {Record<string, any>} */ reward) =>
-              !reward.reviewedAt && !reward.curation,
+              !reward.reviewedAt && !reward.curation && !reward.reviews?.length,
           ),
       );
     const targetIsAvailable = Boolean(target) || Boolean(options.dryRun);

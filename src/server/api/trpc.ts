@@ -136,6 +136,13 @@ export const protectedProcedure = t.procedure
 export const curatorProcedure = protectedProcedure.use(
   async ({ ctx, next }) => {
     await requireCurator(ctx.db, ctx.session.user.id);
-    return next();
+    const result = await next();
+    if (!result.ok && result.error.code === "INTERNAL_SERVER_ERROR") {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Could not complete the curator request. Try again.",
+      });
+    }
+    return result;
   },
 );

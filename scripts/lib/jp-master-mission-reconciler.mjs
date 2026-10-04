@@ -102,7 +102,11 @@ export async function reconcileProjectedMasterMissions(
   );
   const existingSources = await db.rewardSource.findMany({
     where: { sourceKey: { startsWith: "atlas:JP:mm:" } },
-    include: { rewards: { include: { curation: true } } },
+    include: {
+      rewards: {
+        include: { curation: true, reviews: { select: { id: true }, take: 1 } },
+      },
+    },
   });
   const existingByKey = new Map(
     existingSources.map((/** @type {Record<string, any>} */ source) => [
@@ -156,7 +160,7 @@ export async function reconcileProjectedMasterMissions(
       const retainedCuratorRewards = existing.rewards.filter(
         (/** @type {Record<string, any>} */ reward) =>
           !reward.reviewedAt &&
-          reward.curation &&
+          (reward.curation || reward.reviews?.length) &&
           !desiredRewards.has(reward.sourceKey),
       );
       protectedRewardDifferences += retainedCuratorRewards.length;
@@ -180,6 +184,7 @@ export async function reconcileProjectedMasterMissions(
               (/** @type {Record<string, any>} */ reward) =>
                 !reward.reviewedAt &&
                 !reward.curation &&
+                !reward.reviews?.length &&
                 !desiredRewards.has(reward.sourceKey),
             )
             .map(
@@ -312,6 +317,7 @@ export async function reconcileProjectedMasterMissions(
                 sourceKey: { in: obsoleteKeys },
                 reviewedAt: null,
                 curation: { is: null },
+                reviews: { none: {} },
               },
             });
           }

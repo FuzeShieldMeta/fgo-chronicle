@@ -163,6 +163,7 @@ model Event {
   family            EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
   rewardSources     RewardSource[]
   curation          EventCuration?
+  reviews           EventReview[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -206,6 +207,7 @@ model RewardDefinition {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   curation        RewardCuration?
+  reviews         RewardReview[]
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
@@ -242,6 +244,30 @@ model RewardCuration {
   reward          RewardDefinition @relation(fields: [rewardId], references: [id], onDelete: Restrict)
 
   @@index([active, expectedAt])
+}
+
+model EventReview {
+  id            String   @id @default(cuid())
+  eventId       String
+  actorId       String
+  sourceHash    String
+  effectiveHash String
+  createdAt     DateTime @default(now())
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([eventId, createdAt, id])
+}
+
+model RewardReview {
+  id            String           @id @default(cuid())
+  rewardId      String
+  actorId       String
+  sourceHash    String
+  effectiveHash String
+  createdAt     DateTime         @default(now())
+  reward        RewardDefinition @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+
+  @@index([rewardId, createdAt, id])
 }
 
 model CuratorChange {

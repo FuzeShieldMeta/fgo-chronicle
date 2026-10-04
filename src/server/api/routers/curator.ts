@@ -4,17 +4,20 @@ import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, curatorProcedure } from "~/server/api/trpc";
 import { curationChangeSchema, saveCuration } from "~/server/services/curation";
+import {
+  describeEventReview,
+  reviewEventInclude,
+  reviewInputSchema,
+  saveReview,
+} from "~/server/services/curator-review";
+import {
+  buildCuratorQueue,
+  curatorQueueSchema,
+} from "~/server/services/curator-queue";
 
 export const curatorRouter = createTRPCRouter({
   events: curatorProcedure
-    .input(
-      z
-        .object({
-          search: z.string().trim().max(200).default(""),
-          page: z.number().int().min(0).max(10000).default(0),
-        })
-        .strict(),
-    )
+    .input(curatorQueueSchema)
     .query(async ({ ctx, input }) => {
       const where = input.search
         ? {
@@ -35,40 +38,28 @@ export const curatorRouter = createTRPCRouter({
             ],
           }
         : {};
-      const [events, count] = await Promise.all([
-        ctx.db.event.findMany({
-          where,
-          include: { curation: true },
-          orderBy: [{ startsAt: "desc" }, { id: "asc" }],
-          skip: input.page * 25,
-          take: 25,
-        }),
-        ctx.db.event.count({ where }),
-      ]);
-      return { events, count };
+      const events = await ctx.db.event.findMany({
+        where,
+        include: reviewEventInclude,
+      });
+      return buildCuratorQueue(events, input);
     }),
   event: curatorProcedure
     .input(z.object({ id: z.string().min(1).max(100) }).strict())
     .query(async ({ ctx, input }) => {
       const event = await ctx.db.event.findUnique({
         where: { id: input.id },
-        include: {
-          curation: true,
-          rewardSources: {
-            include: {
-              rewards: {
-                include: { curation: true },
-                orderBy: { expectedAt: "asc" },
-              },
-            },
-            orderBy: { name: "asc" },
-          },
-        },
+        include: reviewEventInclude,
       });
       if (!event)
         throw new TRPCError({ code: "NOT_FOUND", message: "Event not found." });
-      return event;
+      return describeEventReview(event);
     }),
+  review: curatorProcedure
+    .input(reviewInputSchema)
+    .mutation(({ ctx, input }) =>
+      saveReview(ctx.db, ctx.session.user.id, input),
+    ),
   history: curatorProcedure
     .input(
       z

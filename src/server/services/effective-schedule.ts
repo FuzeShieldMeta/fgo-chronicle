@@ -71,7 +71,6 @@ export function effectiveReward<T extends RewardRecord>(
     nature: curation.nature,
     eligibility: curation.eligibility,
     defaultIncluded: curation.defaultIncluded,
-    reviewedAt: curation.updatedAt,
   };
 }
 

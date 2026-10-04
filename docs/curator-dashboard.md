@@ -43,6 +43,25 @@ Corrections are separate from imported rows. New imports do not overwrite them. 
 
 The change history records the curator account, time, reason, source snapshot, and old/new correction. No dashboard operation edits this history. Role changes also create audit records.
 
+## Reviews and queue
+
+Saving a correction does not mark it reviewed. Select **Mark reviewed** after checking the current content and evidence.
+Event and reward reviews are separate. **Review all** covers the selected event and its current rewards, not other family members or banners.
+Save or discard unsaved edits before reviewing.
+
+Reviews store who checked the content, when, and hashes of the imported and displayed values. Changed values require another review.
+This includes imported values that change while a correction is active. Import timestamps alone do not reopen reviews.
+The dashboard keeps earlier reviews in the change history.
+Older review dates do not confirm that anyone checked the current reward values.
+
+The queue shows unreviewed records, records that need re-review, source changes, missing evidence, corrections, and hidden events.
+An event stays in the review queue until both the event and its rewards have current reviews.
+Search checks imported and displayed names. Date filters and chronological sorting use displayed Global dates.
+Hidden events are excluded by default. Select the Hidden view or change the visibility filter to include them.
+
+Apply the review migration before deploying these controls.
+Tracking how long records have waited for review and dismissing importer warnings are not implemented yet.
+
 If another curator changed the record, the dashboard rejects the stale save. Reload the record and review the new values before trying again. Failed saves retain the form values. After a successful save, public timeline caches are invalidated. An already-open timeline may need a reload.
 
 The dashboard has no public navigation link or search-engine listing. Page checks and API permission checks enforce access independently. The new tables have forced RLS and no grants to Supabase `anon` or `authenticated` roles. The server's Prisma connection remains privileged.

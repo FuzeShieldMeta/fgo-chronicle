@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { api, type RouterOutputs } from "~/trpc/react";
+import { CuratorReviewActions, reviewLabel } from "./curator-review-actions";
+import type { RouterInputs } from "~/trpc/react";
 import {
   effectiveEvent,
   effectiveReward,
@@ -46,8 +48,11 @@ export function CuratorEditor({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   // Background refetches must not advance the revision of an unsaved draft.
-  const [draft] = useState(() => ({event: loadedEvent, reward: loadedReward}));
-  const {event, reward} = draft;
+  const [draft] = useState(() => ({
+    event: loadedEvent,
+    reward: loadedReward,
+  }));
+  const { event, reward } = draft;
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -135,10 +140,16 @@ export function CuratorEditor({
       <h2>{reward ? "Edit reward" : "Edit event"}</h2>
       <p>
         {active
-          ? "A curator correction is active."
-          : "This record uses imported values."}{" "}
+          ? "Uses curator changes."
+          : "Uses imported values."}{" "}
         Revision {revision}.
       </p>
+      <CuratorReviewActions
+        event={event}
+        reward={reward}
+        dirty={dirty}
+        onReviewed={onSaved}
+      />
       <details className="curator-source">
         <summary>Imported values and evidence</summary>
         {reward ? (
@@ -457,13 +468,23 @@ export function CuratorDashboard() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
+  type Filters = Omit<RouterInputs["curator"]["events"], "search" | "page">;
+  const [filters, setFilters] = useState<Filters>({
+    sort: "EARLIEST_UNREVIEWED",
+    visibility: "VISIBLE",
+    view: "ALL",
+  });
+  function filter<K extends keyof Filters>(key: K, value: Filters[K]) {
+    setFilters((current) => ({ ...current, [key]: value }));
+    setPage(0);
+  }
   const [eventId, setEventId] = useState<string | null>(null);
   const [rewardId, setRewardId] = useState<string | null>(null);
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [editorDirty, setEditorDirty] = useState(false);
   const [notice, setNotice] = useState("");
   const events = api.curator.events.useQuery(
-    { search: query, page },
+    { search: query, page, ...filters },
     { refetchOnWindowFocus: false },
   );
   const detail = api.curator.event.useQuery(
@@ -515,9 +536,124 @@ export function CuratorDashboard() {
           </label>
           <button>Search</button>
         </form>
+        <label>
+          Queue
+          <select
+            value={filters.view}
+            onChange={(e) => filter("view", e.target.value as Filters["view"])}
+          >
+            <option value="ALL">All</option>
+            <option value="UNREVIEWED">Unreviewed</option>
+            <option value="NEEDS_REVIEW">Needs re-review</option>
+            <option value="SOURCE_CHANGED">Source changed</option>
+            <option value="MISSING_EVIDENCE">Missing evidence</option>
+            <option value="CORRECTED">Corrected</option>
+            <option value="HIDDEN">Hidden</option>
+          </select>
+        </label>
+        <label>
+          Sort
+          <select
+            value={filters.sort}
+            onChange={(e) => filter("sort", e.target.value as Filters["sort"])}
+          >
+            <option value="EARLIEST_UNREVIEWED">Earliest unreviewed</option>
+            <option value="EARLIEST">Earliest event</option>
+            <option value="LATEST">Latest event</option>
+          </select>
+        </label>
+        <details className="curator-queue-filters">
+          <summary>Filters</summary>
+          <label>
+            Visibility
+            <select
+              value={filters.visibility}
+              onChange={(e) =>
+                filter("visibility", e.target.value as Filters["visibility"])
+              }
+            >
+              <option value="VISIBLE">Visible</option>
+              <option value="ALL">Include hidden</option>
+              <option value="HIDDEN">Hidden only</option>
+            </select>
+          </label>
+          <label>
+            Schedule status
+            <select
+              value={filters.status ?? ""}
+              onChange={(e) =>
+                filter(
+                  "status",
+                  (e.target.value || undefined) as Filters["status"],
+                )
+              }
+            >
+              <option value="">All statuses</option>
+              <option value="PROJECTED">Projected</option>
+              <option value="CURATED">Curated</option>
+              <option value="OFFICIAL">Official</option>
+            </select>
+          </label>
+          <label>
+            Event type
+            <select
+              value={filters.type ?? ""}
+              onChange={(e) =>
+                filter("type", (e.target.value || undefined) as Filters["type"])
+              }
+            >
+              <option value="">All types</option>
+              {[
+                "MAIN_EVENT",
+                "PRE_RELEASE_CAMPAIGN",
+                "LOGIN_BONUS",
+                "CAMPAIGN",
+                "EVENT_SHOP",
+                "QUEST_RELEASE",
+                "LIMITED_MISSION",
+                "MAINTENANCE",
+                "OTHER",
+              ].map((type) => (
+                <option key={type} value={type}>
+                  {itemName(type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            From (UTC)
+            <input
+              type="date"
+              value={filters.from?.toISOString().slice(0, 10) ?? ""}
+              onChange={(e) =>
+                filter(
+                  "from",
+                  e.target.value
+                    ? new Date(e.target.value + "T00:00:00.000Z")
+                    : undefined,
+                )
+              }
+            />
+          </label>
+          <label>
+            Through (UTC)
+            <input
+              type="date"
+              value={filters.to?.toISOString().slice(0, 10) ?? ""}
+              onChange={(e) =>
+                filter(
+                  "to",
+                  e.target.value
+                    ? new Date(e.target.value + "T23:59:59.999Z")
+                    : undefined,
+                )
+              }
+            />
+          </label>
+        </details>
         {events.isPending && <p role="status">Loading events…</p>}
         {events.error && <p role="alert">{events.error.message}</p>}
-        <p>{events.data?.count ?? 0} events, including hidden records</p>
+        <p>{events.data?.count ?? 0} matching events</p>
         <ul>
           {events.data?.events.map((value) => (
             <li key={value.id}>
@@ -525,18 +661,24 @@ export function CuratorDashboard() {
                 aria-pressed={eventId === value.id}
                 onClick={() => select(value.id, null)}
               >
-                <span>
-                  {value.curation?.active ? value.curation.name : value.name}
-                </span>
+                <span>{value.name}</span>
                 <small>
-                  {formatDate(
-                    value.curation?.active
-                      ? value.curation.startsAt
-                      : value.startsAt,
-                  )}
-                  {value.curation?.active && value.curation.hidden
-                    ? " · Hidden"
-                    : ""}
+                  {formatDate(value.startsAt)}
+                  {value.hidden ? " · Hidden" : ""}
+                </small>
+                <small>
+                  Event: {reviewLabel(value.eventReview)} · Rewards:{" "}
+                  {value.rewardCounts.reviewed}/{value.rewardCounts.total}{" "}
+                  reviewed
+                </small>
+                <small>
+                  {value.badges
+                    .map((badge) =>
+                      badge === "NEEDS_REVIEW"
+                        ? "Needs re-review"
+                        : itemName(badge),
+                    )
+                    .join(" · ")}
                 </small>
               </button>
             </li>
@@ -571,7 +713,7 @@ export function CuratorDashboard() {
                 aria-pressed={!rewardId}
                 onClick={() => select(event.id, null)}
               >
-                Event dates and visibility
+                Event dates and visibility · {reviewLabel(event.review.status)}
               </button>
               {event.rewardSources.map((source) => (
                 <div key={source.id}>
@@ -590,7 +732,8 @@ export function CuratorDashboard() {
                       ·{" "}
                       {value.curation?.active
                         ? value.curation.amount
-                        : value.amount}
+                        : value.amount}{" "}
+                      · {reviewLabel(value.review.status)}
                     </button>
                   ))}
                 </div>
@@ -599,7 +742,7 @@ export function CuratorDashboard() {
                 <p>No reward sources recorded.</p>
               )}
             </nav>
-        <CuratorEditor
+            <CuratorEditor
               key={`${event.id}:${rewardId ?? "event"}:${editorEpoch}`}
               event={event}
               reward={reward}
