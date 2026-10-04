@@ -94,6 +94,21 @@ Title similarities do not establish a match. Missing associations and conflicts 
 The report retains Global timestamps without projecting them. Embedded reward totals do not include quest rewards.
 This is a source-assessment tool, not the automatic Global publication workflow.
 
+### Date confirmation evidence
+
+The evidence table keeps Global source records separate from reviews and corrections.
+Each record stores its source kind, URL, record identity, retrieval time and content hash.
+Start and end confirmation have separate timestamps and precision. Earlier evidence remains in history when a source changes.
+The curator API provides paginated evidence history. Signed-out users and ordinary accounts cannot read it.
+There is no endpoint for manually submitting an official-date claim.
+
+Storage alone does not publish a date or change public income.
+The boundary classifier requires qualifying Global evidence that matches the displayed timestamp and precision.
+A confirmed start does not confirm a projected end. Date corrections remain Curated, including a removed end date.
+Name corrections do not change date status.
+The later publication workflow will apply this classification to the public timeline.
+Apply the evidence migration before deploying its API. RLS is forced, and client database roles have no table privileges.
+
 ## Family names
 
 Select an event, then open **Family name** if the event belongs to a family.

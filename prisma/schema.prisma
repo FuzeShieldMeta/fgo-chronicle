@@ -165,6 +165,7 @@ model Event {
   rewardSources     RewardSource[]
   curation          EventCuration?
   reviews           EventReview[]
+  dateEvidence      EventDateEvidence[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -266,6 +267,25 @@ model EventReview {
   effectiveHash String
   createdAt     DateTime @default(now())
   event         Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([eventId, createdAt, id])
+}
+
+model EventDateEvidence {
+  id                      String                 @id @default(cuid())
+  eventId                 String
+  sourceKind              String
+  sourceUrl               String
+  sourceRecordId          String
+  sourceRegion            String                 @default("NA")
+  retrievedAt             DateTime
+  contentHash             String
+  confirmedStartsAt       DateTime?
+  confirmedStartPrecision ScheduleTimePrecision?
+  confirmedEndsAt         DateTime?
+  confirmedEndPrecision   ScheduleTimePrecision?
+  createdAt               DateTime               @default(now())
+  event                   Event                  @relation(fields: [eventId], references: [id], onDelete: Restrict)
 
   @@index([eventId, createdAt, id])
 }

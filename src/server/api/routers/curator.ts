@@ -23,6 +23,23 @@ import {
 } from "~/server/services/curator-queue";
 
 export const curatorRouter = createTRPCRouter({
+  dateEvidence: curatorProcedure
+    .input(
+      z
+        .object({
+          eventId: z.string().min(1).max(100),
+          page: z.number().int().min(0).max(10000).default(0),
+        })
+        .strict(),
+    )
+    .query(({ ctx, input }) =>
+      ctx.db.eventDateEvidence.findMany({
+        where: { eventId: input.eventId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: input.page * 25,
+        take: 25,
+      }),
+    ),
   family: curatorProcedure
     .input(z.object({ id: z.string().min(1).max(100) }).strict())
     .query(async ({ ctx, input }) => {
