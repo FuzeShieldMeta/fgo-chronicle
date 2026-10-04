@@ -249,6 +249,18 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
               }
             : null,
         embeddedRewardTotals: totals,
+        embeddedRewardSources: normalized.rewardSources,
+        jpEmbeddedRewardSources: jpEvent
+          ? normalizeAtlasEvent(jpEvent, {
+              region: "JP",
+              retrievedAt: jp.retrievedAt,
+              contentHash: jp.contentHash,
+              family: {
+                sourceKey: `atlas:JP:event:${jpEvent.id}:family`,
+                name: jpEvent.name,
+              },
+            }).rewardSources
+          : [],
         questRewardsInspected: false,
         coverageIssues: normalized.issues,
         publicationAllowed: false,

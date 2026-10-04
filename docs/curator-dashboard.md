@@ -111,6 +111,22 @@ The private queue table forces RLS and grants no client-role access.
 Collection and pagination limits live in `src/shared/global-reconciliation-config.ts`, separate from timeline layout settings.
 Apply the candidate-queue migration before deploying these controls.
 
+### Global value previews
+
+Open **Preview Global values** for a matched source assessment.
+The preview shows current, Global-source and proposed event values, along with the proposed date status.
+Curator-owned fields retain their corrections by default. Select **Use Global source value** to release an individual field in the preview.
+These selections do not save changes. There is no publication action yet.
+
+Reward matching requires the same source identity in both regional records within the verified event.
+Duplicate or missing reward identities remain unchanged. Unmatched Global rewards stay visible without creating new income.
+The preview retains stable reward IDs, manual definitions, hidden state and family associations.
+Reward amount differences exclude player inclusion choices. Conditional rewards are not guaranteed income.
+Quest rewards are not inspected by this source assessment.
+Old assessments without both regional reward-source records require collection again.
+Superseded assessments, changed event identities and invalid mixed date ranges cannot proceed.
+Preview fingerprints include current event and reward values for the later publication check.
+
 ### Date confirmation evidence
 
 The evidence table keeps Global source records separate from reviews and corrections.

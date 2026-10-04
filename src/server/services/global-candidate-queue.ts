@@ -53,6 +53,8 @@ export function globalCandidateRows(
       jpRecord: candidate.jpEvidence?.record ?? null,
       coverageIssues: candidate.coverageIssues,
       embeddedRewardTotals: candidate.embeddedRewardTotals,
+      embeddedRewardSources: candidate.embeddedRewardSources,
+      jpEmbeddedRewardSources: candidate.jpEmbeddedRewardSources,
     }),
     name: candidate.globalName,
     startsAt: new Date(candidate.startsAt),

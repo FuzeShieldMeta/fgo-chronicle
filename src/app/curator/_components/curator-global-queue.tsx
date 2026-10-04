@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CuratorGlobalPreview } from "./curator-global-preview";
 import { api, type RouterInputs } from "~/trpc/react";
 import {
   GLOBAL_SOURCE_LIMITS,
@@ -197,6 +198,9 @@ export function CuratorGlobalQueue({
                     >
                       Open matched event
                     </button>
+                  ) : null}
+                  {entry.targetEventId ? (
+                    <CuratorGlobalPreview candidateId={entry.id} />
                   ) : null}
                   <details>
                     <summary>Source assessment details</summary>

@@ -255,6 +255,23 @@
   background: var(--md-surface-high);
   padding: 12px;
 }
+.curator-preview-field {
+  padding-block: 12px;
+  border-top: 1px solid var(--md-outline-variant);
+}
+.curator-preview-field :is(h4, h5) {
+  margin-block: 0 8px;
+  font-size: 1rem;
+}
+.curator-preview-values {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+}
+.curator-preview-values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .curator-sr-only {
   position: absolute;
   width: 1px;

@@ -27,8 +27,15 @@ import {
   getGlobalCandidateQueue,
   globalCandidateQueueSchema,
 } from "~/server/services/global-candidate-queue";
+import {
+  getGlobalEventPreview,
+  globalEventPreviewSchema,
+} from "~/server/services/global-event-preview";
 
 export const curatorRouter = createTRPCRouter({
+  previewGlobalEvent: curatorProcedure
+    .input(globalEventPreviewSchema)
+    .query(({ ctx, input }) => getGlobalEventPreview(ctx.db, input)),
   globalCandidates: curatorProcedure
     .input(globalCandidateQueueSchema)
     .query(({ ctx, input }) => getGlobalCandidateQueue(ctx.db, input)),
