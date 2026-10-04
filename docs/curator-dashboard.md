@@ -64,6 +64,25 @@ Hidden events are excluded by default. Select the Hidden view or change the visi
 Apply the review migration before deploying these controls.
 Tracking how long records have waited for review and dismissing importer warnings are not implemented yet.
 
+## Global source assessment
+
+`npm run data:review-global-events` compares the public Atlas JP and NA event exports for the next 35 days.
+It does not connect to the database by default. It never publishes events, rewards or confirmation status.
+Use `--from=YYYY-MM-DD` and `--through=YYYY-MM-DD` after `--` to inspect another interval.
+Saved exports can be supplied with `--jp-file=PATH` and `--na-file=PATH`.
+
+To resolve candidates against existing event IDs, run:
+
+```bash
+node --env-file=.env scripts/report-global-event-candidates.mjs --include-database
+```
+
+This mode reads schedule identities and correction revisions only. It does not read player plans or curator account information.
+An associated identity requires a shared event ID, matching event type and the same non-empty war association.
+Title similarities do not establish a match. Missing associations and conflicts remain unresolved.
+The report retains Global timestamps without projecting them. Embedded reward totals do not include quest rewards.
+This is a source-assessment tool, not the automatic Global publication workflow.
+
 ## Family names
 
 Select an event, then open **Family name** if the event belongs to a family.
