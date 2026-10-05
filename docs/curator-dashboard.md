@@ -108,6 +108,8 @@ Changed source records create new assessments. Earlier versions remain available
 Collection checks curator access before retrieval and again inside the transaction.
 It rechecks matched identities before saving candidates. Candidates and their collection audit save together.
 The private queue table forces RLS and grants no client-role access.
+Collection and pagination limits live in `src/shared/global-reconciliation-config.ts`, separate from timeline layout settings.
+Apply the candidate-queue migration before deploying these controls.
 
 ### Publisher announcements
 
@@ -120,8 +122,18 @@ Collection keeps earlier article revisions and saves identical assessments only 
 Announcements remain private and unresolved. They cannot use the Atlas preview or publication workflow.
 This collection does not change events, rewards, player plans or date confirmation.
 No scheduled production importer collects these announcements.
-Collection and pagination limits live in `src/shared/global-reconciliation-config.ts`, separate from timeline layout settings.
-Apply the candidate-queue migration before deploying these controls.
+
+### Global reconciliation verification
+
+The local acceptance audit passed 575 unit/static tests and 62 database/HTTP checks.
+Checks covered identity conflicts, stale approvals, partial confirmation, source revisions, atomic audits and denied client-role access.
+A real JP re-import retained accepted Global rewards, manual additions, suppressed rewards, family corrections, banners and player references.
+Public details and progressive responses kept private source assessments and player data out of their payloads.
+A local production server returned a new publication through a warmed timeline cache without a tag invalidation call.
+The schema comparison and production build passed against a disposable database. No browser QA or production database writes ran.
+Shared-database tests ran serially because their whole-table assertions must not race with other fixtures.
+
+Apply the pending migrations to the intended database before deployment. Production migrations, deployment and scheduled reconciliation require separate approval.
 
 ### Global value previews
 

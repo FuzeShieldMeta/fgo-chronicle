@@ -570,7 +570,7 @@ function timelineWindowRange(input: TimelineWindowInput) {
   return { definition, range: { from, to } };
 }
 
-async function queryTimelineWindow(
+export async function queryTimelineWindow(
   database: TimelineDatabase,
   input: TimelineWindowInput,
 ) {
