@@ -3,12 +3,18 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { Prisma, type PrismaClient } from "../../../generated/prisma";
-import { requireCurator } from "~/server/auth/curator";
+import {
+  curatorSourceAuthority,
+  requireSourceAuthority,
+  lockSourceAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
 import { reportGlobalEvents } from "../../../scripts/lib/global-event-candidates.mjs";
 import {
   GLOBAL_SOURCE_LIMITS,
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
+import { boundedGlobalExportLoader } from "./global-export-source";
 
 export const collectGlobalCandidatesSchema = z
   .object({
@@ -91,9 +97,26 @@ export async function collectGlobalCandidates(
   rawInput: unknown,
   dependencies: Parameters<typeof reportGlobalEvents>[2] = {},
 ) {
+  return collectGlobalCandidatesWithAuthority(
+    database,
+    curatorSourceAuthority(actorId),
+    rawInput,
+    dependencies,
+  );
+}
+
+export async function collectGlobalCandidatesWithAuthority(
+  database: PrismaClient,
+  authority: GlobalSourceAuthority,
+  rawInput: unknown,
+  dependencies: Parameters<typeof reportGlobalEvents>[2] = {},
+) {
   const input = collectGlobalCandidatesSchema.parse(rawInput);
-  await requireCurator(database, actorId);
-  const report = await reportGlobalEvents(database, input, dependencies);
+  await requireSourceAuthority(database, authority);
+  const report = await reportGlobalEvents(database, input, {
+    ...dependencies,
+    loadSource: dependencies.loadSource ?? boundedGlobalExportLoader(),
+  });
   const records = globalCandidateRows(report);
   if (
     records.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords ||
@@ -111,14 +134,7 @@ export async function collectGlobalCandidates(
   }
   return database.$transaction(
     async (tx) => {
-      const users = await tx.$queryRaw<
-        Array<{ isCurator: boolean }>
-      >`SELECT "isCurator" FROM "User" WHERE "id" = ${actorId} FOR SHARE`;
-      if (users[0]?.isCurator !== true)
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Curator access is required.",
-        });
+      await lockSourceAuthority(tx, authority);
       // Serialise collectors so repeated or overlapping refreshes retain one assessment.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
       const targetIds = [
@@ -165,7 +181,7 @@ export async function collectGlobalCandidates(
       if (result.count)
         await tx.curatorChange.create({
           data: {
-            actorId,
+            actorId: authority.actorId,
             targetKind: "GLOBAL_SOURCE",
             targetId: "atlas:NA:events",
             action: "COLLECT",

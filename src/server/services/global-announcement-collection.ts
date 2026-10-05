@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
-import { requireCurator } from "~/server/auth/curator";
+import {
+  curatorSourceAuthority,
+  requireSourceAuthority,
+  lockSourceAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
 import {
   GLOBAL_ANNOUNCEMENT_LIMITS,
   GLOBAL_ANNOUNCEMENT_MATCHING,
@@ -96,8 +101,22 @@ export async function collectAnnouncements(
   rawInput: unknown,
   dependencies: Parameters<typeof loadPublisherAnnouncements>[0] = {},
 ) {
+  return collectAnnouncementsWithAuthority(
+    database,
+    curatorSourceAuthority(actorId),
+    rawInput,
+    dependencies,
+  );
+}
+
+export async function collectAnnouncementsWithAuthority(
+  database: PrismaClient,
+  authority: GlobalSourceAuthority,
+  rawInput: unknown,
+  dependencies: Parameters<typeof loadPublisherAnnouncements>[0] = {},
+) {
   collectAnnouncementsSchema.parse(rawInput);
-  await requireCurator(database, actorId);
+  await requireSourceAuthority(database, authority);
   const report = await loadPublisherAnnouncements(dependencies);
   const records = announcementCandidateRows(report);
   if (
@@ -115,14 +134,7 @@ export async function collectAnnouncements(
     });
   return database.$transaction(
     async (tx) => {
-      const users = await tx.$queryRaw<
-        Array<{ isCurator: boolean }>
-      >`SELECT "isCurator" FROM "User" WHERE "id" = ${actorId} FOR SHARE`;
-      if (users[0]?.isCurator !== true)
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Curator access is required.",
-        });
+      await lockSourceAuthority(tx, authority);
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
       const starts = report.articles.flatMap((article) =>
         article.periods.flatMap((period) => {
@@ -208,7 +220,7 @@ export async function collectAnnouncements(
       if (result.count)
         await tx.curatorChange.create({
           data: {
-            actorId,
+            actorId: authority.actorId,
             targetKind: "GLOBAL_SOURCE",
             targetId: "publisher:NA:announcements",
             action: "COLLECT",

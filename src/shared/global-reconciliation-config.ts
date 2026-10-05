@@ -35,3 +35,8 @@ export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   minNameTokens: 2,
   minNameCharacters: 12,
 } as const;
+
+export const GLOBAL_EXPORT_LIMITS = {
+  collectionTimeoutMs: 60_000,
+  maxBodyBytes: 32 * 1_024 * 1_024,
+} as const;
