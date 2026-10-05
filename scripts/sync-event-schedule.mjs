@@ -1,5 +1,6 @@
 import { PrismaClient } from "../generated/prisma/index.js";
-import { runEventSchedulePipeline } from "./lib/event-schedule-pipeline.mjs";
+import { runCompleteEventSchedule } from "../src/server/services/complete-event-schedule.js";
+import { safeSyncFailure } from "./lib/event-schedule-monitoring.mjs";
 
 const db = new PrismaClient();
 
@@ -43,15 +44,30 @@ function parseArguments(values) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const report = await runEventSchedulePipeline(db, options);
+  const secret = process.env.CRON_SECRET;
+  const request = new Request(
+    "http://localhost/internal/event-schedule-import",
+    {
+      headers: { authorization: `Bearer ${secret ?? ""}` },
+    },
+  );
+  const report = await runCompleteEventSchedule(db, options, {
+    request,
+    secret,
+  });
   console.log(JSON.stringify(report, null, 2));
+  if (
+    report.globalSources.atlas.status === "failed" ||
+    report.globalSources.publisher.status === "failed"
+  )
+    process.exitCode = 1;
 }
 
 try {
   await main();
 } catch (error) {
   console.error("Event schedule synchronisation failed.");
-  console.error(error);
+  console.error(safeSyncFailure(error));
   process.exitCode = 1;
 } finally {
   await db.$disconnect();

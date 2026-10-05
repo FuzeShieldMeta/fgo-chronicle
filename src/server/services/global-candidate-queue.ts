@@ -110,6 +110,7 @@ export async function collectGlobalCandidatesWithAuthority(
   authority: GlobalSourceAuthority,
   rawInput: unknown,
   dependencies: Parameters<typeof reportGlobalEvents>[2] = {},
+  execution: { dryRun?: boolean } = {},
 ) {
   const input = collectGlobalCandidatesSchema.parse(rawInput);
   await requireSourceAuthority(database, authority);
@@ -132,6 +133,7 @@ export async function collectGlobalCandidatesWithAuthority(
         "The source assessment exceeds the collection limit. Choose a shorter range.",
     });
   }
+  if (execution.dryRun) return { inserted: 0, examined: records.length };
   return database.$transaction(
     async (tx) => {
       await lockSourceAuthority(tx, authority);

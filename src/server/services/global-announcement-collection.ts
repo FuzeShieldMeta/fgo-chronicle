@@ -114,6 +114,7 @@ export async function collectAnnouncementsWithAuthority(
   authority: GlobalSourceAuthority,
   rawInput: unknown,
   dependencies: Parameters<typeof loadPublisherAnnouncements>[0] = {},
+  execution: { dryRun?: boolean } = {},
 ) {
   collectAnnouncementsSchema.parse(rawInput);
   await requireSourceAuthority(database, authority);
@@ -213,6 +214,13 @@ export async function collectAnnouncementsWithAuthority(
           message:
             "The matching assessment exceeds the storage limit. No records were saved.",
         });
+      if (execution.dryRun)
+        return {
+          inserted: 0,
+          examined: records.length,
+          coverageLimited: report.coverageLimited,
+          published: false as const,
+        };
       const result = await tx.globalEventCandidate.createMany({
         data: assessedRecords,
         skipDuplicates: true,

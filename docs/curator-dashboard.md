@@ -147,7 +147,19 @@ Until those checks pass, cron keeps announcement assessments private and reports
 It does not apply official family moves or change reward amounts, curator corrections or player plans.
 Atlas Global publication remains a curator action through the preview workflow.
 
-`npm run data:sync-event-schedule` runs the JP/Fandom importer only. It does not run the new server-side Global collectors.
+`npm run data:sync-event-schedule` and the daily cron use the same complete importer.
+The command reads `DATABASE_URL` and `CRON_SECRET` from `.env`. Missing or invalid authentication stops the command before any import writes.
+It runs against the database in `DATABASE_URL`, so check that target before running it.
+
+```bash
+npm run data:sync-event-schedule -- --dry-run
+npm run data:sync-event-schedule
+```
+
+Dry runs assess JP/Fandom and Global sources without saving imports, candidates, audits or output files.
+Existing `--as-of`, source-file and output flags remain available. Source-file flags apply to the JP inputs. Global collection still retrieves its fixed public sources.
+Only cron refreshes and warms the Next.js timeline cache. The local command needs no running web server.
+Global collection failures appear in the report and give the command a non-zero exit code. Successful earlier stages remain saved.
 
 ### Global reconciliation verification
 

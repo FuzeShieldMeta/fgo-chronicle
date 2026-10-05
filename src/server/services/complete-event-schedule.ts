@@ -1,0 +1,56 @@
+import type { PrismaClient } from "../../../generated/prisma";
+import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
+import { safeSyncFailure } from "../../../scripts/lib/event-schedule-monitoring.mjs";
+import { cronSourceAuthority } from "./global-source-authority";
+import { collectDailyGlobalSources } from "./global-source-cron";
+
+type Options = Parameters<typeof runEventSchedulePipeline>[1];
+type Dependencies = {
+  runSync?: typeof runEventSchedulePipeline;
+  collectGlobalSources?: typeof collectDailyGlobalSources;
+};
+
+export async function runCompleteEventSchedule(
+  database: PrismaClient,
+  options: Options,
+  authentication: { request: Request; secret: string | undefined },
+  dependencies: Dependencies = {},
+) {
+  // Check collection authority before the JP importer can write.
+  cronSourceAuthority(authentication.request, authentication.secret);
+  const report = await (dependencies.runSync ?? runEventSchedulePipeline)(
+    database,
+    options,
+  );
+  let globalSources: Awaited<ReturnType<typeof collectDailyGlobalSources>>;
+  try {
+    globalSources = await (
+      dependencies.collectGlobalSources ?? collectDailyGlobalSources
+    )(
+      database,
+      authentication.request,
+      authentication.secret,
+      options.asOf,
+      {},
+      { dryRun: options.dryRun },
+    );
+  } catch (error) {
+    globalSources = {
+      atlas: { status: "failed", inserted: 0, examined: 0 },
+      publisher: {
+        status: "failed",
+        inserted: 0,
+        examined: 0,
+        coverageLimited: false,
+      },
+      publication: "disabled",
+    };
+    console.warn(
+      JSON.stringify({
+        event: "event_schedule_global_sources_failed",
+        error: safeSyncFailure(error),
+      }),
+    );
+  }
+  return { ...report, globalSources };
+}

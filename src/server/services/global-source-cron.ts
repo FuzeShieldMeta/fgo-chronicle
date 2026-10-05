@@ -19,6 +19,7 @@ export async function collectDailyGlobalSources(
   secret: string | undefined,
   asOf: Date,
   dependencies: Dependencies = {},
+  execution: { dryRun?: boolean } = {},
 ) {
   const authority = cronSourceAuthority(request, secret);
   const from = new Date(asOf);
@@ -44,7 +45,7 @@ export async function collectDailyGlobalSources(
   try {
     const atlas = await (
       dependencies.collectAtlas ?? collectGlobalCandidatesWithAuthority
-    )(database, authority, { from, through });
+    )(database, authority, { from, through }, {}, execution);
     result.atlas = {
       status: "success",
       inserted: atlas.inserted,
@@ -62,7 +63,7 @@ export async function collectDailyGlobalSources(
   try {
     const publisher = await (
       dependencies.collectPublisher ?? collectAnnouncementsWithAuthority
-    )(database, authority, {});
+    )(database, authority, {}, {}, execution);
     result.publisher = {
       status: "success",
       inserted: publisher.inserted,

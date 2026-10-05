@@ -4,11 +4,12 @@ import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
 import { db } from "~/server/db";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { collectDailyGlobalSources } from "./global-source-cron";
+import type { collectDailyGlobalSources } from "./global-source-cron";
 import { cronSourceAuthority } from "./global-source-authority";
+import { runCompleteEventSchedule } from "./complete-event-schedule";
 import type { PrismaClient } from "../../../generated/prisma";
 
-import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
+import type { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
 import {
   safeSyncFailure,
   summariseEventSchedule,
@@ -31,16 +32,10 @@ const syncReportSchema = z.object({
   }),
 });
 
-type PipelineDatabase = Parameters<typeof runEventSchedulePipeline>[0];
-type PipelineOptions = Parameters<typeof runEventSchedulePipeline>[1];
-
 type CronDependencies = {
   database?: PrismaClient;
   now?: () => Date;
-  runSync?: (
-    database: PipelineDatabase,
-    options: PipelineOptions,
-  ) => Promise<unknown>;
+  runSync?: typeof runEventSchedulePipeline;
   invalidateCache?: () => void | Promise<void>;
   warmCache?: (asOf: Date) => Promise<void>;
   secret?: string;
@@ -79,7 +74,6 @@ export async function handleEventScheduleCron(
     return json({ ok: false, error: "Unauthorised." }, 401);
   }
 
-  const runSync = dependencies.runSync ?? runEventSchedulePipeline;
   const started = performance.now();
   const startedAt = (dependencies.now ?? (() => new Date()))().toISOString();
   const durationMs = () => Math.round(performance.now() - started);
@@ -89,40 +83,26 @@ export async function handleEventScheduleCron(
   let stage = "pipeline";
   try {
     const asOf = new Date(startedAt);
-    const rawReport: unknown = await runSync(dependencies.database ?? db, {
-      dryRun: false,
-      asOf,
-      sourceFile: null,
-      warSourceFile: null,
-      masterMissionSourceFile: null,
-      outputPath: null,
-    });
+    const rawReport = await runCompleteEventSchedule(
+      dependencies.database ?? db,
+      {
+        dryRun: false,
+        asOf,
+        sourceFile: null,
+        warSourceFile: null,
+        masterMissionSourceFile: null,
+        outputPath: null,
+      },
+      { request, secret },
+      {
+        runSync: dependencies.runSync,
+        collectGlobalSources: dependencies.collectGlobalSources,
+      },
+    );
     stage = "summary";
     const report = summariseEventSchedule(syncReportSchema.parse(rawReport));
-    stage = "global_sources";
-    let globalSources: Awaited<ReturnType<typeof collectDailyGlobalSources>>;
-    try {
-      globalSources = await (
-        dependencies.collectGlobalSources ?? collectDailyGlobalSources
-      )(dependencies.database ?? db, request, secret, asOf);
-    } catch (error) {
-      globalSources = {
-        atlas: { status: "failed", inserted: 0, examined: 0 },
-        publisher: {
-          status: "failed",
-          inserted: 0,
-          examined: 0,
-          coverageLimited: false,
-        },
-        publication: "disabled",
-      };
-      console.warn(
-        JSON.stringify({
-          event: "event_schedule_global_sources_failed",
-          error: safeSyncFailure(error),
-        }),
-      );
-    }
+    const { globalSources } = rawReport;
+    stage = "cache";
     let cacheWarmed = true;
     try {
       await (dependencies.invalidateCache ?? invalidateTimelineCache)();
