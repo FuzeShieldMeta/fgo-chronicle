@@ -38,5 +38,5 @@ export const GLOBAL_ANNOUNCEMENT_MATCHING = {
 
 export const GLOBAL_EXPORT_LIMITS = {
   collectionTimeoutMs: 60_000,
-  maxBodyBytes: 32 * 1_024 * 1_024,
+  maxBodyBytes: 64 * 1_024 * 1_024,
 } as const;

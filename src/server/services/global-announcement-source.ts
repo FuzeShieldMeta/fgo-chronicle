@@ -17,10 +17,11 @@ export async function fetchPublisherHtml(
   options: { fetchFn?: typeof fetch; signal?: AbortSignal } = {},
 ) {
   // Only fixed publisher indices and dated articles are supported. Redirects are not followed.
+  let retrievalUrl: string;
   try {
-    publisherArticleUrl(url);
+    retrievalUrl = publisherArticleUrl(url);
   } catch {
-    publisherIndexUrl(url);
+    retrievalUrl = publisherIndexUrl(url);
   }
   const signal = options.signal
     ? AbortSignal.any([
@@ -28,7 +29,7 @@ export async function fetchPublisherHtml(
         AbortSignal.timeout(LIMITS.fetchTimeoutMs),
       ])
     : AbortSignal.timeout(LIMITS.fetchTimeoutMs);
-  const response = await (options.fetchFn ?? fetch)(url, {
+  const response = await (options.fetchFn ?? fetch)(retrievalUrl, {
     headers: { accept: "text/html" },
     redirect: "manual",
     signal,

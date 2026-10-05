@@ -76,6 +76,11 @@ export function publisherArticleUrl(value: string) {
     throw new Error(
       "The announcement URL is not a supported publisher article.",
     );
+  if (!url.pathname.endsWith("/")) url.pathname += "/";
+  if (url.pathname.length > LIMITS.maxArticlePathCharacters)
+    throw new Error(
+      "The announcement URL is not a supported publisher article.",
+    );
   return url.href;
 }
 
