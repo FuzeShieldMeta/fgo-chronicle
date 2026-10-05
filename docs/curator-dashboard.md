@@ -126,7 +126,28 @@ The private assessment records the candidate IDs, matching window and rule revis
 Conflicting event periods, reruns and numbered titles have separate matching checks.
 Announcements remain private and unresolved. They cannot use the Atlas preview or publication workflow.
 This collection does not change events, rewards, player plans or date confirmation.
-No scheduled production importer collects these announcements.
+The daily cron handler now runs this collection after the JP importer. This wiring takes effect after deployment.
+
+### Daily cron
+
+Vercel calls `/api/cron/event-schedule` daily at 18:00 UTC, using `CRON_SECRET` for authentication.
+The handler runs these stages in order:
+
+1. Import the JP Atlas event, war/story and master-mission data, and reconcile Fandom event coverage and rewards.
+2. Compare Atlas JP and NA event exports for the next 90 days and save private Global source assessments.
+3. Collect recent official Global announcements and assess event matches using the 30/60/90-day search windows.
+4. Invalidate the public timeline cache and warm its progressive windows.
+
+Global collection failures produce a warning without blocking the other collector or cache refresh.
+Retrieval limits, identity checks and collection audits also apply to cron calls. Cron cannot impersonate a curator.
+Responses contain collection counts, not private article snapshots or player data.
+
+Automatic publication is not yet wired. The family-shift calculator is implemented, but date-overlay storage and atomic announcement publication are still pending.
+Until those checks pass, cron keeps announcement assessments private and reports `publication: "disabled"`.
+It does not apply official family moves or change reward amounts, curator corrections or player plans.
+Atlas Global publication remains a curator action through the preview workflow.
+
+`npm run data:sync-event-schedule` runs the JP/Fandom importer only. It does not run the new server-side Global collectors.
 
 ### Global reconciliation verification
 

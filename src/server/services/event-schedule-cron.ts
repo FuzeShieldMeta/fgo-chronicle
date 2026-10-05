@@ -4,6 +4,9 @@ import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
 import { db } from "~/server/db";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
+import { collectDailyGlobalSources } from "./global-source-cron";
+import { cronSourceAuthority } from "./global-source-authority";
+import type { PrismaClient } from "../../../generated/prisma";
 
 import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
 import {
@@ -32,7 +35,7 @@ type PipelineDatabase = Parameters<typeof runEventSchedulePipeline>[0];
 type PipelineOptions = Parameters<typeof runEventSchedulePipeline>[1];
 
 type CronDependencies = {
-  database?: PipelineDatabase;
+  database?: PrismaClient;
   now?: () => Date;
   runSync?: (
     database: PipelineDatabase,
@@ -41,6 +44,7 @@ type CronDependencies = {
   invalidateCache?: () => void | Promise<void>;
   warmCache?: (asOf: Date) => Promise<void>;
   secret?: string;
+  collectGlobalSources?: typeof collectDailyGlobalSources;
 };
 
 function invalidateTimelineCache() {
@@ -63,13 +67,15 @@ export async function handleEventScheduleCron(
   dependencies: CronDependencies = {},
 ) {
   const secret = dependencies.secret ?? env.CRON_SECRET;
-  if (!secret) {
+  if (!secret || secret.length < 16) {
     return json(
       { ok: false, error: "Event schedule synchronisation is not configured." },
       503,
     );
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  try {
+    cronSourceAuthority(request, secret);
+  } catch {
     return json({ ok: false, error: "Unauthorised." }, 401);
   }
 
@@ -93,6 +99,30 @@ export async function handleEventScheduleCron(
     });
     stage = "summary";
     const report = summariseEventSchedule(syncReportSchema.parse(rawReport));
+    stage = "global_sources";
+    let globalSources: Awaited<ReturnType<typeof collectDailyGlobalSources>>;
+    try {
+      globalSources = await (
+        dependencies.collectGlobalSources ?? collectDailyGlobalSources
+      )(dependencies.database ?? db, request, secret, asOf);
+    } catch (error) {
+      globalSources = {
+        atlas: { status: "failed", inserted: 0, examined: 0 },
+        publisher: {
+          status: "failed",
+          inserted: 0,
+          examined: 0,
+          coverageLimited: false,
+        },
+        publication: "disabled",
+      };
+      console.warn(
+        JSON.stringify({
+          event: "event_schedule_global_sources_failed",
+          error: safeSyncFailure(error),
+        }),
+      );
+    }
     let cacheWarmed = true;
     try {
       await (dependencies.invalidateCache ?? invalidateTimelineCache)();
@@ -109,13 +139,20 @@ export async function handleEventScheduleCron(
       );
     }
     const status =
-      report.totals.warningCount > 0 || !cacheWarmed ? "warning" : "success";
+      report.totals.warningCount > 0 ||
+      !cacheWarmed ||
+      globalSources.atlas.status === "failed" ||
+      globalSources.publisher.status === "failed" ||
+      globalSources.publisher.coverageLimited
+        ? "warning"
+        : "success";
     const completion = {
       startedAt,
       durationMs: durationMs(),
       status,
       cacheWarmed,
       ...report,
+      globalSources,
     };
     const log = status === "warning" ? console.warn : console.info;
     log(
