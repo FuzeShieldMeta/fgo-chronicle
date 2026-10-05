@@ -5,9 +5,20 @@ import type { Prisma, PrismaClient } from "../../../generated/prisma";
 import { requireCurator } from "~/server/auth/curator";
 import {
   GLOBAL_ANNOUNCEMENT_LIMITS,
+  GLOBAL_ANNOUNCEMENT_MATCHING,
   GLOBAL_SOURCE_LIMITS,
+  MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
 import { loadPublisherAnnouncements } from "./global-announcement-source";
+import {
+  assessAnnouncementArticle,
+  type AnnouncementMatchEvent,
+} from "./global-announcement-match";
+import { effectiveEvent } from "./effective-schedule";
+import {
+  publicEventGlobalBaselineSelect,
+  publicDateEvidenceSelect,
+} from "./global-baseline-select";
 
 export const collectAnnouncementsSchema = z.object({}).strict();
 type Report = Awaited<ReturnType<typeof loadPublisherAnnouncements>>;
@@ -18,8 +29,10 @@ const json = (value: unknown) =>
 
 export function announcementCandidateRows(
   report: Report,
+  events?: readonly AnnouncementMatchEvent[],
 ): Prisma.GlobalEventCandidateCreateManyInput[] {
   return report.articles.flatMap((article) => {
+    const matches = events ? assessAnnouncementArticle(article, events) : null;
     const shared = {
       sourceKind: article.sourceKind,
       sourceUrl: article.sourceUrl,
@@ -28,13 +41,14 @@ export function announcementCandidateRows(
       name: article.name || article.sourceRecordId,
       targetEventId: null,
     };
-    const rows = article.periods.map((period) => {
+    const rows = article.periods.map((period, index) => {
       const invalidRange = period.issues.includes("INVALID_DATE_RANGE");
       const snapshot = {
         ...period,
         articleName: article.name,
         parserRevision: GLOBAL_ANNOUNCEMENT_LIMITS.parserRevision,
         targetEventId: null,
+        ...(matches ? { matching: matches[index] } : {}),
       };
       return {
         ...shared,
@@ -110,8 +124,85 @@ export async function collectAnnouncements(
           message: "Curator access is required.",
         });
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+      const starts = report.articles.flatMap((article) =>
+        article.periods.flatMap((period) => {
+          const start = period.startsAt
+            ? new Date(period.startsAt).getTime()
+            : NaN;
+          return period.kind === "EVENT" && Number.isFinite(start)
+            ? [start]
+            : [];
+        }),
+      );
+      let events: AnnouncementMatchEvent[] = [];
+      if (starts.length) {
+        const margin =
+          GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! *
+          MILLISECONDS_PER_DAY;
+        const range = {
+          gte: new Date(Math.min(...starts) - margin),
+          lte: new Date(Math.max(...starts) + margin),
+        };
+        const candidates = await tx.event.findMany({
+          relationLoadStrategy: "join",
+          where: {
+            type: "MAIN_EVENT",
+            OR: [
+              { startsAt: range },
+              { globalBaseline: { is: { startsAt: range } } },
+              { curation: { is: { active: true, startsAt: range } } },
+            ],
+          },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            startsAt: true,
+            endsAt: true,
+            startsAtPrecision: true,
+            endsAtPrecision: true,
+            status: true,
+            updatedAt: true,
+            curation: true,
+            globalBaseline: publicEventGlobalBaselineSelect,
+            dateEvidence: publicDateEvidenceSelect,
+          },
+          orderBy: { id: "asc" },
+          take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
+        });
+        if (candidates.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "The announcement matching range contains too many events. No records were saved.",
+          });
+        events = candidates.map((event) => {
+          const effective = effectiveEvent(event);
+          return {
+            id: event.id,
+            type: event.type,
+            names: [...new Set([event.name, effective.name])],
+            startsAt: effective.startsAt,
+            projectedStartsAt: event.startsAt,
+          };
+        });
+      }
+      // Store the assessment privately. It is not an approved publication target.
+      const assessedRecords = announcementCandidateRows(report, events);
+      if (
+        assessedRecords.some(
+          (record) =>
+            Buffer.byteLength(JSON.stringify(record.snapshot), "utf8") >
+            GLOBAL_SOURCE_LIMITS.maxSnapshotBytes,
+        )
+      )
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "The matching assessment exceeds the storage limit. No records were saved.",
+        });
       const result = await tx.globalEventCandidate.createMany({
-        data: records,
+        data: assessedRecords,
         skipDuplicates: true,
       });
       if (result.count)

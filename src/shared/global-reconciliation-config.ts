@@ -28,3 +28,10 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   maxArticles: 30,
   maxIndexPages: 3,
 } as const;
+
+export const GLOBAL_ANNOUNCEMENT_MATCHING = {
+  windowDays: [30, 60, 90],
+  revision: 1,
+  minNameTokens: 2,
+  minNameCharacters: 12,
+} as const;

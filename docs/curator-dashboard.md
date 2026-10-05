@@ -119,6 +119,11 @@ Use **Source type** to filter the queue. Open **Source assessment details** to i
 Event, summon, exchange/shop and maintenance periods remain separate. Unsupported date formats and embedded content appear as review issues.
 Missing times, unknown timezones, conflicting offsets and invalid ranges do not become confirmed dates.
 Collection keeps earlier article revisions and saves identical assessments only once.
+Source assessment details now include automatic event matching against nearby Global schedule entries.
+Matching searches within 30 days of the announced start, then 60 and 90 days only when no candidate passes the identity checks.
+Ambiguous matches stop the search. Date proximity alone cannot select an event.
+The private assessment records the candidate IDs, matching window and rule revision.
+Conflicting event periods, reruns and numbered titles have separate matching checks.
 Announcements remain private and unresolved. They cannot use the Atlas preview or publication workflow.
 This collection does not change events, rewards, player plans or date confirmation.
 No scheduled production importer collects these announcements.
