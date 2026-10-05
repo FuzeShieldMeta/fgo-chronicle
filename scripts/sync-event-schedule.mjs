@@ -1,5 +1,6 @@
 import { PrismaClient } from "../generated/prisma/index.js";
 import { runCompleteEventSchedule } from "../src/server/services/complete-event-schedule.js";
+import { cliSourceAuthority } from "../src/server/services/global-source-authority.js";
 import { safeSyncFailure } from "./lib/event-schedule-monitoring.mjs";
 
 const db = new PrismaClient();
@@ -44,17 +45,11 @@ function parseArguments(values) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const secret = process.env.CRON_SECRET;
-  const request = new Request(
-    "http://localhost/internal/event-schedule-import",
-    {
-      headers: { authorization: `Bearer ${secret ?? ""}` },
-    },
+  const report = await runCompleteEventSchedule(
+    db,
+    options,
+    cliSourceAuthority(),
   );
-  const report = await runCompleteEventSchedule(db, options, {
-    request,
-    secret,
-  });
   console.log(JSON.stringify(report, null, 2));
   if (
     report.globalSources.atlas.status === "failed" ||

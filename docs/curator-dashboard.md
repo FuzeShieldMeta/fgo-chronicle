@@ -148,7 +148,8 @@ It does not apply official family moves or change reward amounts, curator correc
 Atlas Global publication remains a curator action through the preview workflow.
 
 `npm run data:sync-event-schedule` and the daily cron use the same complete importer.
-The command reads `DATABASE_URL` and `CRON_SECRET` from `.env`. Missing or invalid authentication stops the command before any import writes.
+The local command uses the database credentials in `DATABASE_URL` from `.env`. It does not require `CRON_SECRET`.
+The HTTP cron endpoint still requires `CRON_SECRET`. CLI authority is available only from the local import entry point, not from an HTTP request.
 It runs against the database in `DATABASE_URL`, so check that target before running it.
 
 ```bash

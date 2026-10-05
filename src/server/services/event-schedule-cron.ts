@@ -4,7 +4,8 @@ import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
 import { db } from "~/server/db";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import type { collectDailyGlobalSources } from "./global-source-cron";
+import type { collectGlobalSourcesWithAuthority } from "./global-source-cron";
+import type { GlobalSourceAuthority } from "./global-source-authority";
 import { cronSourceAuthority } from "./global-source-authority";
 import { runCompleteEventSchedule } from "./complete-event-schedule";
 import type { PrismaClient } from "../../../generated/prisma";
@@ -39,7 +40,7 @@ type CronDependencies = {
   invalidateCache?: () => void | Promise<void>;
   warmCache?: (asOf: Date) => Promise<void>;
   secret?: string;
-  collectGlobalSources?: typeof collectDailyGlobalSources;
+  collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
 };
 
 function invalidateTimelineCache() {
@@ -68,8 +69,9 @@ export async function handleEventScheduleCron(
       503,
     );
   }
+  let authority: GlobalSourceAuthority;
   try {
-    cronSourceAuthority(request, secret);
+    authority = cronSourceAuthority(request, secret);
   } catch {
     return json({ ok: false, error: "Unauthorised." }, 401);
   }
@@ -93,7 +95,7 @@ export async function handleEventScheduleCron(
         masterMissionSourceFile: null,
         outputPath: null,
       },
-      { request, secret },
+      authority,
       {
         runSync: dependencies.runSync,
         collectGlobalSources: dependencies.collectGlobalSources,

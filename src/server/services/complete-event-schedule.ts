@@ -1,39 +1,37 @@
 import type { PrismaClient } from "../../../generated/prisma";
 import { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
 import { safeSyncFailure } from "../../../scripts/lib/event-schedule-monitoring.mjs";
-import { cronSourceAuthority } from "./global-source-authority";
-import { collectDailyGlobalSources } from "./global-source-cron";
+import {
+  requireSourceAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
+import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 
 type Options = Parameters<typeof runEventSchedulePipeline>[1];
 type Dependencies = {
   runSync?: typeof runEventSchedulePipeline;
-  collectGlobalSources?: typeof collectDailyGlobalSources;
+  collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
 };
 
 export async function runCompleteEventSchedule(
   database: PrismaClient,
   options: Options,
-  authentication: { request: Request; secret: string | undefined },
+  authority: GlobalSourceAuthority,
   dependencies: Dependencies = {},
 ) {
   // Check collection authority before the JP importer can write.
-  cronSourceAuthority(authentication.request, authentication.secret);
+  await requireSourceAuthority(database, authority);
   const report = await (dependencies.runSync ?? runEventSchedulePipeline)(
     database,
     options,
   );
-  let globalSources: Awaited<ReturnType<typeof collectDailyGlobalSources>>;
+  let globalSources: Awaited<
+    ReturnType<typeof collectGlobalSourcesWithAuthority>
+  >;
   try {
     globalSources = await (
-      dependencies.collectGlobalSources ?? collectDailyGlobalSources
-    )(
-      database,
-      authentication.request,
-      authentication.secret,
-      options.asOf,
-      {},
-      { dryRun: options.dryRun },
-    );
+      dependencies.collectGlobalSources ?? collectGlobalSourcesWithAuthority
+    )(database, authority, options.asOf, {}, { dryRun: options.dryRun });
   } catch (error) {
     globalSources = {
       atlas: { status: "failed", inserted: 0, examined: 0 },

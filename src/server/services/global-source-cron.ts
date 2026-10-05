@@ -4,7 +4,11 @@ import {
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
 import { safeSyncFailure } from "../../../scripts/lib/event-schedule-monitoring.mjs";
-import { cronSourceAuthority } from "./global-source-authority";
+import {
+  cronSourceAuthority,
+  requireSourceAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
 import { collectGlobalCandidatesWithAuthority } from "./global-candidate-queue";
 import { collectAnnouncementsWithAuthority } from "./global-announcement-collection";
 
@@ -22,6 +26,23 @@ export async function collectDailyGlobalSources(
   execution: { dryRun?: boolean } = {},
 ) {
   const authority = cronSourceAuthority(request, secret);
+  return collectGlobalSourcesWithAuthority(
+    database,
+    authority,
+    asOf,
+    dependencies,
+    execution,
+  );
+}
+
+export async function collectGlobalSourcesWithAuthority(
+  database: PrismaClient,
+  authority: GlobalSourceAuthority,
+  asOf: Date,
+  dependencies: Dependencies = {},
+  execution: { dryRun?: boolean } = {},
+) {
+  await requireSourceAuthority(database, authority);
   const from = new Date(asOf);
   from.setUTCHours(0, 0, 0, 0);
   const through = new Date(

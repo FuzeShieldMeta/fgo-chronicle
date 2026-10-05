@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient, Prisma } from "../../../generated/prisma";
 import { requireCurator } from "~/server/auth/curator";
@@ -6,7 +7,7 @@ import { requireCurator } from "~/server/auth/curator";
 const issued = new WeakSet<object>();
 const brand: unique symbol = Symbol("global-source-authority");
 export type GlobalSourceAuthority = Readonly<{
-  kind: "CURATOR" | "CRON";
+  kind: "CURATOR" | "CRON" | "CLI";
   actorId: string;
   [brand]: true;
 }>;
@@ -19,6 +20,17 @@ function issue(kind: GlobalSourceAuthority["kind"], actorId: string) {
 
 export function curatorSourceAuthority(actorId: string) {
   return issue("CURATOR", actorId);
+}
+
+export function cliSourceAuthority() {
+  const entry = process.argv[1];
+  const expected = resolve(process.cwd(), "scripts/sync-event-schedule.mjs");
+  if (!entry || resolve(entry) !== expected)
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "CLI authority requires the local import command.",
+    });
+  return issue("CLI", "system:event-schedule-cli");
 }
 
 export function cronSourceAuthority(
