@@ -18,6 +18,7 @@ const latestReview = {
 export const reviewEventInclude = {
   curation: true,
   globalBaseline: true,
+  dateOverlay: true,
   dateEvidence: true,
   reviews: latestReview,
   rewardSources: {
@@ -26,6 +27,7 @@ export const reviewEventInclude = {
         include: {
           curation: true,
           globalBaseline: true,
+          dateOverlay: true,
           reviews: latestReview,
         },
         orderBy: { id: "asc" },
@@ -100,6 +102,7 @@ type SnapshotReward = Pick<
   | "reviewedAt"
 > & {
   curation?: ReviewReward["curation"];
+  dateOverlay?: Parameters<typeof effectiveReward>[0]["dateOverlay"];
   globalBaseline?: Parameters<typeof effectiveReward>[0]["globalBaseline"];
 };
 

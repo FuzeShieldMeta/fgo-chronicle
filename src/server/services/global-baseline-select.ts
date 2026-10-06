@@ -1,5 +1,36 @@
 import type { Prisma } from "../../../generated/prisma";
 
+export const publicScheduleDateSelect = {
+  startsAt: true,
+  endsAt: true,
+  startsAtPrecision: true,
+  endsAtPrecision: true,
+  startStatus: true,
+  endStatus: true,
+  sourceUrl: true,
+  retrievedAt: true,
+  updatedAt: true,
+} as const;
+
+export const publicEventDateOverlaySelect = {
+  select: {
+    ...publicScheduleDateSelect,
+    curationRevision: true,
+    curationStartsAt: true,
+    curationEndsAt: true,
+    curationStartPrecision: true,
+    curationEndPrecision: true,
+  },
+} satisfies Prisma.Event$dateOverlayArgs;
+
+export const publicBannerDateOverlaySelect = {
+  select: publicScheduleDateSelect,
+} satisfies Prisma.Banner$dateOverlayArgs;
+
+export const publicRewardDateOverlaySelect = {
+  select: { expectedAt: true },
+} satisfies Prisma.RewardDefinition$dateOverlayArgs;
+
 export const publicEventGlobalBaselineSelect = {
   select: {
     name: true,

@@ -3,10 +3,13 @@ import { TRPCError } from "@trpc/server";
 
 import type { Prisma } from "../../../../generated/prisma";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { effectiveBanner } from "~/server/services/effective-schedule";
+import { publicBannerDateOverlaySelect } from "~/server/services/global-baseline-select";
 
 const MAX_BANNER_RANGE_MS = 3 * 366 * 24 * 60 * 60 * 1000;
 
 const bannerRelations = {
+  dateOverlay: publicBannerDateOverlaySelect,
   featured: {
     include: {
       servant: true,
@@ -22,6 +25,21 @@ const bannerRelations = {
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
   },
 } satisfies Prisma.BannerInclude;
+
+function effectiveBannerDetails(
+  banner: Prisma.BannerGetPayload<{ include: typeof bannerRelations }>,
+) {
+  const effective = effectiveBanner(banner);
+  const offset = effective.startsAt.getTime() - banner.startsAt.getTime();
+  return {
+    ...effective,
+    summonLineups: effective.summonLineups.map((lineup) => ({
+      ...lineup,
+      startsAt: new Date(lineup.startsAt.getTime() + offset),
+      endsAt: lineup.endsAt ? new Date(lineup.endsAt.getTime() + offset) : null,
+    })),
+  };
+}
 
 const bannerRangeSchema = z
   .object({
@@ -68,20 +86,37 @@ function getBannerTiming(
 }
 
 export const bannerRouter = createTRPCRouter({
-  upcoming: publicProcedure.input(bannerRangeSchema).query(({ ctx, input }) => {
-    return ctx.db.banner.findMany({
-      where: {
-        startsAt: {
-          gte: input.from,
-          lte: input.to,
+  upcoming: publicProcedure
+    .input(bannerRangeSchema)
+    .query(async ({ ctx, input }) => {
+      const banners = await ctx.db.banner.findMany({
+        where: {
+          OR: [
+            { startsAt: { gte: input.from, lte: input.to } },
+            {
+              dateOverlay: {
+                is: { startsAt: { gte: input.from, lte: input.to } },
+              },
+            },
+          ],
         },
-      },
-      include: {
-        ...bannerRelations,
-      },
-      orderBy: [{ startsAt: "asc" }, { id: "asc" }],
-    });
-  }),
+        include: {
+          ...bannerRelations,
+        },
+        orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      });
+      return banners
+        .map(effectiveBannerDetails)
+        .filter(
+          (banner) =>
+            banner.startsAt >= input.from && banner.startsAt <= input.to,
+        )
+        .sort(
+          (a, b) =>
+            a.startsAt.getTime() - b.startsAt.getTime() ||
+            a.id.localeCompare(b.id),
+        );
+    }),
   byId: publicProcedure
     .input(
       z.object({
@@ -105,7 +140,7 @@ export const bannerRouter = createTRPCRouter({
         });
       }
 
-      return banner;
+      return effectiveBannerDetails(banner);
     }),
   searchServants: publicProcedure
     .input(
@@ -175,7 +210,7 @@ export const bannerRouter = createTRPCRouter({
 
       return {
         servant,
-        banners: banners.map((banner) => ({
+        banners: banners.map(effectiveBannerDetails).map((banner) => ({
           ...banner,
           timing: getBannerTiming(banner, asOf),
         })),

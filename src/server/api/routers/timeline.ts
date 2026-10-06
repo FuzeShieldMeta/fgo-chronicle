@@ -13,6 +13,9 @@ import {
   publicEventGlobalBaselineSelect,
   publicRewardGlobalBaselineSelect,
   publicDateEvidenceSelect,
+  publicEventDateOverlaySelect,
+  publicBannerDateOverlaySelect,
+  publicRewardDateOverlaySelect,
 } from "~/server/services/global-baseline-select";
 import {
   publicReward,
@@ -20,6 +23,7 @@ import {
 } from "~/server/services/public-reward-review";
 import {
   effectiveEvent,
+  effectiveBanner,
   effectiveFamily,
   eventIsHidden,
   overlapsRange,
@@ -125,6 +129,7 @@ const familySelect = {
 } as const;
 
 const eventSelect = {
+  dateOverlay: publicEventDateOverlaySelect,
   curation: true,
   globalBaseline: publicEventGlobalBaselineSelect,
   dateEvidence: publicDateEvidenceSelect,
@@ -147,6 +152,7 @@ const eventSelect = {
 } as const;
 
 const bannerSelect = {
+  dateOverlay: publicBannerDateOverlaySelect,
   id: true,
   name: true,
   startsAt: true,
@@ -161,6 +167,7 @@ const bannerSelect = {
 } as const;
 
 const relatedEventSelect = {
+  dateOverlay: publicEventDateOverlaySelect,
   curation: true,
   globalBaseline: publicEventGlobalBaselineSelect,
   dateEvidence: publicDateEvidenceSelect,
@@ -182,6 +189,7 @@ const relatedEventSelect = {
 } as const;
 
 const relatedBannerSelect = {
+  dateOverlay: publicBannerDateOverlaySelect,
   id: true,
   name: true,
   startsAt: true,
@@ -217,6 +225,7 @@ const rewardSourceSelect = {
   rewards: {
     select: {
       curation: true,
+      dateOverlay: publicRewardDateOverlaySelect,
       globalBaseline: publicRewardGlobalBaselineSelect,
       reviews: publicRewardReviewSelect,
       rewardSourceId: true,
@@ -236,6 +245,7 @@ const rewardSourceSelect = {
 } satisfies Prisma.RewardSourceSelect;
 
 const incomeContributionSelect = {
+  dateOverlay: publicRewardDateOverlaySelect,
   curation: true,
   globalBaseline: publicRewardGlobalBaselineSelect,
   reviews: publicRewardReviewSelect,
@@ -327,8 +337,10 @@ function restoreCacheInput(input: CachedTimelineListInput): TimelineListInput {
 
 function commonWhere(input: TimelineListInput) {
   return {
-    ...intervalWhere(input.from, input.to),
-    ...(input.statuses ? { status: { in: input.statuses } } : {}),
+    OR: [
+      intervalWhere(input.from, input.to),
+      { dateOverlay: { is: intervalWhere(input.from, input.to) } },
+    ],
     ...(input.sourceRegions
       ? { sourceRegion: { in: input.sourceRegions } }
       : {}),
@@ -384,6 +396,7 @@ type RelatedScheduleEntry = {
   curation?: Prisma.EventCurationGetPayload<Record<string, never>> | null;
   globalBaseline?: Parameters<typeof effectiveEvent>[0]["globalBaseline"];
   dateEvidence?: Parameters<typeof effectiveEvent>[0]["dateEvidence"];
+  dateOverlay?: Parameters<typeof effectiveEvent>[0]["dateOverlay"];
 };
 
 function relatedEntries(family: {
@@ -402,7 +415,7 @@ function relatedEntries(family: {
         sourceLastCheckedAt: event.lastSyncedAt ?? null,
       })),
     ...family.banners.map((banner) => ({
-      ...banner,
+      ...effectiveBanner(banner),
       key: `banner:${banner.id}`,
       kind: "BANNER" as const,
       category: "SUMMONING_CAMPAIGN" as const,
@@ -439,6 +452,7 @@ async function queryTimelineList(
             OR: [
               intervalWhere(input.from, input.to),
               { globalBaseline: { is: intervalWhere(input.from, input.to) } },
+              { dateOverlay: { is: intervalWhere(input.from, input.to) } },
               { curation: { is: { active: true } } },
             ],
             ...(input.sourceRegions
@@ -483,14 +497,21 @@ async function queryTimelineList(
         confidence: null,
         sourceLastCheckedAt: event.lastSyncedAt,
       })),
-    ...banners.map((banner) => ({
-      ...banner,
-      family: banner.family ? effectiveFamily(banner.family) : null,
-      key: `banner:${banner.id}`,
-      kind: "BANNER" as const,
-      category: "SUMMONING_CAMPAIGN" as const,
-      confidence: null,
-    })),
+    ...banners
+      .map((banner) => effectiveBanner(banner))
+      .filter(
+        (banner) =>
+          overlapsRange(banner, input.from, input.to) &&
+          (!input.statuses || input.statuses.includes(banner.status)),
+      )
+      .map((banner) => ({
+        ...banner,
+        family: banner.family ? effectiveFamily(banner.family) : null,
+        key: `banner:${banner.id}`,
+        kind: "BANNER" as const,
+        category: "SUMMONING_CAMPAIGN" as const,
+        confidence: null,
+      })),
   ].sort(compareTimelineEntries);
 }
 
@@ -503,6 +524,11 @@ async function queryIncome(
     where: {
       OR: [
         { expectedAt: { gte: input.from, lte: input.to } },
+        {
+          dateOverlay: {
+            is: { expectedAt: { gte: input.from, lte: input.to } },
+          },
+        },
         {
           globalBaseline: {
             is: { expectedAt: { gte: input.from, lte: input.to } },
@@ -701,10 +727,18 @@ export const timelineRouter = createTRPCRouter({
           });
         }
 
-        const { family, ...schedule } = banner;
+        const { family, ...schedule } = effectiveBanner(banner);
+        const offset = schedule.startsAt.getTime() - banner.startsAt.getTime();
 
         return {
           ...schedule,
+          summonLineups: schedule.summonLineups.map((lineup) => ({
+            ...lineup,
+            startsAt: new Date(lineup.startsAt.getTime() + offset),
+            endsAt: lineup.endsAt
+              ? new Date(lineup.endsAt.getTime() + offset)
+              : null,
+          })),
           key: `banner:${banner.id}`,
           kind: "BANNER" as const,
           category: "SUMMONING_CAMPAIGN" as const,

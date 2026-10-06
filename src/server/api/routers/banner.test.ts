@@ -45,6 +45,7 @@ function createBanner(
     sourceRegion: "NA",
     createdAt: new Date("2026-08-01T00:00:00Z"),
     updatedAt: new Date("2026-08-01T00:00:00Z"),
+    summonLineups: [],
     featured: [
       {
         bannerId: id,
@@ -62,6 +63,43 @@ function createBanner(
 }
 
 describe("bannerRouter.upcoming", () => {
+  it("moves lineup dates with the published banner dates", async () => {
+    const database = createDatabaseMock();
+    const startsAt = new Date("2026-10-01T00:00:00Z");
+    const endsAt = new Date("2026-10-15T00:00:00Z");
+    database.banner.findMany.mockResolvedValue([
+      {
+        ...createBanner(),
+        dateOverlay: {
+          startsAt,
+          endsAt,
+          startsAtPrecision: "EXACT",
+          endsAtPrecision: "EXACT",
+          startStatus: "OFFICIAL",
+          endStatus: "OFFICIAL",
+          sourceUrl: "https://webview.fate-go.us/2026/test/",
+          retrievedAt: startsAt,
+          updatedAt: startsAt,
+        },
+        summonLineups: [
+          {
+            id: "lineup-1",
+            startsAt: new Date("2026-09-01T00:00:00Z"),
+            endsAt: new Date("2026-09-15T00:00:00Z"),
+            featured: [],
+          },
+        ],
+      },
+    ]);
+
+    const [banner] = await createCaller(database).upcoming({
+      from: startsAt,
+      to: endsAt,
+    });
+    expect(banner?.summonLineups[0]).toMatchObject({ startsAt, endsAt });
+    expect(banner).not.toHaveProperty("dateOverlay");
+  });
+
   it("uses deterministic ordering for a valid date range", async () => {
     const database = createDatabaseMock();
     database.banner.findMany.mockResolvedValue([]);
@@ -72,7 +110,12 @@ describe("bannerRouter.upcoming", () => {
     await expect(caller.upcoming({ from, to })).resolves.toEqual([]);
     expect(database.banner.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { startsAt: { gte: from, lte: to } },
+        where: {
+          OR: [
+            { startsAt: { gte: from, lte: to } },
+            { dateOverlay: { is: { startsAt: { gte: from, lte: to } } } },
+          ],
+        },
         orderBy: [{ startsAt: "asc" }, { id: "asc" }],
       }),
     );

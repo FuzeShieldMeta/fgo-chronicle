@@ -116,6 +116,7 @@ export async function saveCuration(
             include: {
               curation: true,
               globalBaseline: true,
+              dateOverlay: true,
               dateEvidence: true,
             },
           })

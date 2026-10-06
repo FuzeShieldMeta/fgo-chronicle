@@ -8,6 +8,61 @@ type CompatibleOwnership<T> = Omit<T, "ownedFields"> & {
   ownedFields?: string[];
 };
 
+export type ScheduleDateOverlay = {
+  startsAt: Date;
+  endsAt: Date | null;
+  startsAtPrecision: "EXACT" | "DATE_ONLY";
+  endsAtPrecision: "EXACT" | "DATE_ONLY" | null;
+  startStatus: "OFFICIAL" | "CURATED" | "PROJECTED";
+  endStatus: "OFFICIAL" | "CURATED" | "PROJECTED" | null;
+  curationRevision?: number;
+  curationStartsAt?: Date | null;
+  curationEndsAt?: Date | null;
+  curationStartPrecision?: "EXACT" | "DATE_ONLY" | null;
+  curationEndPrecision?: "EXACT" | "DATE_ONLY" | null;
+  sourceUrl: string;
+  retrievedAt: Date;
+  updatedAt: Date;
+};
+
+function scheduleStatus(
+  start: ScheduleDateOverlay["startStatus"],
+  end: ScheduleDateOverlay["endStatus"],
+) {
+  const statuses = [start, end].filter((value) => value !== null);
+  return statuses.every((value) => value === "OFFICIAL")
+    ? ("OFFICIAL" as const)
+    : statuses.includes("CURATED")
+      ? ("CURATED" as const)
+      : ("PROJECTED" as const);
+}
+
+export function effectiveBanner<
+  T extends {
+    startsAt: Date;
+    endsAt: Date | null;
+    startsAtPrecision: "EXACT" | "DATE_ONLY";
+    endsAtPrecision: "EXACT" | "DATE_ONLY" | null;
+    status: "OFFICIAL" | "CURATED" | "PROJECTED";
+    updatedAt: Date;
+    dateOverlay?: ScheduleDateOverlay | null;
+  },
+>(banner: T) {
+  const { dateOverlay, ...source } = banner;
+  if (!dateOverlay) return source;
+  return {
+    ...source,
+    startsAt: dateOverlay.startsAt,
+    endsAt: dateOverlay.endsAt,
+    startsAtPrecision: dateOverlay.startsAtPrecision,
+    endsAtPrecision: dateOverlay.endsAtPrecision,
+    status: scheduleStatus(dateOverlay.startStatus, dateOverlay.endStatus),
+    updatedAt: new Date(
+      Math.max(source.updatedAt.getTime(), dateOverlay.updatedAt.getTime()),
+    ),
+  };
+}
+
 export function effectiveFamily<
   T extends {
     name: string;
@@ -38,6 +93,7 @@ type EventRecord = {
     updatedAt: Date;
   } | null;
   dateEvidence?: DateConfirmationEvidence[];
+  dateOverlay?: ScheduleDateOverlay | null;
 };
 
 export function eventIsHidden(event: {
@@ -53,7 +109,8 @@ export function eventIsHidden(event: {
 }
 
 export function effectiveEvent<T extends EventRecord>(event: T) {
-  const { curation, globalBaseline, dateEvidence, ...imported } = event;
+  const { curation, globalBaseline, dateEvidence, dateOverlay, ...imported } =
+    event;
   const source = {
     ...imported,
     ...(globalBaseline
@@ -110,12 +167,65 @@ export function effectiveEvent<T extends EventRecord>(event: T) {
               : source.status
             : null,
         };
+  const useStart =
+    dateOverlay &&
+    (dateOverlay.startStatus === "OFFICIAL" ||
+      !(
+        curation?.active &&
+        ownsField(curation, "startsAt") &&
+        curation.revision > (dateOverlay.curationRevision ?? 0) &&
+        (curation.startsAt.getTime() !==
+          dateOverlay.curationStartsAt?.getTime() ||
+          curation.startsAtPrecision !== dateOverlay.curationStartPrecision)
+      ));
+  const useEnd =
+    dateOverlay &&
+    (dateOverlay.endStatus === "OFFICIAL" ||
+      !(
+        curation?.active &&
+        ownsField(curation, "endsAt") &&
+        curation.revision > (dateOverlay.curationRevision ?? 0) &&
+        (curation.endsAt?.getTime() !== dateOverlay.curationEndsAt?.getTime() ||
+          curation.endsAtPrecision !== dateOverlay.curationEndPrecision)
+      ));
+  if (dateOverlay) {
+    if (useStart) confirmation.startsAt = dateOverlay.startStatus;
+    if (useEnd) confirmation.endsAt = dateOverlay.endStatus;
+    confirmation.status = scheduleStatus(
+      confirmation.startsAt,
+      confirmation.endsAt,
+    );
+  }
   return {
     ...effective,
+    ...(dateOverlay
+      ? {
+          ...(useStart
+            ? {
+                startsAt: dateOverlay.startsAt,
+                startsAtPrecision: dateOverlay.startsAtPrecision,
+              }
+            : {}),
+          ...(useEnd
+            ? {
+                endsAt: dateOverlay.endsAt,
+                endsAtPrecision: dateOverlay.endsAtPrecision,
+              }
+            : {}),
+          updatedAt: new Date(
+            Math.max(
+              effective.updatedAt.getTime(),
+              dateOverlay.updatedAt.getTime(),
+            ),
+          ),
+        }
+      : {}),
     status: confirmation.status,
     dateConfirmation: confirmation,
-    globalSourceUrl: globalBaseline?.sourceUrl ?? null,
-    globalRetrievedAt: globalBaseline?.retrievedAt ?? null,
+    globalSourceUrl:
+      dateOverlay?.sourceUrl ?? globalBaseline?.sourceUrl ?? null,
+    globalRetrievedAt:
+      dateOverlay?.retrievedAt ?? globalBaseline?.retrievedAt ?? null,
   };
 }
 
@@ -123,9 +233,27 @@ export function rewardDateShift(
   event: {
     startsAt: Date;
     curation?: CompatibleOwnership<EventCuration> | null;
+    dateOverlay?: ScheduleDateOverlay | null;
   } | null,
   reward?: Pick<RewardRecord, "expectedAt" | "globalBaseline">,
 ) {
+  if (event?.dateOverlay) {
+    if (
+      event.dateOverlay.startStatus === "OFFICIAL" ||
+      !event.curation?.active ||
+      event.curation.revision <= (event.dateOverlay.curationRevision ?? 0) ||
+      (event.curation.startsAt.getTime() ===
+        event.dateOverlay.curationStartsAt?.getTime() &&
+        event.curation.startsAtPrecision ===
+          event.dateOverlay.curationStartPrecision)
+    )
+      return 0;
+    return ownsField(event.curation, "startsAt") &&
+      ownsField(event.curation, "shiftRewardDates") &&
+      event.curation.shiftRewardDates
+      ? event.curation.startsAt.getTime() - event.dateOverlay.startsAt.getTime()
+      : 0;
+  }
   return event?.curation?.active &&
     ownsField(event.curation, "startsAt") &&
     ownsField(event.curation, "shiftRewardDates") &&
@@ -143,6 +271,7 @@ type RewardRecord = {
   eligibility: string | null;
   defaultIncluded: boolean;
   reviewedAt: Date | null;
+  dateOverlay?: { expectedAt: Date | null } | null;
   curation?: CompatibleOwnership<RewardCuration> | null;
   globalBaseline?: {
     itemType: string;
@@ -159,7 +288,7 @@ export function effectiveReward<T extends RewardRecord>(
   reward: T,
   shiftMs = 0,
 ) {
-  const { curation, globalBaseline, ...imported } = reward;
+  const { curation, globalBaseline, dateOverlay, ...imported } = reward;
   const source = {
     ...imported,
     ...(globalBaseline
@@ -172,6 +301,7 @@ export function effectiveReward<T extends RewardRecord>(
           defaultIncluded: globalBaseline.defaultIncluded,
         }
       : {}),
+    ...(dateOverlay ? { expectedAt: dateOverlay.expectedAt } : {}),
   };
   if (!curation?.active)
     return {
