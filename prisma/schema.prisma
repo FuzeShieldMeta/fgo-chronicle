@@ -144,33 +144,37 @@ model EventFamily {
 }
 
 model Event {
-  id                String                    @id @default(cuid())
-  sourceKey         String                    @unique
-  familyId          String?
-  name              String
-  type              EventType
-  startsAt          DateTime
-  startsAtPrecision ScheduleTimePrecision     @default(EXACT)
-  endsAt            DateTime?
-  endsAtPrecision   ScheduleTimePrecision?
-  status            ScheduleStatus
-  sourceUrl         String?
-  sourceRegion      String
-  sourceStartsAt    DateTime?
-  sourceEndsAt      DateTime?
-  projectionMethod  ScheduleProjectionMethod?
-  lastSyncedAt      DateTime?
-  sourceContentHash String?
-  family            EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
-  rewardSources     RewardSource[]
-  curation          EventCuration?
-  reviews           EventReview[]
-  dateEvidence      EventDateEvidence[]
-  globalCandidates  GlobalEventCandidate[]
-  globalBaseline    EventGlobalBaseline?
-  globalRewards     RewardGlobalBaseline[]
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  id                  String                    @id @default(cuid())
+  sourceKey           String                    @unique
+  familyId            String?
+  name                String
+  type                EventType
+  startsAt            DateTime
+  startsAtPrecision   ScheduleTimePrecision     @default(EXACT)
+  endsAt              DateTime?
+  endsAtPrecision     ScheduleTimePrecision?
+  status              ScheduleStatus
+  sourceUrl           String?
+  sourceRegion        String
+  sourceStartsAt      DateTime?
+  sourceEndsAt        DateTime?
+  projectionMethod    ScheduleProjectionMethod?
+  lastSyncedAt        DateTime?
+  sourceContentHash   String?
+  family              EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  rewardSources       RewardSource[]
+  curation            EventCuration?
+  reviews             EventReview[]
+  dateEvidence        EventDateEvidence[]
+  globalCandidates    GlobalEventCandidate[]
+  globalBaseline      EventGlobalBaseline?
+  dateOverlay         EventDateOverlay?         @relation("EventDateTarget")
+  anchoredEventDates  EventDateOverlay[]        @relation("EventDateAnchor")
+  anchoredBannerDates BannerDateOverlay[]
+  anchoredRewardDates RewardDateOverlay[]
+  globalRewards       RewardGlobalBaseline[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])
@@ -214,6 +218,7 @@ model RewardDefinition {
   curation        RewardCuration?
   reviews         RewardReview[]
   globalBaseline  RewardGlobalBaseline?
+  dateOverlay     RewardDateOverlay?
 
   @@index([rewardSourceId, expectedAt])
   @@index([itemType, expectedAt])
@@ -312,6 +317,9 @@ model GlobalEventCandidate {
   targetEvent     Event?                 @relation(fields: [targetEventId], references: [id], onDelete: Restrict)
   eventBaselines  EventGlobalBaseline[]
   rewardBaselines RewardGlobalBaseline[]
+  eventDates      EventDateOverlay[]
+  bannerDates     BannerDateOverlay[]
+  rewardDates     RewardDateOverlay[]
 
   @@unique([sourceKind, sourceRecordId, contentHash, assessmentHash], map: "GlobalEventCandidate_source_assessment_key")
   @@index([createdAt, id])
@@ -336,6 +344,70 @@ model EventGlobalBaseline {
 
   @@index([candidateId])
   @@index([startsAt])
+}
+
+model EventDateOverlay {
+  eventId                String                 @id
+  anchorEventId          String
+  candidateId            String
+  startsAt               DateTime
+  endsAt                 DateTime?
+  startsAtPrecision      ScheduleTimePrecision
+  endsAtPrecision        ScheduleTimePrecision?
+  startStatus            ScheduleStatus
+  endStatus              ScheduleStatus?
+  curationRevision       Int                    @default(0)
+  curationStartsAt       DateTime?
+  curationEndsAt         DateTime?
+  curationStartPrecision ScheduleTimePrecision?
+  curationEndPrecision   ScheduleTimePrecision?
+  sourceUrl              String
+  retrievedAt            DateTime
+  updatedAt              DateTime               @updatedAt
+  event                  Event                  @relation("EventDateTarget", fields: [eventId], references: [id], onDelete: Restrict)
+  anchor                 Event                  @relation("EventDateAnchor", fields: [anchorEventId], references: [id], onDelete: Restrict)
+  candidate              GlobalEventCandidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([anchorEventId])
+  @@index([candidateId])
+  @@index([startsAt])
+}
+
+model BannerDateOverlay {
+  bannerId          String                 @id
+  anchorEventId     String
+  candidateId       String
+  startsAt          DateTime
+  endsAt            DateTime?
+  startsAtPrecision ScheduleTimePrecision
+  endsAtPrecision   ScheduleTimePrecision?
+  startStatus       ScheduleStatus
+  endStatus         ScheduleStatus?
+  sourceUrl         String
+  retrievedAt       DateTime
+  updatedAt         DateTime               @updatedAt
+  banner            Banner                 @relation(fields: [bannerId], references: [id], onDelete: Restrict)
+  anchor            Event                  @relation(fields: [anchorEventId], references: [id], onDelete: Restrict)
+  candidate         GlobalEventCandidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([anchorEventId])
+  @@index([candidateId])
+  @@index([startsAt])
+}
+
+model RewardDateOverlay {
+  rewardId      String               @id
+  anchorEventId String
+  candidateId   String
+  expectedAt    DateTime?
+  updatedAt     DateTime             @updatedAt
+  reward        RewardDefinition     @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  anchor        Event                @relation(fields: [anchorEventId], references: [id], onDelete: Restrict)
+  candidate     GlobalEventCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([anchorEventId])
+  @@index([candidateId])
+  @@index([expectedAt])
 }
 
 model RewardGlobalBaseline {
@@ -423,6 +495,7 @@ model Banner {
   family            EventFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
   featured          BannerServant[]
   summonLineups     SummonLineup[]
+  dateOverlay       BannerDateOverlay?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
