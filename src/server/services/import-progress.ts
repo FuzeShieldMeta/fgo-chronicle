@@ -7,7 +7,17 @@ type Stage =
   | "publisher_download"
   | "publisher_matching"
   | "publisher_assessments"
-  | "official_family";
+  | "official_family"
+  | "banner_association"
+  | "official_banners"
+  | "atlas_events_download"
+  | "atlas_wars_download"
+  | "atlas_missions_download"
+  | "fandom_download"
+  | "story_publication"
+  | "atlas_publication"
+  | "fandom_publication"
+  | "mission_publication";
 type Counters = {
   attempt?: number;
   index?: number;
@@ -16,9 +26,13 @@ type Counters = {
   inserted?: number;
   publishedCount?: number;
   publicationFailures?: number;
+  pagesCompleted?: number;
+  pagesRequested?: number;
+  batchesCompleted?: number;
 };
 
 export function importFailureCategory(error: unknown) {
+  if (isImportTransactionConflict(error)) return "TRANSACTION_CONFLICT";
   const code =
     error && typeof error === "object" && "code" in error
       ? error.code
@@ -40,9 +54,23 @@ export function importFailureCategory(error: unknown) {
   return "IMPORT_ERROR";
 }
 
+export function isImportTransactionConflict(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  if (error.code === "P2034") return true;
+  if (error.code !== "P2010" || !("meta" in error)) return false;
+  const meta = error.meta;
+  return (
+    !!meta &&
+    typeof meta === "object" &&
+    "code" in meta &&
+    (meta.code === "40001" || meta.code === "40P01")
+  );
+}
+
 export function createImportProgress() {
   const runId = randomUUID();
   const startedAt = Date.now();
+  const activeStages: symbol[] = [];
   const emit = (
     stage: Stage,
     state: string,
@@ -68,7 +96,7 @@ export function createImportProgress() {
     runId,
     event(
       stage: Stage,
-      state: "transaction_acquired" | "retry",
+      state: "transaction_acquired" | "retry" | "batch_completed",
       counters: Counters = {},
     ) {
       emit(stage, state, 0, counters);
@@ -79,11 +107,13 @@ export function createImportProgress() {
       counters: Counters = {},
     ): Promise<T> {
       const start = Date.now();
+      const token = Symbol(stage);
+      activeStages.push(token);
       emit(stage, "started", 0, counters);
-      const timer = setInterval(
-        () => emit(stage, "running", Date.now() - start, counters),
-        IMPORT_EXECUTION_LIMITS.heartbeatMs,
-      );
+      const timer = setInterval(() => {
+        if (activeStages.at(-1) === token)
+          emit(stage, "running", Date.now() - start, counters);
+      }, IMPORT_EXECUTION_LIMITS.heartbeatMs);
       timer.unref();
       try {
         const result = await work();
@@ -94,6 +124,7 @@ export function createImportProgress() {
         throw error;
       } finally {
         clearInterval(timer);
+        activeStages.splice(activeStages.indexOf(token), 1);
       }
     },
   };

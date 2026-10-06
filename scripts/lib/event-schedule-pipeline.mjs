@@ -57,6 +57,7 @@ export async function writeDatasetAtomically(outputPath, dataset) {
  * @param {Record<string, any>} db
  * @param {{dryRun: boolean, asOf: Date, sourceFile: string | null, warSourceFile?: string | null, masterMissionSourceFile?: string | null, outputPath: string | null}} options
  * @param {{
+ *   progress?: import("../../src/server/services/import-progress").ImportProgress,
  *   env?: Record<string, string | undefined>,
  *   loadSourceFn?: (options: Record<string, any>, dependencies?: Record<string, any>) => Promise<string>,
  *   loadWarSourceFn?: (options: Record<string, any>, dependencies?: Record<string, any>) => Promise<string>,
@@ -68,7 +69,7 @@ export async function writeDatasetAtomically(outputPath, dataset) {
  *   buildMasterMissionsFn?: (missions: any[], options: Record<string, any>) => Record<string, any>,
  *   reconcileMasterMissionsFn?: (db: Record<string, any>, dataset: Record<string, any>, options: Record<string, any>) => Promise<Record<string, any>>,
  *   applyMasterMissionPrecedenceFn?: (fandom: Record<string, any>, missions: Record<string, any>, events: Array<Record<string, any>>) => Record<string, any>,
- *   buildCoverageFn?: (events: Array<Record<string, any>>, options: {asOf: Date}) => Promise<{dataset: Record<string, any>, supersededEvents?: Array<{sourceEventKey: string, targetEventKey: string, matchMethod: string | null, sourceName: string, targetName: string}>, report: Record<string, any>}>,
+ *   buildCoverageFn?: (events: Parameters<typeof buildFandomCoverage>[0], options: Parameters<typeof buildFandomCoverage>[1]) => Promise<{dataset: Record<string, any>, supersededEvents?: Array<{sourceEventKey: string, targetEventKey: string, matchMethod: string | null, sourceName: string, targetName: string}>, report: Record<string, any>}>,
  *   reconcileFandomFn?: (db: Record<string, any>, dataset: Record<string, any>, options: Record<string, any>) => Promise<Record<string, any>>,
  *   writeDatasetFn?: (outputPath: string, dataset: Record<string, any>) => Promise<void>,
  *   fetchFn?: (url: string, init: Record<string, any>) => Promise<{ok: boolean, status: number, text: () => Promise<string>}>,
@@ -78,6 +79,10 @@ export async function writeDatasetAtomically(outputPath, dataset) {
  * }} [dependencies]
  */
 export async function runEventSchedulePipeline(db, options, dependencies = {}) {
+  const progress = dependencies.progress;
+  /** @template T @param {Parameters<NonNullable<typeof progress>["stage"]>[0]} name @param {() => Promise<T>} work */
+  const stage = (name, work) =>
+    progress ? progress.stage(name, work) : work();
   const startedAt = new Date();
   const env = dependencies.env ?? process.env;
   const masterMissionMaxUpdates = parseIntegerSetting(
@@ -123,30 +128,36 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
     });
   }
   const loadSource = dependencies.loadSourceFn ?? loadJpEventSource;
-  const atlasBody = await loadSource(options, {
-    env,
-    fetchFn: dependencies.fetchFn,
-    readFileFn: dependencies.readFileFn,
-    delayFn: dependencies.delayFn,
-    timeoutSignal: dependencies.timeoutSignal,
-  });
+  const atlasBody = await stage("atlas_events_download", () =>
+    loadSource(options, {
+      env,
+      fetchFn: dependencies.fetchFn,
+      readFileFn: dependencies.readFileFn,
+      delayFn: dependencies.delayFn,
+      timeoutSignal: dependencies.timeoutSignal,
+    }),
+  );
   const loadWarSource = dependencies.loadWarSourceFn ?? loadJpWarSource;
-  const atlasWarBody = await loadWarSource(options, {
-    env,
-    fetchFn: dependencies.fetchFn,
-    readFileFn: dependencies.readFileFn,
-    delayFn: dependencies.delayFn,
-    timeoutSignal: dependencies.timeoutSignal,
-  });
+  const atlasWarBody = await stage("atlas_wars_download", () =>
+    loadWarSource(options, {
+      env,
+      fetchFn: dependencies.fetchFn,
+      readFileFn: dependencies.readFileFn,
+      delayFn: dependencies.delayFn,
+      timeoutSignal: dependencies.timeoutSignal,
+    }),
+  );
   const loadMasterMissionSource =
     dependencies.loadMasterMissionSourceFn ?? loadJpMasterMissionSource;
-  const atlasMasterMissionBody = await loadMasterMissionSource(options, {
-    env,
-    fetchFn: dependencies.fetchFn,
-    readFileFn: dependencies.readFileFn,
-    delayFn: dependencies.delayFn,
-    timeoutSignal: dependencies.timeoutSignal,
-  });
+  const atlasMasterMissionBody = await stage("atlas_missions_download", () =>
+    loadMasterMissionSource(options, {
+      env,
+      fetchFn: dependencies.fetchFn,
+      readFileFn: dependencies.readFileFn,
+      delayFn: dependencies.delayFn,
+      timeoutSignal: dependencies.timeoutSignal,
+    }),
+  );
   const minimumRecords = parseIntegerSetting(
     env.JP_EVENT_SYNC_MIN_EXPORT_RECORDS,
     { name: "JP_EVENT_SYNC_MIN_EXPORT_RECORDS", defaultValue: 1_000 },
@@ -183,13 +194,16 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
   });
   const supportedAtlasEvents =
     /** @type {Parameters<typeof buildFandomCoverage>[0]} */ (atlasEvents);
-  const coverage = await (dependencies.buildCoverageFn ?? buildFandomCoverage)(
-    supportedAtlasEvents,
-    {
+  /** @type {NonNullable<typeof dependencies.buildCoverageFn>} */
+  const buildCoverage = dependencies.buildCoverageFn ?? buildFandomCoverage;
+  const coverage = await stage("fandom_download", () =>
+    buildCoverage(supportedAtlasEvents, {
       asOf: options.asOf,
       rawWars: atlasWars,
       warContentHash,
-    },
+      onProgress: (counts) =>
+        progress?.event("fandom_download", "batch_completed", counts),
+    }),
   );
   const fandomPublicationDataset = (
     dependencies.applyMasterMissionPrecedenceFn ?? preferAtlasMasterMissions
@@ -207,49 +221,52 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
   );
   /** @param {Record<string, any>} publicationDb */
   const publish = async (publicationDb) => {
-    const storyReport = await reconcileStoryCatalogue(
-      publicationDb,
-      storyCatalogue,
-      options,
+    const storyReport = await stage("story_publication", () =>
+      reconcileStoryCatalogue(publicationDb, storyCatalogue, options),
     );
-    const atlasReport = await (dependencies.runAtlasSyncFn ?? runJpEventSync)(
-      publicationDb,
-      options,
-      {
+    const atlasReport = await stage("atlas_publication", () =>
+      (dependencies.runAtlasSyncFn ?? runJpEventSync)(publicationDb, options, {
         env,
         sourceBody: atlasBody,
         warSourceBody: atlasWarBody,
-      },
+      }),
     );
-    const fandomPublication = await (
-      dependencies.reconcileFandomFn ?? reconcileProjectedFandomEvents
-    )(publicationDb, fandomPublicationDataset.dataset, {
-      asOf: options.asOf,
-      dryRun: options.dryRun,
-      maxUpdates: fandomMaxUpdates,
-      maxRewardChanges: parseIntegerSetting(
-        env.FANDOM_EVENT_SYNC_MAX_REWARD_CHANGES,
+    const fandomPublication = await stage("fandom_publication", () =>
+      (dependencies.reconcileFandomFn ?? reconcileProjectedFandomEvents)(
+        publicationDb,
+        fandomPublicationDataset.dataset,
         {
-          name: "FANDOM_EVENT_SYNC_MAX_REWARD_CHANGES",
-          defaultValue: 250,
-          allowZero: true,
+          asOf: options.asOf,
+          dryRun: options.dryRun,
+          maxUpdates: fandomMaxUpdates,
+          maxRewardChanges: parseIntegerSetting(
+            env.FANDOM_EVENT_SYNC_MAX_REWARD_CHANGES,
+            {
+              name: "FANDOM_EVENT_SYNC_MAX_REWARD_CHANGES",
+              defaultValue: 250,
+              allowZero: true,
+            },
+          ),
+          supersededEvents: coverage.supersededEvents ?? [],
+          externalEventSourceKeys:
+            fandomPublicationDataset.externalEventSourceKeys ?? [],
         },
       ),
-      supersededEvents: coverage.supersededEvents ?? [],
-      externalEventSourceKeys:
-        fandomPublicationDataset.externalEventSourceKeys ?? [],
-    });
-    const masterMissionReport = await (
-      dependencies.reconcileMasterMissionsFn ?? reconcileProjectedMasterMissions
-    )(publicationDb, masterMissionDataset, {
-      dryRun: options.dryRun,
-      maxUpdates: masterMissionMaxUpdates,
-      maxAssociationUpdates: masterMissionMaxAssociationUpdates,
-      ambiguousRewardSourceKeys:
-        fandomPublicationDataset.ambiguousRewardSourceKeys ?? [],
-      eventAssociations:
-        fandomPublicationDataset.masterMissionAssociations ?? [],
-    });
+    );
+    const masterMissionReport = await stage("mission_publication", () =>
+      (
+        dependencies.reconcileMasterMissionsFn ??
+        reconcileProjectedMasterMissions
+      )(publicationDb, masterMissionDataset, {
+        dryRun: options.dryRun,
+        maxUpdates: masterMissionMaxUpdates,
+        maxAssociationUpdates: masterMissionMaxAssociationUpdates,
+        ambiguousRewardSourceKeys:
+          fandomPublicationDataset.ambiguousRewardSourceKeys ?? [],
+        eventAssociations:
+          fandomPublicationDataset.masterMissionAssociations ?? [],
+      }),
+    );
 
     return { atlasReport, fandomPublication, masterMissionReport, storyReport };
   };

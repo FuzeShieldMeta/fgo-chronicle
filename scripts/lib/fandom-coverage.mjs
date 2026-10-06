@@ -518,10 +518,27 @@ function findUpcomingCompanions(upcoming, sourceEntries, candidatePages) {
  * Build a review dataset for supported Fandom entries that the Atlas event
  * export does not contain.
  * @param {Parameters<typeof selectRollingJpEvents>[0]} rawAtlasEvents
- * @param {{asOf: Date, rawWars?: Array<Record<string, any>>, warContentHash?: string | null, now?: () => Date, fetchRevisions?: typeof fetchAllFandomRevisions, fetchCategoryMembers?: typeof fetchFandomCategoryMembers}} options
+ * @param {{asOf: Date, rawWars?: Array<Record<string, any>>, warContentHash?: string | null, now?: () => Date, fetchRevisions?: typeof fetchAllFandomRevisions, fetchCategoryMembers?: typeof fetchFandomCategoryMembers, onProgress?: (counts: {pagesCompleted: number, pagesRequested: number, batchesCompleted: number}) => void}} options
  */
 export async function buildFandomCoverage(rawAtlasEvents, options) {
-  const fetchRevisions = options.fetchRevisions ?? fetchAllFandomRevisions;
+  let pagesCompleted = 0;
+  let pagesRequested = 0;
+  let batchesCompleted = 0;
+  /** @type {typeof fetchAllFandomRevisions} */
+  const fetchRevisions = (titles) => {
+    pagesRequested += new Set(titles).size;
+    return (options.fetchRevisions ?? fetchAllFandomRevisions)(titles, {
+      onBatch: (_requested, completed) => {
+        pagesCompleted += completed;
+        batchesCompleted++;
+        options.onProgress?.({
+          pagesCompleted,
+          pagesRequested,
+          batchesCompleted,
+        });
+      },
+    });
+  };
   const fetchCategoryMembers =
     options.fetchCategoryMembers ?? fetchFandomCategoryMembers;
   const now = options.now ?? (() => new Date());

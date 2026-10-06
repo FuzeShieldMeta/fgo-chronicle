@@ -24,7 +24,9 @@ export async function runCompleteEventSchedule(
   await requireSourceAuthority(database, authority);
   const progress = createImportProgress();
   const report = await progress.stage("jp_fandom", () =>
-    (dependencies.runSync ?? runEventSchedulePipeline)(database, options),
+    (dependencies.runSync ?? runEventSchedulePipeline)(database, options, {
+      progress,
+    }),
   );
   let globalSources: Awaited<
     ReturnType<typeof collectGlobalSourcesWithAuthority>

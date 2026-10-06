@@ -227,7 +227,7 @@ export async function fetchFandomRevisions(titles, options = {}) {
 
 /**
  * @param {string[]} titles
- * @param {Parameters<typeof fetchFandomRevisions>[1]} [options]
+ * @param {Parameters<typeof fetchFandomRevisions>[1] & {onBatch?: (requested: number, completed: number) => void}} [options]
  * @returns {Promise<FandomRevisionPage[]>}
  */
 export async function fetchAllFandomRevisions(titles, options = {}) {
@@ -236,6 +236,10 @@ export async function fetchAllFandomRevisions(titles, options = {}) {
   for (let index = 0; index < unique.length; index += 50) {
     pages.push(
       ...(await fetchFandomRevisions(unique.slice(index, index + 50), options)),
+    );
+    options.onBatch?.(
+      Math.min(50, unique.length - index),
+      Math.min(50, unique.length - index),
     );
   }
   return pages;
