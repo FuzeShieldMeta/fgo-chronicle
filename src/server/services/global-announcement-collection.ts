@@ -13,6 +13,7 @@ import {
   GLOBAL_ANNOUNCEMENT_MATCHING,
   GLOBAL_SOURCE_LIMITS,
   MILLISECONDS_PER_DAY,
+  IMPORT_EXECUTION_LIMITS,
 } from "~/shared/global-reconciliation-config";
 import { loadPublisherAnnouncements } from "./global-announcement-source";
 import {
@@ -22,6 +23,7 @@ import {
 import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { publishAnnouncementFamily } from "./global-announcement-publication";
+import { createImportProgress, type ImportProgress } from "./import-progress";
 import {
   publicEventGlobalBaselineSelect,
   publicDateEvidenceSelect,
@@ -117,11 +119,18 @@ export async function collectAnnouncementsWithAuthority(
   authority: GlobalSourceAuthority,
   rawInput: unknown,
   dependencies: Parameters<typeof loadPublisherAnnouncements>[0] = {},
-  execution: { dryRun?: boolean; allowPublication?: boolean } = {},
+  execution: {
+    dryRun?: boolean;
+    allowPublication?: boolean;
+    progress?: ImportProgress;
+  } = {},
 ) {
   collectAnnouncementsSchema.parse(rawInput);
   await requireSourceAuthority(database, authority);
-  const report = await loadPublisherAnnouncements(dependencies);
+  const progress = execution.progress ?? createImportProgress();
+  const report = await progress.stage("publisher_download", () =>
+    loadPublisherAnnouncements(dependencies),
+  );
   const records = announcementCandidateRows(report);
   if (
     records.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords ||
@@ -139,6 +148,7 @@ export async function collectAnnouncementsWithAuthority(
   const collect = () =>
     database.$transaction(
       async (tx) => {
+        progress.event("publisher_assessments", "transaction_acquired");
         await lockSourceAuthority(tx, authority);
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
         const starts = report.articles.flatMap((article) =>
@@ -153,93 +163,95 @@ export async function collectAnnouncementsWithAuthority(
         );
         let events: AnnouncementMatchEvent[] = [];
         if (starts.length) {
-          const margin =
-            GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! *
-            MILLISECONDS_PER_DAY;
-          const range = {
-            gte: new Date(Math.min(...starts) - margin),
-            lte: new Date(Math.max(...starts) + margin),
-          };
-          const candidates = await tx.event.findMany({
-            relationLoadStrategy: "join",
-            where: {
-              type: "MAIN_EVENT",
-              OR: [
-                { startsAt: range },
-                { globalBaseline: { is: { startsAt: range } } },
-                { dateOverlay: { is: { startsAt: range } } },
-                { curation: { is: { active: true, startsAt: range } } },
-              ],
-            },
-            select: {
-              id: true,
-              sourceKey: true,
-              sourceRegion: true,
-              name: true,
-              type: true,
-              startsAt: true,
-              endsAt: true,
-              startsAtPrecision: true,
-              endsAtPrecision: true,
-              status: true,
-              updatedAt: true,
-              curation: true,
-              globalBaseline: publicEventGlobalBaselineSelect,
-              dateEvidence: publicDateEvidenceSelect,
-              dateOverlay: publicEventDateOverlaySelect,
-            },
-            orderBy: { id: "asc" },
-            take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
-          });
-          if (candidates.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message:
-                "The announcement matching range contains too many events. No records were saved.",
-            });
-          const sourceIds = candidates.flatMap((event) => {
-            const match = /^atlas:JP:event:(\d+):projection:NA$/.exec(
-              event.sourceKey,
-            );
-            return match ? [match[1]!] : [];
-          });
-          const aliases = sourceIds.length
-            ? await tx.globalEventCandidate.findMany({
-                where: {
-                  sourceKind: "GLOBAL_GAME_DATA",
-                  sourceRecordId: { in: sourceIds },
-                },
-                distinct: ["sourceRecordId"],
-                orderBy: [
-                  { sourceRecordId: "asc" },
-                  { retrievedAt: "desc" },
-                  { createdAt: "desc" },
-                  { id: "desc" },
-                ],
-              })
-            : [];
-          events = candidates.map((event) => {
-            const effective = effectiveEvent(event);
-            const assessment = aliases.find(
-              (alias) => alias.targetEventId === event.id,
-            );
-            const alias =
-              execution.allowPublication !== false && assessment
-                ? verifiedAtlasAlias(assessment, event)
-                : null;
-            return {
-              id: event.id,
-              type: event.type,
-              names: [
-                ...new Set([
-                  event.name,
-                  effective.name,
-                  ...(alias ? [alias] : []),
-                ]),
-              ],
-              startsAt: effective.startsAt,
-              projectedStartsAt: event.startsAt,
+          events = await progress.stage("publisher_matching", async () => {
+            const margin =
+              GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! *
+              MILLISECONDS_PER_DAY;
+            const range = {
+              gte: new Date(Math.min(...starts) - margin),
+              lte: new Date(Math.max(...starts) + margin),
             };
+            const candidates = await tx.event.findMany({
+              relationLoadStrategy: "join",
+              where: {
+                type: "MAIN_EVENT",
+                OR: [
+                  { startsAt: range },
+                  { globalBaseline: { is: { startsAt: range } } },
+                  { dateOverlay: { is: { startsAt: range } } },
+                  { curation: { is: { active: true, startsAt: range } } },
+                ],
+              },
+              select: {
+                id: true,
+                sourceKey: true,
+                sourceRegion: true,
+                name: true,
+                type: true,
+                startsAt: true,
+                endsAt: true,
+                startsAtPrecision: true,
+                endsAtPrecision: true,
+                status: true,
+                updatedAt: true,
+                curation: true,
+                globalBaseline: publicEventGlobalBaselineSelect,
+                dateEvidence: publicDateEvidenceSelect,
+                dateOverlay: publicEventDateOverlaySelect,
+              },
+              orderBy: { id: "asc" },
+              take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
+            });
+            if (candidates.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message:
+                  "The announcement matching range contains too many events. No records were saved.",
+              });
+            const sourceIds = candidates.flatMap((event) => {
+              const match = /^atlas:JP:event:(\d+):projection:NA$/.exec(
+                event.sourceKey,
+              );
+              return match ? [match[1]!] : [];
+            });
+            const aliases = sourceIds.length
+              ? await tx.globalEventCandidate.findMany({
+                  where: {
+                    sourceKind: "GLOBAL_GAME_DATA",
+                    sourceRecordId: { in: sourceIds },
+                  },
+                  distinct: ["sourceRecordId"],
+                  orderBy: [
+                    { sourceRecordId: "asc" },
+                    { retrievedAt: "desc" },
+                    { createdAt: "desc" },
+                    { id: "desc" },
+                  ],
+                })
+              : [];
+            return candidates.map((event) => {
+              const effective = effectiveEvent(event);
+              const assessment = aliases.find(
+                (alias) => alias.targetEventId === event.id,
+              );
+              const alias =
+                execution.allowPublication !== false && assessment
+                  ? verifiedAtlasAlias(assessment, event)
+                  : null;
+              return {
+                id: event.id,
+                type: event.type,
+                names: [
+                  ...new Set([
+                    event.name,
+                    effective.name,
+                    ...(alias ? [alias] : []),
+                  ]),
+                ],
+                startsAt: effective.startsAt,
+                projectedStartsAt: event.startsAt,
+              };
+            });
           });
         }
         // Store the assessment privately. It is not an approved publication target.
@@ -269,78 +281,22 @@ export async function collectAnnouncementsWithAuthority(
           data: assessedRecords,
           skipDuplicates: true,
         });
-        let publishedCount = 0;
-        let publicationFailures = 0;
-        if (execution.allowPublication !== false) {
-          const proposals = report.articles.flatMap((article) => {
-            const matches = assessAnnouncementArticle(article, events);
-            return article.periods.flatMap((period, index) => {
-              const match = matches[index]!;
-              return match.targetEventId
-                ? [{ article, period, eventId: match.targetEventId }]
-                : [];
-            });
-          });
-          const grouped = new Map<string, typeof proposals>();
-          for (const proposal of proposals)
-            grouped.set(proposal.eventId, [
-              ...(grouped.get(proposal.eventId) ?? []),
-              proposal,
-            ]);
-          for (const [eventId, group] of [...grouped].sort(([a], [b]) =>
-            a.localeCompare(b),
-          )) {
-            if (
-              new Set(
-                group.map(
-                  ({ period }) => `${period.startsAt}/${period.endsAt}`,
-                ),
-              ).size !== 1
-            ) {
-              publicationFailures++;
-              continue;
-            }
-            const proposal = [...group].sort((a, b) =>
-              a.article.sourceUrl.localeCompare(b.article.sourceUrl),
-            )[0]!;
-            const row = assessedRecords.find(
-              (record) =>
-                record.sourceRecordId === proposal.period.sourceRecordId &&
-                record.sourceUrl === proposal.article.sourceUrl,
-            )!;
-            const candidate = await tx.globalEventCandidate.findFirstOrThrow({
-              where: {
-                sourceKind: row.sourceKind,
-                sourceRecordId: row.sourceRecordId,
-                contentHash: row.contentHash,
-                assessmentHash: row.assessmentHash,
-              },
-            });
-            await tx.$executeRaw`SAVEPOINT official_family`;
-            try {
-              const publication = await publishAnnouncementFamily(
-                tx,
-                authority.actorId,
-                candidate,
-                eventId,
-              );
-              if (publication.changed) publishedCount++;
-              if (publication.reason === "CONFLICTING_OFFICIAL_ARTICLES")
-                publicationFailures++;
-              await tx.$executeRaw`RELEASE SAVEPOINT official_family`;
-            } catch {
-              await tx.$executeRaw`ROLLBACK TO SAVEPOINT official_family`;
-              await tx.$executeRaw`RELEASE SAVEPOINT official_family`;
-              publicationFailures++;
-              console.warn(
-                JSON.stringify({
-                  event: "official_family_publication_failed",
-                  eventId,
-                }),
-              );
-            }
-          }
-        }
+        if (assessedRecords.length)
+          await tx.$executeRaw`UPDATE "GlobalEventCandidate" c
+            SET "retrievedAt" = x."retrievedAt"
+            FROM jsonb_to_recordset(${JSON.stringify(
+              assessedRecords.map((record) => ({
+                sourceRecordId: record.sourceRecordId,
+                contentHash: record.contentHash,
+                assessmentHash: record.assessmentHash,
+                retrievedAt: record.retrievedAt,
+              })),
+            )}::jsonb) AS x("sourceRecordId" TEXT, "contentHash" TEXT, "assessmentHash" TEXT, "retrievedAt" TIMESTAMP)
+            WHERE c."sourceKind" = 'PUBLISHER_ANNOUNCEMENT'
+              AND c."sourceRecordId" = x."sourceRecordId"
+              AND c."contentHash" = x."contentHash"
+              AND c."assessmentHash" = x."assessmentHash"
+              AND c."retrievedAt" < x."retrievedAt"`;
         if (result.count)
           await tx.curatorChange.create({
             data: {
@@ -363,20 +319,43 @@ export async function collectAnnouncementsWithAuthority(
           inserted: result.count,
           examined: records.length,
           coverageLimited: report.coverageLimited,
-          published: publishedCount > 0,
-          publishedCount,
-          publicationFailures,
+          events,
+          assessedRecords,
         };
       },
       {
         isolationLevel: "Serializable",
         maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
-        timeout: GLOBAL_SOURCE_LIMITS.transactionTimeoutMs,
+        timeout: IMPORT_EXECUTION_LIMITS.assessmentTransactionTimeoutMs,
       },
     );
   for (let attempt = 1; ; attempt++) {
     try {
-      return await collect();
+      const stored = await progress.stage("publisher_assessments", collect, {
+        attempt,
+        timeoutMs: IMPORT_EXECUTION_LIMITS.assessmentTransactionTimeoutMs,
+      });
+      if (!stored.assessedRecords || !stored.events)
+        return {
+          inserted: stored.inserted,
+          examined: stored.examined,
+          coverageLimited: stored.coverageLimited,
+          published: false,
+          publishedCount: 0,
+          publicationFailures: 0,
+        };
+      return await publishStoredAnnouncements(
+        database,
+        authority,
+        report,
+        {
+          ...stored,
+          events: stored.events,
+          assessedRecords: stored.assessedRecords,
+        },
+        execution,
+        progress,
+      );
     } catch (error) {
       if (
         attempt >= GLOBAL_SOURCE_LIMITS.transactionAttempts ||
@@ -392,6 +371,148 @@ export async function collectAnnouncementsWithAuthority(
           GLOBAL_SOURCE_LIMITS.transactionRetryDelayMs * attempt,
         ),
       );
+      progress.event("publisher_assessments", "retry", { attempt });
     }
   }
+}
+
+async function publishStoredAnnouncements(
+  database: PrismaClient,
+  authority: GlobalSourceAuthority,
+  report: Report,
+  stored: {
+    inserted: number;
+    examined: number;
+    coverageLimited: boolean;
+    events: AnnouncementMatchEvent[];
+    assessedRecords: Prisma.GlobalEventCandidateCreateManyInput[];
+  },
+  execution: { allowPublication?: boolean },
+  progress: ImportProgress,
+) {
+  let publishedCount = 0;
+  let publicationFailures = 0;
+  const proposals =
+    execution.allowPublication === false
+      ? []
+      : report.articles.flatMap((article) => {
+          const matches = assessAnnouncementArticle(article, stored.events);
+          return article.periods.flatMap((period, index) => {
+            const match = matches[index]!;
+            return match.targetEventId
+              ? [{ article, period, eventId: match.targetEventId }]
+              : [];
+          });
+        });
+  const grouped = new Map<string, typeof proposals>();
+  for (const proposal of proposals)
+    grouped.set(proposal.eventId, [
+      ...(grouped.get(proposal.eventId) ?? []),
+      proposal,
+    ]);
+  let index = 0;
+  for (const [eventId, group] of [...grouped].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    index++;
+    if (
+      new Set(group.map(({ period }) => `${period.startsAt}/${period.endsAt}`))
+        .size !== 1
+    ) {
+      publicationFailures++;
+      continue;
+    }
+    const proposal = [...group].sort((a, b) =>
+      a.article.sourceUrl.localeCompare(b.article.sourceUrl),
+    )[0]!;
+    const row = stored.assessedRecords.find(
+      (record) =>
+        record.sourceRecordId === proposal.period.sourceRecordId &&
+        record.sourceUrl === proposal.article.sourceUrl,
+    )!;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const publication = await progress.stage(
+          "official_family",
+          () =>
+            database.$transaction(
+              async (tx) => {
+                progress.event("official_family", "transaction_acquired", {
+                  index,
+                  attempt,
+                });
+                await lockSourceAuthority(tx, authority);
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+                const candidate =
+                  await tx.globalEventCandidate.findFirstOrThrow({
+                    where: {
+                      sourceKind: row.sourceKind,
+                      sourceRecordId: row.sourceRecordId,
+                    },
+                    orderBy: [
+                      { retrievedAt: "desc" },
+                      { createdAt: "desc" },
+                      { id: "desc" },
+                    ],
+                  });
+                if (
+                  candidate.contentHash !== row.contentHash ||
+                  candidate.assessmentHash !== row.assessmentHash
+                )
+                  throw new Error(
+                    "The announcement assessment changed before publication.",
+                  );
+                return publishAnnouncementFamily(
+                  tx,
+                  authority.actorId,
+                  candidate,
+                  eventId,
+                );
+              },
+              {
+                isolationLevel: "Serializable",
+                maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
+                timeout: IMPORT_EXECUTION_LIMITS.familyTransactionTimeoutMs,
+              },
+            ),
+          {
+            index,
+            total: grouped.size,
+            attempt,
+            timeoutMs: IMPORT_EXECUTION_LIMITS.familyTransactionTimeoutMs,
+          },
+        );
+        if (publication.changed) publishedCount++;
+        if (publication.reason === "CONFLICTING_OFFICIAL_ARTICLES")
+          publicationFailures++;
+        break;
+      } catch (error) {
+        const conflict =
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "P2034";
+        if (conflict && attempt < GLOBAL_SOURCE_LIMITS.transactionAttempts) {
+          progress.event("official_family", "retry", { index, attempt });
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              GLOBAL_SOURCE_LIMITS.transactionRetryDelayMs * attempt,
+            ),
+          );
+          continue;
+        }
+        publicationFailures++;
+        break;
+      }
+    }
+  }
+  return {
+    inserted: stored.inserted,
+    examined: stored.examined,
+    coverageLimited: stored.coverageLimited,
+    published: publishedCount > 0,
+    publishedCount,
+    publicationFailures,
+  };
 }

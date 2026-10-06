@@ -1,7 +1,10 @@
 import { PrismaClient } from "../generated/prisma/index.js";
 import { runCompleteEventSchedule } from "../src/server/services/complete-event-schedule.js";
 import { cliSourceAuthority } from "../src/server/services/global-source-authority.js";
-import { safeSyncFailure } from "./lib/event-schedule-monitoring.mjs";
+import {
+  safeSyncFailure,
+  summariseEventSchedule,
+} from "./lib/event-schedule-monitoring.mjs";
 
 const db = new PrismaClient();
 
@@ -50,12 +53,21 @@ async function main() {
     options,
     cliSourceAuthority(),
   );
-  console.log(JSON.stringify(report, null, 2));
-  if (
-    report.globalSources.atlas.status === "failed" ||
-    report.globalSources.publisher.status === "failed"
-  )
-    process.exitCode = 1;
+  console.log(
+    JSON.stringify(
+      {
+        event: "import_finished",
+        runId: report.runId,
+        status: report.importStatus,
+        dryRun: options.dryRun,
+        ...summariseEventSchedule(report),
+        globalSources: report.globalSources,
+      },
+      null,
+      2,
+    ),
+  );
+  if (report.importStatus === "partial_failure") process.exitCode = 1;
 }
 
 try {

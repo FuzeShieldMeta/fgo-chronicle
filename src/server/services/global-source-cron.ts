@@ -11,6 +11,7 @@ import {
 } from "./global-source-authority";
 import { collectGlobalCandidatesWithAuthority } from "./global-candidate-queue";
 import { collectAnnouncementsWithAuthority } from "./global-announcement-collection";
+import { createImportProgress, type ImportProgress } from "./import-progress";
 
 type Dependencies = {
   collectAtlas?: typeof collectGlobalCandidatesWithAuthority;
@@ -23,7 +24,7 @@ export async function collectDailyGlobalSources(
   secret: string | undefined,
   asOf: Date,
   dependencies: Dependencies = {},
-  execution: { dryRun?: boolean } = {},
+  execution: { dryRun?: boolean; progress?: ImportProgress } = {},
 ) {
   const authority = cronSourceAuthority(request, secret);
   return collectGlobalSourcesWithAuthority(
@@ -40,9 +41,10 @@ export async function collectGlobalSourcesWithAuthority(
   authority: GlobalSourceAuthority,
   asOf: Date,
   dependencies: Dependencies = {},
-  execution: { dryRun?: boolean } = {},
+  execution: { dryRun?: boolean; progress?: ImportProgress } = {},
 ) {
   await requireSourceAuthority(database, authority);
+  const progress = execution.progress ?? createImportProgress();
   const from = new Date(asOf);
   from.setUTCHours(0, 0, 0, 0);
   const through = new Date(
@@ -66,9 +68,15 @@ export async function collectGlobalSourcesWithAuthority(
     publication: "official-dates" as "official-dates" | "blocked",
   };
   try {
-    const atlas = await (
-      dependencies.collectAtlas ?? collectGlobalCandidatesWithAuthority
-    )(database, authority, { from, through }, {}, execution);
+    const atlas = await progress.stage("atlas_global", () =>
+      (dependencies.collectAtlas ?? collectGlobalCandidatesWithAuthority)(
+        database,
+        authority,
+        { from, through },
+        {},
+        execution,
+      ),
+    );
     result.atlas = {
       status: "success",
       inserted: atlas.inserted,
@@ -91,7 +99,11 @@ export async function collectGlobalSourcesWithAuthority(
       authority,
       {},
       {},
-      { ...execution, allowPublication: result.atlas.status === "success" },
+      {
+        ...execution,
+        progress,
+        allowPublication: result.atlas.status === "success",
+      },
     );
     if (result.atlas.status !== "success") result.publication = "blocked";
     result.publisher = {

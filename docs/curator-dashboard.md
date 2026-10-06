@@ -144,7 +144,7 @@ Global collection failures produce a warning without blocking the other collecto
 Retrieval limits, identity checks and collection audits also apply to cron calls. Cron cannot impersonate a curator.
 Responses contain collection counts, not private article snapshots or player data.
 
-Announcement publication saves date-only overlays, official evidence and change history in one transaction.
+Announcement assessments commit before publication. Each family then saves its date-only overlays, official evidence and change history in a separate transaction. A failed family leaves the assessments and other completed families intact.
 Only directly confirmed boundaries become official. Shifted family members keep their previous confirmation level.
 Date overlays survive later imports without freezing reward amounts. Conflicting articles and invalid family moves need review.
 An Atlas collection failure blocks automatic publication for that run. Cron reports publication and failure counts.
@@ -164,6 +164,10 @@ npm run data:sync-event-schedule
 Dry runs assess JP/Fandom and Global sources without saving imports, candidates, audits or output files.
 Existing `--as-of`, source-file and output flags remain available. Source-file flags apply to the JP inputs. Global collection still retrieves its fixed public sources.
 Only cron refreshes and warms the Next.js timeline cache. The local command needs no running web server.
+
+The CLI prints stage timings, a heartbeat every 15 seconds and a compact final summary. A partial failure returns a non-zero exit code. The overall `importStatus` covers Global collection and publication. The older `EVENT_SCHEDULE_PIPELINE` database status covers only the JP/Fandom stage.
+
+Progress logs include a run ID and distinguish transaction acquisition failures from expiry when Prisma supplies that information. They do not include raw database errors or source snapshots. Assessment transactions have a 30-second limit. Each family publication has a 60-second limit. These importer limits are separate from curator edit limits.
 Global collection failures appear in the report and give the command a non-zero exit code. Successful earlier stages remain saved.
 
 ### Global reconciliation verification

@@ -77,6 +77,7 @@ export async function publishAnnouncementFamily(
   await tx.$queryRaw`SELECT s."id" FROM "RewardSource" s JOIN "Event" e ON e."id" = s."eventId" WHERE e."id" = ${eventId} OR e."familyId" = ${target.familyId} ORDER BY s."id" FOR UPDATE OF s`;
   await tx.$queryRaw`SELECT r."id" FROM "RewardDefinition" r JOIN "RewardSource" s ON s."id" = r."rewardSourceId" JOIN "Event" e ON e."id" = s."eventId" WHERE e."id" = ${eventId} OR e."familyId" = ${target.familyId} ORDER BY r."id" FOR UPDATE OF r`;
   const events = await tx.event.findMany({
+    relationLoadStrategy: "join",
     where: target.familyId ? { familyId: target.familyId } : { id: eventId },
     include: reviewEventInclude,
     orderBy: { id: "asc" },
@@ -151,6 +152,7 @@ export async function publishAnnouncementFamily(
   }
   const banners = target.familyId
     ? await tx.banner.findMany({
+        relationLoadStrategy: "join",
         where: { familyId: target.familyId },
         include: { dateOverlay: true },
         orderBy: { id: "asc" },

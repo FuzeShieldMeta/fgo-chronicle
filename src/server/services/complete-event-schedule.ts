@@ -6,6 +6,7 @@ import {
   type GlobalSourceAuthority,
 } from "./global-source-authority";
 import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
+import { createImportProgress } from "./import-progress";
 
 type Options = Parameters<typeof runEventSchedulePipeline>[1];
 type Dependencies = {
@@ -21,9 +22,9 @@ export async function runCompleteEventSchedule(
 ) {
   // Check collection authority before the JP importer can write.
   await requireSourceAuthority(database, authority);
-  const report = await (dependencies.runSync ?? runEventSchedulePipeline)(
-    database,
-    options,
+  const progress = createImportProgress();
+  const report = await progress.stage("jp_fandom", () =>
+    (dependencies.runSync ?? runEventSchedulePipeline)(database, options),
   );
   let globalSources: Awaited<
     ReturnType<typeof collectGlobalSourcesWithAuthority>
@@ -31,7 +32,13 @@ export async function runCompleteEventSchedule(
   try {
     globalSources = await (
       dependencies.collectGlobalSources ?? collectGlobalSourcesWithAuthority
-    )(database, authority, options.asOf, {}, { dryRun: options.dryRun });
+    )(
+      database,
+      authority,
+      options.asOf,
+      {},
+      { dryRun: options.dryRun, progress },
+    );
   } catch (error) {
     globalSources = {
       atlas: { status: "failed", inserted: 0, examined: 0 },
@@ -52,5 +59,16 @@ export async function runCompleteEventSchedule(
       }),
     );
   }
-  return { ...report, globalSources };
+  const failed =
+    globalSources.atlas.status === "failed" ||
+    globalSources.publisher.status === "failed" ||
+    globalSources.publisher.publicationFailures > 0;
+  return {
+    ...report,
+    globalSources,
+    runId: progress.runId,
+    importStatus: failed
+      ? ("partial_failure" as const)
+      : ("succeeded" as const),
+  };
 }

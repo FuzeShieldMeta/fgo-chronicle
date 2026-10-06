@@ -42,3 +42,9 @@ export const GLOBAL_EXPORT_LIMITS = {
   collectionTimeoutMs: 60_000,
   maxBodyBytes: 64 * 1_024 * 1_024,
 } as const;
+
+export const IMPORT_EXECUTION_LIMITS = {
+  heartbeatMs: 15_000,
+  assessmentTransactionTimeoutMs: 30_000,
+  familyTransactionTimeoutMs: 60_000,
+} as const;
