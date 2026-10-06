@@ -60,8 +60,10 @@ export async function collectGlobalSourcesWithAuthority(
       inserted: 0,
       examined: 0,
       coverageLimited: false,
+      publishedCount: 0,
+      publicationFailures: 0,
     },
-    publication: "disabled" as const,
+    publication: "official-dates" as "official-dates" | "blocked",
   };
   try {
     const atlas = await (
@@ -84,14 +86,24 @@ export async function collectGlobalSourcesWithAuthority(
   try {
     const publisher = await (
       dependencies.collectPublisher ?? collectAnnouncementsWithAuthority
-    )(database, authority, {}, {}, execution);
+    )(
+      database,
+      authority,
+      {},
+      {},
+      { ...execution, allowPublication: result.atlas.status === "success" },
+    );
+    if (result.atlas.status !== "success") result.publication = "blocked";
     result.publisher = {
       status: "success",
       inserted: publisher.inserted,
       examined: publisher.examined,
       coverageLimited: publisher.coverageLimited,
+      publishedCount: publisher.publishedCount ?? 0,
+      publicationFailures: publisher.publicationFailures ?? 0,
     };
   } catch (error) {
+    result.publication = "blocked";
     console.warn(
       JSON.stringify({
         event: "global_source_collection_failed",

@@ -20,9 +20,12 @@ import {
   type AnnouncementMatchEvent,
 } from "./global-announcement-match";
 import { effectiveEvent } from "./effective-schedule";
+import { verifiedAtlasAlias } from "./global-announcement-alias";
+import { publishAnnouncementFamily } from "./global-announcement-publication";
 import {
   publicEventGlobalBaselineSelect,
   publicDateEvidenceSelect,
+  publicEventDateOverlaySelect,
 } from "./global-baseline-select";
 
 export const collectAnnouncementsSchema = z.object({}).strict();
@@ -114,7 +117,7 @@ export async function collectAnnouncementsWithAuthority(
   authority: GlobalSourceAuthority,
   rawInput: unknown,
   dependencies: Parameters<typeof loadPublisherAnnouncements>[0] = {},
-  execution: { dryRun?: boolean } = {},
+  execution: { dryRun?: boolean; allowPublication?: boolean } = {},
 ) {
   collectAnnouncementsSchema.parse(rawInput);
   await requireSourceAuthority(database, authority);
@@ -133,126 +136,262 @@ export async function collectAnnouncementsWithAuthority(
       message:
         "The publisher assessment exceeds the collection limit. No records were saved.",
     });
-  return database.$transaction(
-    async (tx) => {
-      await lockSourceAuthority(tx, authority);
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
-      const starts = report.articles.flatMap((article) =>
-        article.periods.flatMap((period) => {
-          const start = period.startsAt
-            ? new Date(period.startsAt).getTime()
-            : NaN;
-          return period.kind === "EVENT" && Number.isFinite(start)
-            ? [start]
+  const collect = () =>
+    database.$transaction(
+      async (tx) => {
+        await lockSourceAuthority(tx, authority);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+        const starts = report.articles.flatMap((article) =>
+          article.periods.flatMap((period) => {
+            const start = period.startsAt
+              ? new Date(period.startsAt).getTime()
+              : NaN;
+            return period.kind === "EVENT" && Number.isFinite(start)
+              ? [start]
+              : [];
+          }),
+        );
+        let events: AnnouncementMatchEvent[] = [];
+        if (starts.length) {
+          const margin =
+            GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! *
+            MILLISECONDS_PER_DAY;
+          const range = {
+            gte: new Date(Math.min(...starts) - margin),
+            lte: new Date(Math.max(...starts) + margin),
+          };
+          const candidates = await tx.event.findMany({
+            relationLoadStrategy: "join",
+            where: {
+              type: "MAIN_EVENT",
+              OR: [
+                { startsAt: range },
+                { globalBaseline: { is: { startsAt: range } } },
+                { dateOverlay: { is: { startsAt: range } } },
+                { curation: { is: { active: true, startsAt: range } } },
+              ],
+            },
+            select: {
+              id: true,
+              sourceKey: true,
+              sourceRegion: true,
+              name: true,
+              type: true,
+              startsAt: true,
+              endsAt: true,
+              startsAtPrecision: true,
+              endsAtPrecision: true,
+              status: true,
+              updatedAt: true,
+              curation: true,
+              globalBaseline: publicEventGlobalBaselineSelect,
+              dateEvidence: publicDateEvidenceSelect,
+              dateOverlay: publicEventDateOverlaySelect,
+            },
+            orderBy: { id: "asc" },
+            take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
+          });
+          if (candidates.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "The announcement matching range contains too many events. No records were saved.",
+            });
+          const sourceIds = candidates.flatMap((event) => {
+            const match = /^atlas:JP:event:(\d+):projection:NA$/.exec(
+              event.sourceKey,
+            );
+            return match ? [match[1]!] : [];
+          });
+          const aliases = sourceIds.length
+            ? await tx.globalEventCandidate.findMany({
+                where: {
+                  sourceKind: "GLOBAL_GAME_DATA",
+                  sourceRecordId: { in: sourceIds },
+                },
+                distinct: ["sourceRecordId"],
+                orderBy: [
+                  { sourceRecordId: "asc" },
+                  { retrievedAt: "desc" },
+                  { createdAt: "desc" },
+                  { id: "desc" },
+                ],
+              })
             : [];
-        }),
-      );
-      let events: AnnouncementMatchEvent[] = [];
-      if (starts.length) {
-        const margin =
-          GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! *
-          MILLISECONDS_PER_DAY;
-        const range = {
-          gte: new Date(Math.min(...starts) - margin),
-          lte: new Date(Math.max(...starts) + margin),
-        };
-        const candidates = await tx.event.findMany({
-          relationLoadStrategy: "join",
-          where: {
-            type: "MAIN_EVENT",
-            OR: [
-              { startsAt: range },
-              { globalBaseline: { is: { startsAt: range } } },
-              { curation: { is: { active: true, startsAt: range } } },
-            ],
-          },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            startsAt: true,
-            endsAt: true,
-            startsAtPrecision: true,
-            endsAtPrecision: true,
-            status: true,
-            updatedAt: true,
-            curation: true,
-            globalBaseline: publicEventGlobalBaselineSelect,
-            dateEvidence: publicDateEvidenceSelect,
-          },
-          orderBy: { id: "asc" },
-          take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
-        });
-        if (candidates.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
+          events = candidates.map((event) => {
+            const effective = effectiveEvent(event);
+            const assessment = aliases.find(
+              (alias) => alias.targetEventId === event.id,
+            );
+            const alias =
+              execution.allowPublication !== false && assessment
+                ? verifiedAtlasAlias(assessment, event)
+                : null;
+            return {
+              id: event.id,
+              type: event.type,
+              names: [
+                ...new Set([
+                  event.name,
+                  effective.name,
+                  ...(alias ? [alias] : []),
+                ]),
+              ],
+              startsAt: effective.startsAt,
+              projectedStartsAt: event.startsAt,
+            };
+          });
+        }
+        // Store the assessment privately. It is not an approved publication target.
+        const assessedRecords = announcementCandidateRows(report, events);
+        if (
+          assessedRecords.some(
+            (record) =>
+              Buffer.byteLength(JSON.stringify(record.snapshot), "utf8") >
+              GLOBAL_SOURCE_LIMITS.maxSnapshotBytes,
+          )
+        )
           throw new TRPCError({
             code: "BAD_REQUEST",
             message:
-              "The announcement matching range contains too many events. No records were saved.",
+              "The matching assessment exceeds the storage limit. No records were saved.",
           });
-        events = candidates.map((event) => {
-          const effective = effectiveEvent(event);
+        if (execution.dryRun)
           return {
-            id: event.id,
-            type: event.type,
-            names: [...new Set([event.name, effective.name])],
-            startsAt: effective.startsAt,
-            projectedStartsAt: event.startsAt,
+            inserted: 0,
+            examined: records.length,
+            coverageLimited: report.coverageLimited,
+            published: false as const,
+            publishedCount: 0,
+            publicationFailures: 0,
           };
+        const result = await tx.globalEventCandidate.createMany({
+          data: assessedRecords,
+          skipDuplicates: true,
         });
-      }
-      // Store the assessment privately. It is not an approved publication target.
-      const assessedRecords = announcementCandidateRows(report, events);
-      if (
-        assessedRecords.some(
-          (record) =>
-            Buffer.byteLength(JSON.stringify(record.snapshot), "utf8") >
-            GLOBAL_SOURCE_LIMITS.maxSnapshotBytes,
-        )
-      )
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "The matching assessment exceeds the storage limit. No records were saved.",
-        });
-      if (execution.dryRun)
+        let publishedCount = 0;
+        let publicationFailures = 0;
+        if (execution.allowPublication !== false) {
+          const proposals = report.articles.flatMap((article) => {
+            const matches = assessAnnouncementArticle(article, events);
+            return article.periods.flatMap((period, index) => {
+              const match = matches[index]!;
+              return match.targetEventId
+                ? [{ article, period, eventId: match.targetEventId }]
+                : [];
+            });
+          });
+          const grouped = new Map<string, typeof proposals>();
+          for (const proposal of proposals)
+            grouped.set(proposal.eventId, [
+              ...(grouped.get(proposal.eventId) ?? []),
+              proposal,
+            ]);
+          for (const [eventId, group] of [...grouped].sort(([a], [b]) =>
+            a.localeCompare(b),
+          )) {
+            if (
+              new Set(
+                group.map(
+                  ({ period }) => `${period.startsAt}/${period.endsAt}`,
+                ),
+              ).size !== 1
+            ) {
+              publicationFailures++;
+              continue;
+            }
+            const proposal = [...group].sort((a, b) =>
+              a.article.sourceUrl.localeCompare(b.article.sourceUrl),
+            )[0]!;
+            const row = assessedRecords.find(
+              (record) =>
+                record.sourceRecordId === proposal.period.sourceRecordId &&
+                record.sourceUrl === proposal.article.sourceUrl,
+            )!;
+            const candidate = await tx.globalEventCandidate.findFirstOrThrow({
+              where: {
+                sourceKind: row.sourceKind,
+                sourceRecordId: row.sourceRecordId,
+                contentHash: row.contentHash,
+                assessmentHash: row.assessmentHash,
+              },
+            });
+            await tx.$executeRaw`SAVEPOINT official_family`;
+            try {
+              const publication = await publishAnnouncementFamily(
+                tx,
+                authority.actorId,
+                candidate,
+                eventId,
+              );
+              if (publication.changed) publishedCount++;
+              if (publication.reason === "CONFLICTING_OFFICIAL_ARTICLES")
+                publicationFailures++;
+              await tx.$executeRaw`RELEASE SAVEPOINT official_family`;
+            } catch {
+              await tx.$executeRaw`ROLLBACK TO SAVEPOINT official_family`;
+              await tx.$executeRaw`RELEASE SAVEPOINT official_family`;
+              publicationFailures++;
+              console.warn(
+                JSON.stringify({
+                  event: "official_family_publication_failed",
+                  eventId,
+                }),
+              );
+            }
+          }
+        }
+        if (result.count)
+          await tx.curatorChange.create({
+            data: {
+              actorId: authority.actorId,
+              targetKind: "GLOBAL_SOURCE",
+              targetId: "publisher:NA:announcements",
+              action: "COLLECT",
+              reason: "Collected publisher announcement candidates for review.",
+              before: { published: false },
+              after: {
+                inserted: result.count,
+                examined: records.length,
+                articles: report.articles.length,
+                coverageLimited: report.coverageLimited,
+                published: false,
+              },
+            },
+          });
         return {
-          inserted: 0,
+          inserted: result.count,
           examined: records.length,
           coverageLimited: report.coverageLimited,
-          published: false as const,
+          published: publishedCount > 0,
+          publishedCount,
+          publicationFailures,
         };
-      const result = await tx.globalEventCandidate.createMany({
-        data: assessedRecords,
-        skipDuplicates: true,
-      });
-      if (result.count)
-        await tx.curatorChange.create({
-          data: {
-            actorId: authority.actorId,
-            targetKind: "GLOBAL_SOURCE",
-            targetId: "publisher:NA:announcements",
-            action: "COLLECT",
-            reason: "Collected publisher announcement candidates for review.",
-            before: { published: false },
-            after: {
-              inserted: result.count,
-              examined: records.length,
-              articles: report.articles.length,
-              coverageLimited: report.coverageLimited,
-              published: false,
-            },
-          },
-        });
-      return {
-        inserted: result.count,
-        examined: records.length,
-        coverageLimited: report.coverageLimited,
-        published: false as const,
-      };
-    },
-    {
-      maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
-      timeout: GLOBAL_SOURCE_LIMITS.transactionTimeoutMs,
-    },
-  );
+      },
+      {
+        isolationLevel: "Serializable",
+        maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
+        timeout: GLOBAL_SOURCE_LIMITS.transactionTimeoutMs,
+      },
+    );
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await collect();
+    } catch (error) {
+      if (
+        attempt >= GLOBAL_SOURCE_LIMITS.transactionAttempts ||
+        !error ||
+        typeof error !== "object" ||
+        !("code" in error) ||
+        error.code !== "P2034"
+      )
+        throw error;
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          GLOBAL_SOURCE_LIMITS.transactionRetryDelayMs * attempt,
+        ),
+      );
+    }
+  }
 }

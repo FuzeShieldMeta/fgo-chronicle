@@ -12,6 +12,8 @@ export const GLOBAL_SOURCE_LIMITS = {
   maxPublicationReasonLength: 1_000,
   transactionMaxWaitMs: 5_000,
   transactionTimeoutMs: 15_000,
+  transactionAttempts: 3,
+  transactionRetryDelayMs: 25,
 } as const;
 
 export const GLOBAL_ANNOUNCEMENT_LIMITS = {

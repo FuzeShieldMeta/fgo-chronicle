@@ -180,6 +180,21 @@ export async function collectGlobalCandidatesWithAuthority(
         data: records,
         skipDuplicates: true,
       });
+      if (records.length)
+        await tx.$executeRaw`UPDATE "GlobalEventCandidate" c
+        SET "retrievedAt" = x."retrievedAt"
+        FROM jsonb_to_recordset(${JSON.stringify(
+          records.map((record) => ({
+            sourceKind: record.sourceKind,
+            sourceRecordId: record.sourceRecordId,
+            contentHash: record.contentHash,
+            assessmentHash: record.assessmentHash,
+            retrievedAt: record.retrievedAt,
+          })),
+        )}::jsonb) AS x("sourceKind" TEXT, "sourceRecordId" TEXT, "contentHash" TEXT, "assessmentHash" TEXT, "retrievedAt" TIMESTAMP)
+        WHERE c."sourceKind" = x."sourceKind" AND c."sourceRecordId" = x."sourceRecordId"
+          AND c."contentHash" = x."contentHash" AND c."assessmentHash" = x."assessmentHash"
+          AND c."retrievedAt" < x."retrievedAt"`;
       if (result.count)
         await tx.curatorChange.create({
           data: {
@@ -225,7 +240,10 @@ export async function getGlobalCandidateQueue(
   const [entries, total] = await Promise.all([
     database.globalEventCandidate.findMany({
       where,
-      include: { eventBaselines: { select: { eventId: true }, take: 1 } },
+      include: {
+        eventBaselines: { select: { eventId: true }, take: 1 },
+        eventDates: { select: { eventId: true }, take: 1 },
+      },
       orderBy:
         input.sort === "EARLIEST"
           ? [
@@ -240,9 +258,10 @@ export async function getGlobalCandidateQueue(
     database.globalEventCandidate.count({ where }),
   ]);
   return {
-    entries: entries.map(({ eventBaselines, ...entry }) => ({
+    entries: entries.map(({ eventBaselines, eventDates, ...entry }) => ({
       ...entry,
-      published: eventBaselines.length > 0,
+      targetEventId: entry.targetEventId ?? eventDates[0]?.eventId ?? null,
+      published: eventBaselines.length > 0 || eventDates.length > 0,
     })),
     total,
     page: input.page,

@@ -125,7 +125,8 @@ export async function handleEventScheduleCron(
       !cacheWarmed ||
       globalSources.atlas.status === "failed" ||
       globalSources.publisher.status === "failed" ||
-      globalSources.publisher.coverageLimited
+      globalSources.publisher.coverageLimited ||
+      globalSources.publisher.publicationFailures > 0
         ? "warning"
         : "success";
     const completion = {

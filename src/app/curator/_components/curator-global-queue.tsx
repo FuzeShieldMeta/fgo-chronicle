@@ -51,7 +51,7 @@ export function CuratorGlobalQueue({
   const announcements = api.curator.collectAnnouncements.useMutation({
     onSuccess: async (result) => {
       setNotice(
-        `Collected ${result.inserted} new announcement assessments. Nothing was published.${result.coverageLimited ? " Collection reached its coverage limit." : ""}`,
+        `Collected ${result.inserted} new announcement assessments. Updated official dates for ${result.publishedCount} events.${result.publicationFailures ? ` ${result.publicationFailures} matches need review.` : ""}${result.coverageLimited ? " Collection reached its coverage limit." : ""}`,
       );
       setInput((current) => ({
         ...current,
@@ -60,6 +60,11 @@ export function CuratorGlobalQueue({
       }));
       try {
         await utils.curator.globalCandidates.invalidate();
+        if (result.published)
+          await Promise.all([
+            utils.curator.invalidate(),
+            utils.timeline.invalidate(),
+          ]);
       } catch {
         setNotice(
           "Announcement assessments were saved. Reload the queue to see them.",
@@ -136,10 +141,10 @@ export function CuratorGlobalQueue({
             : "Collect publisher announcements"}
         </button>
         <p>
-          Checks recent official news and maintenance articles. Extracted
-          periods and unsupported formats stay private for review. Announcements
-          cannot be published from this queue. The date range above applies only
-          to Atlas records.
+          Checks recent official news and maintenance articles. Unique event
+          matches update official dates and relative family dates. Other periods
+          and unsupported formats stay in the review queue. The date range above
+          applies only to Atlas records.
         </p>
       </div>
       {notice ? (

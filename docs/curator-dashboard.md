@@ -124,8 +124,10 @@ Matching searches within 30 days of the announced start, then 60 and 90 days onl
 Ambiguous matches stop the search. Date proximity alone cannot select an event.
 The private assessment records the candidate IDs, matching window and rule revision.
 Conflicting event periods, reruns and numbered titles have separate matching checks.
-Announcements remain private and unresolved. They cannot use the Atlas preview or publication workflow.
-This collection does not change events, rewards, player plans or date confirmation.
+Matching also uses Atlas NA English names linked by the shared JP/NA event ID and verified war associations.
+Unique valid event matches automatically confirm the announced dates and move relative family dates.
+Curator names, reward amounts, explicit reward dates and player plans remain unchanged.
+Other periods and unresolved matches stay private. They cannot use the Atlas preview or publication workflow.
 The daily cron handler now runs this collection after the JP importer. This wiring takes effect after deployment.
 
 ### Daily cron
@@ -135,16 +137,18 @@ The handler runs these stages in order:
 
 1. Import the JP Atlas event, war/story and master-mission data, and reconcile Fandom event coverage and rewards.
 2. Compare Atlas JP and NA event exports for the next 90 days and save private Global source assessments.
-3. Collect recent official Global announcements and assess event matches using the 30/60/90-day search windows.
+3. Collect recent official Global announcements, match events using the 30/60/90-day windows, and apply verified official dates.
 4. Invalidate the public timeline cache and warm its progressive windows.
 
 Global collection failures produce a warning without blocking the other collector or cache refresh.
 Retrieval limits, identity checks and collection audits also apply to cron calls. Cron cannot impersonate a curator.
 Responses contain collection counts, not private article snapshots or player data.
 
-Automatic publication is not yet wired. The family-shift calculator is implemented, but date-overlay storage and atomic announcement publication are still pending.
-Until those checks pass, cron keeps announcement assessments private and reports `publication: "disabled"`.
-It does not apply official family moves or change reward amounts, curator corrections or player plans.
+Announcement publication saves date-only overlays, official evidence and change history in one transaction.
+Only directly confirmed boundaries become official. Shifted family members keep their previous confirmation level.
+Date overlays survive later imports without freezing reward amounts. Conflicting articles and invalid family moves need review.
+An Atlas collection failure blocks automatic publication for that run. Cron reports publication and failure counts.
+Apply the date-overlay migration before deploying this version. The importer does not apply migrations itself.
 Atlas Global publication remains a curator action through the preview workflow.
 
 `npm run data:sync-event-schedule` and the daily cron use the same complete importer.

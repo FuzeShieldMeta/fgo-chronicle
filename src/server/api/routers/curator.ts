@@ -41,9 +41,23 @@ import {
 export const curatorRouter = createTRPCRouter({
   collectAnnouncements: curatorProcedure
     .input(collectAnnouncementsSchema)
-    .mutation(({ ctx, input }) =>
-      collectAnnouncements(ctx.db, ctx.session.user.id, input),
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const result = await collectAnnouncements(
+        ctx.db,
+        ctx.session.user.id,
+        input,
+      );
+      if (result.published) {
+        try {
+          revalidateTag("timeline-public-data");
+        } catch {
+          console.warn(
+            "Official dates were saved, but the timeline cache could not refresh.",
+          );
+        }
+      }
+      return result;
+    }),
   publishGlobalEvent: curatorProcedure
     .input(globalPublicationInputSchema)
     .mutation(async ({ ctx, input }) => {

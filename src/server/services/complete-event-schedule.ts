@@ -40,8 +40,10 @@ export async function runCompleteEventSchedule(
         inserted: 0,
         examined: 0,
         coverageLimited: false,
+        publishedCount: 0,
+        publicationFailures: 0,
       },
-      publication: "disabled",
+      publication: "blocked",
     };
     console.warn(
       JSON.stringify({
