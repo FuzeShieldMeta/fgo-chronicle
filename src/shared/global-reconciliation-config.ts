@@ -36,6 +36,7 @@ export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   revision: 1,
   minNameTokens: 2,
   minNameCharacters: 12,
+  minServantNameCharacters: 3,
 } as const;
 
 export const GLOBAL_EXPORT_LIMITS = {

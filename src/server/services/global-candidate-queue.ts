@@ -232,9 +232,11 @@ export async function getGlobalCandidateQueue(
   const input = globalCandidateQueueSchema.parse(rawInput);
   const where: Prisma.GlobalEventCandidateWhereInput =
     input.view === "MATCHED"
-      ? { targetEventId: { not: null } }
+      ? {
+          OR: [{ targetEventId: { not: null } }, { bannerDates: { some: {} } }],
+        }
       : input.view === "UNRESOLVED"
-        ? { targetEventId: null }
+        ? { targetEventId: null, bannerDates: { none: {} } }
         : {};
   if (input.source !== "ALL") where.sourceKind = input.source;
   const [entries, total] = await Promise.all([
@@ -243,6 +245,7 @@ export async function getGlobalCandidateQueue(
       include: {
         eventBaselines: { select: { eventId: true }, take: 1 },
         eventDates: { select: { eventId: true }, take: 1 },
+        bannerDates: { select: { anchorEventId: true }, take: 1 },
       },
       orderBy:
         input.sort === "EARLIEST"
@@ -258,11 +261,20 @@ export async function getGlobalCandidateQueue(
     database.globalEventCandidate.count({ where }),
   ]);
   return {
-    entries: entries.map(({ eventBaselines, eventDates, ...entry }) => ({
-      ...entry,
-      targetEventId: entry.targetEventId ?? eventDates[0]?.eventId ?? null,
-      published: eventBaselines.length > 0 || eventDates.length > 0,
-    })),
+    entries: entries.map(
+      ({ eventBaselines, eventDates, bannerDates, ...entry }) => ({
+        ...entry,
+        targetEventId:
+          entry.targetEventId ??
+          eventDates[0]?.eventId ??
+          bannerDates[0]?.anchorEventId ??
+          null,
+        published:
+          eventBaselines.length > 0 ||
+          eventDates.length > 0 ||
+          bannerDates.length > 0,
+      }),
+    ),
     total,
     page: input.page,
     hasNext: (input.page + 1) * GLOBAL_SOURCE_LIMITS.pageSize < total,

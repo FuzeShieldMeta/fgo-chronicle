@@ -63,6 +63,7 @@ export async function collectGlobalSourcesWithAuthority(
       examined: 0,
       coverageLimited: false,
       publishedCount: 0,
+      publishedBannerCount: 0,
       publicationFailures: 0,
     },
     publication: "official-dates" as "official-dates" | "blocked",
@@ -112,6 +113,7 @@ export async function collectGlobalSourcesWithAuthority(
       examined: publisher.examined,
       coverageLimited: publisher.coverageLimited,
       publishedCount: publisher.publishedCount ?? 0,
+      publishedBannerCount: publisher.publishedBannerCount ?? 0,
       publicationFailures: publisher.publicationFailures ?? 0,
     };
   } catch (error) {

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { GlobalEventCandidate, Prisma } from "../../../generated/prisma";
-import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
+import {
+  GLOBAL_SOURCE_LIMITS,
+  MILLISECONDS_PER_DAY,
+} from "~/shared/global-reconciliation-config";
 import {
   effectiveEvent,
   effectiveBanner,
@@ -125,6 +128,7 @@ export async function publishAnnouncementFamily(
   )
     throw new Error("The announcement match changed.");
   const existing = anchor.dateOverlay;
+  let anchorUnchanged = false;
   if (existing) {
     const previous = await tx.globalEventCandidate.findUniqueOrThrow({
       where: { id: existing.candidateId },
@@ -148,7 +152,7 @@ export async function publishAnnouncementFamily(
       previous.sourceUrl === candidate.sourceUrl &&
       previous.contentHash === candidate.contentHash
     )
-      return { changed: false, reason: "UNCHANGED" as const };
+      anchorUnchanged = true;
   }
   const banners = target.familyId
     ? await tx.banner.findMany({
@@ -165,6 +169,34 @@ export async function publishAnnouncementFamily(
     ),
   );
   if (
+    anchorUnchanged &&
+    banners.every(
+      (banner) => !!banner.dateOverlay || banner.status === "OFFICIAL",
+    ) &&
+    events.every(
+      (event) =>
+        event.id === eventId ||
+        !!event.dateOverlay ||
+        event.status === "OFFICIAL",
+    )
+  )
+    return { changed: false, reason: "UNCHANGED" as const };
+  // A newly linked imported member has not followed earlier curator/official moves.
+  // Rebase it from the imported anchor, not from the already corrected anchor.
+  const importedRelative = (
+    date: Date | null,
+    precision: "EXACT" | "DATE_ONLY" | null,
+  ) => {
+    if (!date) return null;
+    const offset =
+      precision === "DATE_ONLY"
+        ? (Math.floor(date.getTime() / MILLISECONDS_PER_DAY) -
+            Math.floor(anchor.startsAt.getTime() / MILLISECONDS_PER_DAY)) *
+          MILLISECONDS_PER_DAY
+        : date.getTime() - anchor.startsAt.getTime();
+    return new Date(current.startsAt.getTime() + offset);
+  };
+  if (
     events.length + banners.length + rewards.length >
     GLOBAL_SOURCE_LIMITS.maxBatchRecords
   )
@@ -175,8 +207,20 @@ export async function publishAnnouncementFamily(
       return {
         id: event.id,
         kind: "EVENT" as const,
-        startsAt: effective.startsAt,
-        endsAt: effective.endsAt,
+        startsAt:
+          event.id !== eventId &&
+          !event.dateOverlay &&
+          !(event.curation?.active && ownsField(event.curation, "startsAt")) &&
+          effective.dateConfirmation.startsAt !== "OFFICIAL"
+            ? importedRelative(event.startsAt, event.startsAtPrecision)!
+            : effective.startsAt,
+        endsAt:
+          event.id !== eventId &&
+          !event.dateOverlay &&
+          !(event.curation?.active && ownsField(event.curation, "endsAt")) &&
+          effective.dateConfirmation.endsAt !== "OFFICIAL"
+            ? importedRelative(event.endsAt, event.endsAtPrecision)
+            : effective.endsAt,
         startsAtPrecision: effective.startsAtPrecision,
         endsAtPrecision: effective.endsAtPrecision,
         confirmation: effective.dateConfirmation,
@@ -188,8 +232,14 @@ export async function publishAnnouncementFamily(
       return {
         id: banner.id,
         kind: "BANNER" as const,
-        startsAt: effective.startsAt,
-        endsAt: effective.endsAt,
+        startsAt:
+          !banner.dateOverlay && banner.status === "PROJECTED"
+            ? importedRelative(banner.startsAt, banner.startsAtPrecision)!
+            : effective.startsAt,
+        endsAt:
+          !banner.dateOverlay && banner.status === "PROJECTED"
+            ? importedRelative(banner.endsAt, banner.endsAtPrecision)
+            : effective.endsAt,
         startsAtPrecision: effective.startsAtPrecision,
         endsAtPrecision: effective.endsAtPrecision,
         confirmation: {
@@ -210,8 +260,20 @@ export async function publishAnnouncementFamily(
     rewards: rewards.map(({ event, source, reward }) => ({
       id: reward.id,
       eventId: event.id,
-      expectedAt: effectiveReward(reward, rewardDateShift(event, reward))
-        .expectedAt,
+      expectedAt: effectiveReward(
+        reward,
+        rewardDateShift(event, reward) +
+          (!reward.dateOverlay &&
+          relativeSources.has(source.type) &&
+          reward.storyWarId === null &&
+          !(reward.curation?.active && ownsField(reward.curation, "expectedAt"))
+            ? members
+                .find(
+                  (member) => member.kind === "EVENT" && member.id === event.id,
+                )!
+                .startsAt.getTime() - effectiveEvent(event).startsAt.getTime()
+            : 0),
+      ).expectedAt,
       behaviour:
         relativeSources.has(source.type) && reward.storyWarId === null
           ? ("EVENT_RELATIVE" as const)
@@ -253,8 +315,8 @@ export async function publishAnnouncementFamily(
       const original = events.find((event) => event.id === member.id)!;
       if (
         member.id !== eventId &&
-        member.startOffsetMs === 0 &&
-        after.endsAt?.getTime() === member.before.endsAt?.getTime()
+        original.dateOverlay?.startStatus === "OFFICIAL" &&
+        original.dateOverlay.endStatus === "OFFICIAL"
       )
         continue;
       const eventData = {
@@ -267,9 +329,11 @@ export async function publishAnnouncementFamily(
       };
       eventRows.push({ eventId: member.id, ...eventData });
     } else {
+      const original = banners.find((banner) => banner.id === member.id)!;
       if (
-        member.startOffsetMs === 0 &&
-        after.endsAt?.getTime() === member.before.endsAt?.getTime()
+        original.status === "OFFICIAL" ||
+        (original.dateOverlay?.startStatus === "OFFICIAL" &&
+          original.dateOverlay.endStatus === "OFFICIAL")
       )
         continue;
       bannerRows.push({ bannerId: member.id, ...data });
@@ -277,8 +341,12 @@ export async function publishAnnouncementFamily(
   }
   const rewardRows: Prisma.RewardDateOverlayUncheckedCreateInput[] = [];
   for (const reward of plan.rewards) {
-    if (reward.expectedAt?.getTime() === reward.before.expectedAt?.getTime())
-      continue;
+    const original = rewards.find((record) => record.reward.id === reward.id)!;
+    const before = effectiveReward(
+      original.reward,
+      rewardDateShift(original.event, original.reward),
+    ).expectedAt;
+    if (reward.expectedAt?.getTime() === before?.getTime()) continue;
     const data = {
       anchorEventId: eventId,
       candidateId: candidate.id,
@@ -304,7 +372,8 @@ export async function publishAnnouncementFamily(
     SELECT x."rewardId", x."anchorEventId", x."candidateId", x."expectedAt", CURRENT_TIMESTAMP
     FROM jsonb_to_recordset(${JSON.stringify(rewardRows)}::jsonb) AS x("rewardId" TEXT, "anchorEventId" TEXT, "candidateId" TEXT, "expectedAt" TIMESTAMP)
     ON CONFLICT ("rewardId") DO UPDATE SET "anchorEventId" = EXCLUDED."anchorEventId", "candidateId" = EXCLUDED."candidateId", "expectedAt" = EXCLUDED."expectedAt", "updatedAt" = CURRENT_TIMESTAMP`;
-  await tx.eventDateEvidence.create({ data: { eventId, ...evidence } });
+  if (!anchorUnchanged)
+    await tx.eventDateEvidence.create({ data: { eventId, ...evidence } });
   await tx.curatorChange.create({
     data: {
       actorId,
@@ -313,8 +382,31 @@ export async function publishAnnouncementFamily(
       action: "PUBLISH_OFFICIAL_DATES",
       reason: "Applied official announcement dates and relative family dates.",
       before: json({
-        members: plan.members.map((member) => member.before),
-        rewards: plan.rewards.map((reward) => reward.before),
+        members: plan.members.map((member) => {
+          const original =
+            member.kind === "EVENT"
+              ? effectiveEvent(events.find((event) => event.id === member.id)!)
+              : effectiveBanner(
+                  banners.find((banner) => banner.id === member.id)!,
+                );
+          return {
+            ...member.before,
+            startsAt: original.startsAt,
+            endsAt: original.endsAt,
+          };
+        }),
+        rewards: plan.rewards.map((reward) => {
+          const original = rewards.find(
+            (record) => record.reward.id === reward.id,
+          )!;
+          return {
+            ...reward.before,
+            expectedAt: effectiveReward(
+              original.reward,
+              rewardDateShift(original.event, original.reward),
+            ).expectedAt,
+          };
+        }),
       }),
       after: json({
         candidateId: candidate.id,

@@ -23,7 +23,13 @@ import {
 import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { publishAnnouncementFamily } from "./global-announcement-publication";
-import { createImportProgress, type ImportProgress } from "./import-progress";
+import { associateBannerFamilies } from "./banner-family-association";
+import { publishOfficialBannerDates } from "./official-banner-dates";
+import {
+  createImportProgress,
+  isImportTransactionConflict,
+  type ImportProgress,
+} from "./import-progress";
 import {
   publicEventGlobalBaselineSelect,
   publicDateEvidenceSelect,
@@ -151,6 +157,10 @@ export async function collectAnnouncementsWithAuthority(
         progress.event("publisher_assessments", "transaction_acquired");
         await lockSourceAuthority(tx, authority);
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+        if (!execution.dryRun && execution.allowPublication !== false)
+          await progress.stage("banner_association", () =>
+            associateBannerFamilies(tx, authority.actorId),
+          );
         const starts = report.articles.flatMap((article) =>
           article.periods.flatMap((period) => {
             const start = period.startsAt
@@ -275,6 +285,7 @@ export async function collectAnnouncementsWithAuthority(
             coverageLimited: report.coverageLimited,
             published: false as const,
             publishedCount: 0,
+            publishedBannerCount: 0,
             publicationFailures: 0,
           };
         const result = await tx.globalEventCandidate.createMany({
@@ -342,6 +353,7 @@ export async function collectAnnouncementsWithAuthority(
           coverageLimited: stored.coverageLimited,
           published: false,
           publishedCount: 0,
+          publishedBannerCount: 0,
           publicationFailures: 0,
         };
       return await publishStoredAnnouncements(
@@ -359,10 +371,7 @@ export async function collectAnnouncementsWithAuthority(
     } catch (error) {
       if (
         attempt >= GLOBAL_SOURCE_LIMITS.transactionAttempts ||
-        !error ||
-        typeof error !== "object" ||
-        !("code" in error) ||
-        error.code !== "P2034"
+        !isImportTransactionConflict(error)
       )
         throw error;
       await new Promise((resolve) =>
@@ -391,6 +400,7 @@ async function publishStoredAnnouncements(
   progress: ImportProgress,
 ) {
   let publishedCount = 0;
+  let publishedBannerCount = 0;
   let publicationFailures = 0;
   const proposals =
     execution.allowPublication === false
@@ -487,13 +497,65 @@ async function publishStoredAnnouncements(
           publicationFailures++;
         break;
       } catch (error) {
-        const conflict =
-          error &&
-          typeof error === "object" &&
-          "code" in error &&
-          error.code === "P2034";
+        const conflict = isImportTransactionConflict(error);
         if (conflict && attempt < GLOBAL_SOURCE_LIMITS.transactionAttempts) {
           progress.event("official_family", "retry", { index, attempt });
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              GLOBAL_SOURCE_LIMITS.transactionRetryDelayMs * attempt,
+            ),
+          );
+          continue;
+        }
+        publicationFailures++;
+        break;
+      }
+    }
+  }
+  if (
+    execution.allowPublication !== false &&
+    report.articles.some((article) =>
+      article.periods.some(
+        (period) => period.kind === "SUMMON" && period.issues.length === 0,
+      ),
+    )
+  ) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const banners = await progress.stage(
+          "official_banners",
+          () =>
+            database.$transaction(
+              async (tx) => {
+                await lockSourceAuthority(tx, authority);
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+                return publishOfficialBannerDates(
+                  tx,
+                  authority.actorId,
+                  stored.assessedRecords,
+                );
+              },
+              {
+                isolationLevel: "Serializable",
+                maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
+                timeout: IMPORT_EXECUTION_LIMITS.familyTransactionTimeoutMs,
+              },
+            ),
+          {
+            attempt,
+            timeoutMs: IMPORT_EXECUTION_LIMITS.familyTransactionTimeoutMs,
+          },
+        );
+        publishedBannerCount = banners.publishedCount;
+        publicationFailures += banners.publicationFailures;
+        break;
+      } catch (error) {
+        if (
+          isImportTransactionConflict(error) &&
+          attempt < GLOBAL_SOURCE_LIMITS.transactionAttempts
+        ) {
+          progress.event("official_banners", "retry", { attempt });
           await new Promise((resolve) =>
             setTimeout(
               resolve,
@@ -511,8 +573,9 @@ async function publishStoredAnnouncements(
     inserted: stored.inserted,
     examined: stored.examined,
     coverageLimited: stored.coverageLimited,
-    published: publishedCount > 0,
+    published: publishedCount > 0 || publishedBannerCount > 0,
     publishedCount,
+    publishedBannerCount,
     publicationFailures,
   };
 }

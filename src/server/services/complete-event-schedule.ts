@@ -50,6 +50,7 @@ export async function runCompleteEventSchedule(
         examined: 0,
         coverageLimited: false,
         publishedCount: 0,
+        publishedBannerCount: 0,
         publicationFailures: 0,
       },
       publication: "blocked",

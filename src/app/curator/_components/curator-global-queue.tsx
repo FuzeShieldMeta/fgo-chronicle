@@ -51,7 +51,7 @@ export function CuratorGlobalQueue({
   const announcements = api.curator.collectAnnouncements.useMutation({
     onSuccess: async (result) => {
       setNotice(
-        `Collected ${result.inserted} new announcement assessments. Updated official dates for ${result.publishedCount} events.${result.publicationFailures ? ` ${result.publicationFailures} matches need review.` : ""}${result.coverageLimited ? " Collection reached its coverage limit." : ""}`,
+        `Collected ${result.inserted} new announcement assessments. Updated official dates for ${result.publishedCount} events and ${result.publishedBannerCount} banners.${result.publicationFailures ? ` ${result.publicationFailures} matches need review.` : ""}${result.coverageLimited ? " Collection reached its coverage limit." : ""}`,
       );
       setInput((current) => ({
         ...current,
