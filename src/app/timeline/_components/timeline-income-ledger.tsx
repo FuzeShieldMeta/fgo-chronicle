@@ -9,9 +9,23 @@ import {
 import { forecastResourceTypes } from "~/app/timeline/_lib/player-forecast";
 import { timelineLayout } from "~/app/timeline/_lib/timeline-layout-config";
 
-function signedAmount(value: number) {
-  if (value > 0) return `+${value}`;
-  if (value < 0) return `−${Math.abs(value)}`;
+const compactAmount = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 0,
+});
+
+function displayAmount(value: number) {
+  return Math.abs(value) >= 10_000
+    ? compactAmount.format(value)
+    : String(value);
+}
+
+function signedAmount(value: number, compact = false) {
+  const amount = compact
+    ? displayAmount(Math.abs(value))
+    : String(Math.abs(value));
+  if (value > 0) return `+${amount}`;
+  if (value < 0) return `−${amount}`;
   return "0";
 }
 
@@ -60,6 +74,15 @@ export function TimelineIncomeLedger({
             {resourceCells.map((cell) => {
               const dayIndex = dayIndexes.get(cell.day);
               if (dayIndex === undefined) return null;
+              const unresolvedAmount = cell.contributions.reduce(
+                (total, contribution) =>
+                  total +
+                  (contribution.inclusionResolved ? 0 : contribution.amount),
+                0,
+              );
+              const decisionDescription = cell.hasUnresolvedConditional
+                ? ` ${unresolvedAmount} ${incomeResourceLabels[itemType]} needs your choice and is not included in the balance.`
+                : "";
 
               const style = {
                 left: dayIndex * timelineLayout.dayWidth,
@@ -83,21 +106,25 @@ export function TimelineIncomeLedger({
                     cell.hasUnresolvedConditional ? "true" : undefined
                   }
                   style={style}
-                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${cell.hasUnresolvedConditional ? " Contains a conditional reward that needs your choice." : ""}`}
-                  title={`Resource change: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.`}
+                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${decisionDescription}`}
+                  title={`Resource change: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.${decisionDescription}`}
                   aria-pressed={selectedKey === cell.key}
                   onClick={() => onSelect(cell)}
                 >
-                  <strong>{signedAmount(cell.delta)}</strong>
-                  <small>{cell.closingBalance ?? "—"}</small>
                   {cell.hasUnresolvedConditional ? (
                     <span
                       className="timeline-income-decision-marker"
                       aria-hidden="true"
                     >
-                      ?
+                      {displayAmount(unresolvedAmount)}?
                     </span>
                   ) : null}
+                  <strong>{signedAmount(cell.delta, true)}</strong>
+                  <small>
+                    {cell.closingBalance === null
+                      ? "—"
+                      : displayAmount(cell.closingBalance)}
+                  </small>
                 </button>
               );
             })}

@@ -59,9 +59,6 @@
   --timeline-balance-attention-duration: 6s;
   --timeline-balance-attention-ring-size: 7px;
   --timeline-balance-attention-halo-size: 24px;
-  --timeline-decision-marker-size: 14px;
-  --timeline-decision-marker-block-inset: 2px;
-  --timeline-decision-marker-inline-inset: 3px;
   --timeline-decision-accent-width: 3px;
   --timeline-decision-action-min-width: 88px;
   --timeline-type-micro: clamp(0.625rem, 0.59rem + 0.08vw, 0.75rem);
@@ -1060,6 +1057,7 @@ button {
   top: 0;
   bottom: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   content-visibility: auto;
   min-width: 0;
   min-height: var(--timeline-min-income-row-height);
@@ -1108,6 +1106,7 @@ button {
 }
 
 .timeline-income-cell[data-needs-decision="true"] {
+  grid-template-rows: 14px auto auto;
   border-color: color-mix(
     in srgb,
     var(--md-conditional) 68%,
@@ -1120,20 +1119,49 @@ button {
   );
 }
 
+.timeline-income-cell[data-needs-decision="true"] strong {
+  font-size: min(var(--timeline-type-body), 14px);
+  line-height: 1;
+}
+
+.timeline-income-cell[data-needs-decision="true"] small {
+  font-size: min(var(--timeline-type-micro), 10px);
+  line-height: 1;
+}
+
 .timeline-income-decision-marker {
-  position: absolute;
-  top: var(--timeline-decision-marker-block-inset);
-  right: var(--timeline-decision-marker-inline-inset);
   display: grid;
-  width: var(--timeline-decision-marker-size);
-  height: var(--timeline-decision-marker-size);
+  align-self: stretch;
+  justify-self: center;
   place-items: center;
+  max-width: 100%;
+  min-width: 14px;
+  padding-inline: 3px;
   border: 1px solid var(--md-conditional);
-  border-radius: 50%;
+  border-radius: 999px;
   color: var(--md-conditional);
-  font-size: var(--timeline-type-micro);
+  font-size: min(var(--timeline-type-micro), 10px);
+  font-variant-numeric: tabular-nums;
   font-weight: 750;
   line-height: 1;
+  white-space: nowrap;
+}
+
+@media (max-height: 760px) {
+  .timeline-income-cell[data-needs-decision="true"] {
+    grid-template-rows: 12px 11px 9px;
+    padding-block: 0;
+  }
+
+  .timeline-income-cell[data-needs-decision="true"] strong {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .timeline-income-cell[data-needs-decision="true"] small {
+    font-size: 9px;
+    line-height: 1;
+  }
 }
 
 .timeline-income-cell:focus-visible,
