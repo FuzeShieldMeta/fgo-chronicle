@@ -24,7 +24,7 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   maxContextCharacters: 1_200,
   maxTitleCharacters: 500,
   maxArticlePathCharacters: 160,
-  parserRevision: 1,
+  parserRevision: 2,
   fetchTimeoutMs: 15_000,
   collectionTimeoutMs: 45_000,
   maxArticles: 30,
@@ -33,7 +33,7 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
 
 export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   windowDays: [30, 60, 90],
-  revision: 1,
+  revision: 2,
   minNameTokens: 2,
   minNameCharacters: 12,
   minServantNameCharacters: 3,

@@ -18,6 +18,8 @@ import {
 import { loadPublisherAnnouncements } from "./global-announcement-source";
 import {
   assessAnnouncementArticle,
+  announcementEventTypes,
+  announcementMatchTypes,
   type AnnouncementMatchEvent,
 } from "./global-announcement-match";
 import { effectiveEvent } from "./effective-schedule";
@@ -166,7 +168,7 @@ export async function collectAnnouncementsWithAuthority(
             const start = period.startsAt
               ? new Date(period.startsAt).getTime()
               : NaN;
-            return period.kind === "EVENT" && Number.isFinite(start)
+            return announcementEventTypes[period.kind] && Number.isFinite(start)
               ? [start]
               : [];
           }),
@@ -184,7 +186,7 @@ export async function collectAnnouncementsWithAuthority(
             const candidates = await tx.event.findMany({
               relationLoadStrategy: "join",
               where: {
-                type: "MAIN_EVENT",
+                type: { in: announcementMatchTypes },
                 OR: [
                   { startsAt: range },
                   { globalBaseline: { is: { startsAt: range } } },

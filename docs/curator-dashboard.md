@@ -126,6 +126,10 @@ The private assessment records the candidate IDs, matching window and rule revis
 Conflicting event periods, reruns and numbered titles have separate matching checks.
 Matching also uses Atlas NA English names linked by the shared JP/NA event ID and verified war associations.
 Unique valid event matches automatically confirm the announced dates and move relative family dates.
+Campaign periods can confirm campaign and pre-release records. Quest periods can confirm quest releases and finite chapter or quest events.
+These periods update only the matched record and its eligible relative reward dates. They do not move sibling events or summon banners.
+Only the introductory campaign period can use the article title for matching. Later campaign sections must identify their own target.
+An explicit quest or chapter release date confirms only the start. It does not confirm an unstated end.
 Curator names, reward amounts, explicit reward dates and player plans remain unchanged.
 Other periods and unresolved matches stay private. They cannot use the Atlas preview or publication workflow.
 The daily cron handler now runs this collection after the JP importer. This wiring takes effect after deployment.

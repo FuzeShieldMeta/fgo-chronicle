@@ -38,6 +38,9 @@ const RANGE = new RegExp(
     `(?:[ \\t]+(?<endZone>${ZONE}))?`,
   "g",
 );
+const RELEASE = new RegExp(
+  `(?<start>\\d{4}-\\d{2}-\\d{2})[ \\t]+(?<startTime>\\d{2}:\\d{2})(?:[ \\t]+(?<startZone>${ZONE}))?`,
+);
 
 export type AnnouncementPeriodKind =
   | "EVENT"
@@ -60,6 +63,7 @@ export interface AnnouncementPeriod {
   endTimezone: string | null;
   issues: string[];
   publicationAllowed: false;
+  articleNameAllowed?: boolean;
 }
 
 export function publisherArticleUrl(value: string) {
@@ -232,7 +236,8 @@ function periodKind(label: string): AnnouncementPeriodKind {
   if (/maintenance/i.test(label)) kinds.push("MAINTENANCE");
   if (/summon.*period|pickup.*period/i.test(label)) kinds.push("SUMMON");
   if (/exchange period|shop.*period/i.test(label)) kinds.push("SHOP");
-  if (/quest period|quest availability/i.test(label)) kinds.push("QUEST");
+  if (/quest period|quest availability|quest availability period/i.test(label))
+    kinds.push("QUEST");
   if (/login bonus.*period/i.test(label)) kinds.push("LOGIN_BONUS");
   if (/campaign period/i.test(label)) kinds.push("CAMPAIGN");
   if (/event period/i.test(label)) kinds.push("EVENT");
@@ -268,6 +273,42 @@ export function parsePublisherAnnouncement(
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!;
     const matches = [...line.matchAll(RANGE)];
+    const releaseLabel =
+      /^(?:quest|chapter) (?:release date|available from)\s*:?\s*$/i;
+    if (!matches.length) {
+      const match = RELEASE.exec(line);
+      const label = match ? line.slice(0, match.index).trim() : "";
+      if (
+        match &&
+        (releaseLabel.test(label) ||
+          (!label && releaseLabel.test(lines[index - 1] ?? "")))
+      ) {
+        if (periods.length >= LIMITS.maxPeriodsPerArticle)
+          throw new Error("The announcement has too many date ranges.");
+        const groups = match.groups!;
+        const start = boundary(
+          groups.start!,
+          groups.startTime,
+          groups.startZone,
+        );
+        periods.push({
+          sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
+          kind: "QUEST",
+          context: lines
+            .slice(Math.max(0, index - LIMITS.contextLines), index + 1)
+            .join("\n")
+            .slice(-LIMITS.maxContextCharacters),
+          rawPeriod: match[0],
+          startsAt: start.value,
+          endsAt: null,
+          startTimezone: groups.startZone ?? null,
+          endTimezone: null,
+          issues: start.issue ? [start.issue] : [],
+          publicationAllowed: false,
+        });
+        continue;
+      }
+    }
     if (
       !matches.length &&
       (/\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/.test(line) ||
@@ -305,7 +346,13 @@ export function parsePublisherAnnouncement(
         .slice(-LIMITS.maxContextCharacters);
       const inlineLabel = line.slice(0, match.index).trim();
       const label = inlineLabel.length ? inlineLabel : (lines[index - 1] ?? "");
-      const kind = periodKind(label);
+      const kind =
+        /\[New Chapter\]/i.test(name) &&
+        /^"([^"]+)"/.test(inlineLabel) &&
+        name.includes(/^"([^"]+)"/.exec(inlineLabel)![1]!) &&
+        /will be available for a limited time during\s*$/i.test(inlineLabel)
+          ? "QUEST"
+          : periodKind(label);
       const periodIssues = [
         ...new Set(
           [start.issue, end.issue].filter((issue): issue is string => !!issue),
@@ -317,6 +364,7 @@ export function parsePublisherAnnouncement(
       periods.push({
         sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
         kind,
+        articleNameAllowed: kind !== "CAMPAIGN" || periods.length === 0,
         context,
         rawPeriod: match[0],
         startsAt: start.value,

@@ -23,17 +23,18 @@ import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { z } from "zod";
 
 const assessmentSchema = z.object({
-  kind: z.literal("EVENT"),
+  kind: z.enum(["EVENT", "CAMPAIGN", "QUEST"]),
   issues: z.array(z.string()).length(0),
   sourceRecordId: z.string(),
   context: z.string(),
   rawPeriod: z.string(),
   startsAt: z.string().datetime(),
-  endsAt: z.string().datetime(),
+  endsAt: z.string().datetime().nullable(),
   startTimezone: z.string().min(1),
-  endTimezone: z.string().min(1),
+  endTimezone: z.string().min(1).nullable(),
   publicationAllowed: z.literal(false),
   articleName: z.string(),
+  articleNameAllowed: z.boolean().optional(),
   matching: z.object({
     targetEventId: z.string(),
     reason: z.literal("UNIQUE_EVENT_MATCH"),
@@ -64,14 +65,17 @@ export async function publishAnnouncementFamily(
   if (
     candidate.sourceKind !== "PUBLISHER_ANNOUNCEMENT" ||
     publisherArticleUrl(candidate.sourceUrl) !== candidate.sourceUrl ||
-    !candidate.startsAt ||
-    !candidate.endsAt
+    !candidate.startsAt
   )
     throw new Error("Invalid announcement source.");
+  const assessed = assessmentSchema.parse(candidate.snapshot);
   const target = await tx.event.findUniqueOrThrow({
     where: { id: eventId },
     select: { familyId: true },
   });
+  // Only a main-event announcement anchors a family move. Campaign and quest
+  // sections have their own windows, even when they belong to that family.
+  if (assessed.kind !== "EVENT") target.familyId = null;
   if (target.familyId)
     await tx.$queryRaw`SELECT "id" FROM "EventFamily" WHERE "id" = ${target.familyId} FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} OR "familyId" = ${target.familyId} ORDER BY "id" FOR UPDATE`;
@@ -88,14 +92,14 @@ export async function publishAnnouncementFamily(
   });
   const anchor = events.find((event) => event.id === eventId);
   if (!anchor) throw new Error("The announcement target no longer exists.");
-  if (anchor.familyId !== target.familyId)
+  if (assessed.kind === "EVENT" && anchor.familyId !== target.familyId)
     throw new Error("The announcement family changed.");
-  const assessed = assessmentSchema.parse(candidate.snapshot);
   if (
     assessed.matching.targetEventId !== eventId ||
     assessed.sourceRecordId !== candidate.sourceRecordId ||
     new Date(assessed.startsAt).getTime() !== candidate.startsAt.getTime() ||
-    new Date(assessed.endsAt).getTime() !== candidate.endsAt.getTime()
+    (assessed.endsAt ? new Date(assessed.endsAt).getTime() : null) !==
+      (candidate.endsAt?.getTime() ?? null)
   )
     throw new Error("Invalid announcement assessment.");
   const atlasId = /^atlas:JP:event:(\d+):projection:NA$/.exec(
@@ -137,7 +141,8 @@ export async function publishAnnouncementFamily(
       existing.anchorEventId === eventId &&
       previous.sourceUrl !== candidate.sourceUrl &&
       (existing.startsAt.getTime() !== candidate.startsAt.getTime() ||
-        existing.endsAt?.getTime() !== candidate.endsAt.getTime())
+        (candidate.endsAt &&
+          existing.endsAt?.getTime() !== candidate.endsAt.getTime()))
     )
       return {
         changed: false,
@@ -146,9 +151,10 @@ export async function publishAnnouncementFamily(
     if (
       existing.anchorEventId === eventId &&
       existing.startsAt.getTime() === candidate.startsAt.getTime() &&
-      existing.endsAt?.getTime() === candidate.endsAt.getTime() &&
+      (!candidate.endsAt ||
+        existing.endsAt?.getTime() === candidate.endsAt.getTime()) &&
       existing.startStatus === "OFFICIAL" &&
-      existing.endStatus === "OFFICIAL" &&
+      (!candidate.endsAt || existing.endStatus === "OFFICIAL") &&
       previous.sourceUrl === candidate.sourceUrl &&
       previous.contentHash === candidate.contentHash
     )
@@ -293,7 +299,7 @@ export async function publishAnnouncementFamily(
     confirmedStartsAt: candidate.startsAt,
     confirmedEndsAt: candidate.endsAt,
     confirmedStartPrecision: "EXACT",
-    confirmedEndPrecision: "EXACT",
+    confirmedEndPrecision: candidate.endsAt ? "EXACT" : null,
   });
   const eventRows: Prisma.EventDateOverlayUncheckedCreateInput[] = [];
   const bannerRows: Prisma.BannerDateOverlayUncheckedCreateInput[] = [];

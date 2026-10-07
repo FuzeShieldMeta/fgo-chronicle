@@ -3,7 +3,23 @@ import {
   GLOBAL_ANNOUNCEMENT_MATCHING as RULES,
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
-import type { AnnouncementPeriod } from "./global-announcement-parser";
+import type {
+  AnnouncementPeriod,
+  AnnouncementPeriodKind,
+} from "./global-announcement-parser";
+
+// A section can confirm only the schedule record it describes.
+export const announcementEventTypes: Partial<
+  Record<AnnouncementPeriodKind, readonly EventType[]>
+> = {
+  EVENT: ["MAIN_EVENT"],
+  CAMPAIGN: ["CAMPAIGN", "PRE_RELEASE_CAMPAIGN"],
+  QUEST: ["QUEST_RELEASE", "MAIN_EVENT"],
+};
+
+export const announcementMatchTypes = [
+  ...new Set(Object.values(announcementEventTypes).flat()),
+];
 
 export interface AnnouncementMatchEvent {
   id: string;
@@ -59,14 +75,14 @@ export function matchAnnouncementEvent(
   const base = { revision: RULES.revision, publicationAllowed: false as const };
   const start = period.startsAt ? new Date(period.startsAt).getTime() : NaN;
   const end = period.endsAt ? new Date(period.endsAt).getTime() : NaN;
+  const releaseOnly = period.kind === "QUEST" && period.endsAt === null;
   if (
-    period.kind !== "EVENT" ||
+    !announcementEventTypes[period.kind] ||
     period.issues.length ||
     !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    end < start ||
+    (!releaseOnly && (!Number.isFinite(end) || end < start)) ||
     !period.startTimezone ||
-    !period.endTimezone
+    (!releaseOnly && !period.endTimezone)
   )
     return {
       ...base,
@@ -79,7 +95,7 @@ export function matchAnnouncementEvent(
   for (const windowDays of RULES.windowDays) {
     const matches = events.filter(
       (event) =>
-        event.type === "MAIN_EVENT" &&
+        announcementEventTypes[period.kind]!.includes(event.type) &&
         [event.startsAt, event.projectedStartsAt].some(
           (date) =>
             Math.abs(date.getTime() - start) <=
@@ -88,7 +104,8 @@ export function matchAnnouncementEvent(
         event.names.some(
           (name) =>
             nameInContext(name, period.context) ||
-            nameInContext(name, articleName),
+            (period.articleNameAllowed !== false &&
+              nameInContext(name, articleName)),
         ),
     );
     const candidateIds = [...new Set(matches.map((event) => event.id))].sort();
