@@ -125,6 +125,12 @@ Ambiguous matches stop the search. Date proximity alone cannot select an event.
 The private assessment records the candidate IDs, matching window and rule revision.
 Conflicting event periods, reruns and numbered titles have separate matching checks.
 Matching also uses Atlas NA English names linked by the shared JP/NA event ID and verified war associations.
+Campaigns without wars require shared shop or mission record IDs as well as the same Atlas event ID and type.
+Names such as “25 Million” and “25M” are equivalent. Different milestone numbers are not equivalent.
+Fandom-only campaigns can use paired JP and NA headers from the same canonical wiki page.
+The importer checks the JP header against the stored source dates and saves the page revision and headers privately.
+Separate pages, matching rewards and similar names do not establish a regional identity.
+Missing, conflicting or unavailable identity evidence leaves the campaign unresolved.
 Unique valid event matches automatically confirm the announced dates and move relative family dates.
 Campaign periods can confirm campaign and pre-release records. Quest periods can confirm quest releases and finite chapter or quest events.
 These periods update only the matched record and its eligible relative reward dates. They do not move sibling events or summon banners.
@@ -140,7 +146,8 @@ Vercel calls `/api/cron/event-schedule` daily at 18:00 UTC, using `CRON_SECRET` 
 The handler runs these stages in order:
 
 1. Import the JP Atlas event, war/story and master-mission data, and reconcile Fandom event coverage and rewards.
-2. Compare Atlas JP and NA event exports for the next 90 days and save private Global source assessments.
+2. Compare Atlas JP and NA event exports for the previous 60 days and next 90 days, using one download per region.
+   Save private Global source assessments for both ranges.
 3. Collect recent official Global announcements, match events using the 30/60/90-day windows, and apply verified official dates.
 4. Invalidate the public timeline cache and warm its progressive windows.
 

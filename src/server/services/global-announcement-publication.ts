@@ -20,6 +20,7 @@ import { ownsField } from "./curation-ownership";
 import { publisherArticleUrl } from "./global-announcement-parser";
 import { matchAnnouncementEvent } from "./global-announcement-match";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
+import { verifiedRegionalCampaignAlias } from "./global-campaign-identity";
 import { z } from "zod";
 
 const assessmentSchema = z.object({
@@ -35,6 +36,7 @@ const assessmentSchema = z.object({
   publicationAllowed: z.literal(false),
   articleName: z.string(),
   articleNameAllowed: z.boolean().optional(),
+  regionalIdentity: z.unknown().optional(),
   matching: z.object({
     targetEventId: z.string(),
     reason: z.literal("UNIQUE_EVENT_MATCH"),
@@ -116,6 +118,10 @@ export async function publishAnnouncementFamily(
       })
     : null;
   const alias = atlas ? verifiedAtlasAlias(atlas, anchor) : null;
+  const regional = verifiedRegionalCampaignAlias(
+    assessed.regionalIdentity,
+    anchor,
+  );
   const current = effectiveEvent(anchor);
   if (
     matchAnnouncementEvent(assessed, assessed.articleName, [
@@ -123,7 +129,12 @@ export async function publishAnnouncementFamily(
         id: eventId,
         type: anchor.type,
         names: [
-          ...new Set([anchor.name, current.name, ...(alias ? [alias] : [])]),
+          ...new Set([
+            anchor.name,
+            current.name,
+            ...(alias ? [alias] : []),
+            ...(regional ? [regional] : []),
+          ]),
         ],
         startsAt: current.startsAt,
         projectedStartsAt: anchor.startsAt,

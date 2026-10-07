@@ -119,8 +119,15 @@ function associations(event) {
   };
 }
 
+/** @param {Record<string, any>} event */
+function embeddedAssociations(event) {
+  return ["shop", "missions"].flatMap((kind) =>
+    (event[kind] ?? []).map((/** @type {Record<string, any>} */ record) => `${kind}:${record.id}`),
+  ).filter((key) => /^(shop|missions):[1-9]\d*$/.test(key)).sort();
+}
+
 /**
- * Identity candidates require an event ID, event type and non-empty war association.
+ * Identity candidates require a shared event ID, type and content association.
  * This report does not authorise publication or infer links from translated names.
  * @param {Awaited<ReturnType<typeof loadGlobalEventExport>>} jp
  * @param {Awaited<ReturnType<typeof loadGlobalEventExport>>} na
@@ -150,6 +157,9 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
       const jpEvent = jpById.get(event.id);
       const linked = associations(event);
       const origin = jpEvent ? associations(jpEvent) : null;
+      const embeddedIds = embeddedAssociations(event);
+      const jpEmbeddedIds = jpEvent ? embeddedAssociations(jpEvent) : [];
+      const sharedEmbeddedIds = embeddedIds.filter((id) => jpEmbeddedIds.includes(id));
       const projectedKey = `atlas:JP:event:${event.id}:projection:NA`;
       const targets = existingByKey.get(projectedKey) ?? [];
       const reasons = [];
@@ -158,9 +168,14 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
       if (!jpEvent) reasons.push("NO_JP_IDENTITY");
       else {
         if (jpEvent.type !== event.type) reasons.push("EVENT_TYPE_CONFLICT");
-        if (!origin?.ids.length || !linked.ids.length)
+        const campaign = eventType === "CAMPAIGN" || eventType === "PRE_RELEASE_CAMPAIGN";
+        const embeddedIdentity = campaign && !origin?.ids.length && !linked.ids.length &&
+          sharedEmbeddedIds.length > 0 &&
+          new Set(embeddedIds).size === embeddedIds.length &&
+          new Set(jpEmbeddedIds).size === jpEmbeddedIds.length;
+        if ((!origin?.ids.length || !linked.ids.length) && !embeddedIdentity)
           reasons.push("MISSING_WAR_ASSOCIATION");
-        else if (JSON.stringify(origin.ids) !== JSON.stringify(linked.ids))
+        else if (JSON.stringify(origin?.ids) !== JSON.stringify(linked.ids))
           reasons.push("WAR_ASSOCIATION_CONFLICT");
       }
       if (linked.repeated || origin?.repeated)
@@ -193,6 +208,7 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
         startedAt: event.startedAt,
         endedAt: event.endedAt,
         warIds: linked.ids,
+        embeddedIds,
       };
       return {
         sourceRecordId: event.id,
@@ -212,12 +228,14 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
         projectedSourceKey: projectedKey,
         jpName: jpEvent?.name ?? null,
         globalName: event.name,
+        sourceType: event.type,
         eventType,
         startsAt: new Date(event.startedAt * 1000).toISOString(),
         endsAt: new Date(event.endedAt * 1000).toISOString(),
         startsAtPrecision: "EXACT",
         endsAtPrecision: "EXACT",
         warIds: linked.ids,
+        embeddedIds,
         evidence: {
           sourceKind: "GLOBAL_GAME_DATA",
           inputKind: na.inputKind,
@@ -238,6 +256,7 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
                 startedAt: jpEvent.startedAt,
                 endedAt: jpEvent.endedAt,
                 warIds: origin?.ids ?? [],
+                embeddedIds: jpEmbeddedIds,
               },
             }
           : null,

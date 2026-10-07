@@ -24,6 +24,11 @@ import {
 } from "./global-announcement-match";
 import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
+import {
+  loadRegionalCampaignProofs,
+  verifiedRegionalCampaignAlias,
+  type CampaignIdentityProof,
+} from "./global-campaign-identity";
 import { publishAnnouncementFamily } from "./global-announcement-publication";
 import { associateBannerFamilies } from "./banner-family-association";
 import { publishOfficialBannerDates } from "./official-banner-dates";
@@ -48,6 +53,7 @@ const json = (value: unknown) =>
 export function announcementCandidateRows(
   report: Report,
   events?: readonly AnnouncementMatchEvent[],
+  regionalProofs: ReadonlyMap<string, CampaignIdentityProof> = new Map(),
 ): Prisma.GlobalEventCandidateCreateManyInput[] {
   return report.articles.flatMap((article) => {
     const matches = events ? assessAnnouncementArticle(article, events) : null;
@@ -61,12 +67,18 @@ export function announcementCandidateRows(
     };
     const rows = article.periods.map((period, index) => {
       const invalidRange = period.issues.includes("INVALID_DATE_RANGE");
+      const targetId = matches?.[index]?.targetEventId;
       const snapshot = {
         ...period,
         articleName: article.name,
         parserRevision: GLOBAL_ANNOUNCEMENT_LIMITS.parserRevision,
         targetEventId: null,
         ...(matches ? { matching: matches[index] } : {}),
+        ...(targetId && regionalProofs.has(targetId)
+          ? {
+              regionalIdentity: regionalProofs.get(targetId),
+            }
+          : {}),
       };
       return {
         ...shared,
@@ -140,6 +152,64 @@ export async function collectAnnouncementsWithAuthority(
     loadPublisherAnnouncements(dependencies),
   );
   const records = announcementCandidateRows(report);
+  const starts = report.articles.flatMap((article) =>
+    article.periods.flatMap((period) =>
+      announcementEventTypes[period.kind] &&
+      period.startsAt &&
+      Number.isFinite(Date.parse(period.startsAt))
+        ? [Date.parse(period.startsAt)]
+        : [],
+    ),
+  );
+  const margin =
+    GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)! * MILLISECONDS_PER_DAY;
+  const range = starts.length
+    ? {
+        gte: new Date(Math.min(...starts) - margin),
+        lte: new Date(Math.max(...starts) + margin),
+      }
+    : null;
+  const regionalProofs = new Map<string, CampaignIdentityProof>();
+  let regionalCoverageLimited = false;
+  if (range && execution.allowPublication !== false) {
+    const targets = await database.event.findMany({
+      where: {
+        sourceKey: { startsWith: "fandom:JP:page:" },
+        type: { in: ["CAMPAIGN", "PRE_RELEASE_CAMPAIGN"] },
+        OR: [
+          { startsAt: range },
+          { globalBaseline: { is: { startsAt: range } } },
+          { dateOverlay: { is: { startsAt: range } } },
+          { curation: { is: { active: true, startsAt: range } } },
+        ],
+      },
+      select: {
+        id: true,
+        sourceKey: true,
+        sourceRegion: true,
+        type: true,
+        sourceStartsAt: true,
+        sourceEndsAt: true,
+      },
+      take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
+    });
+    try {
+      const proofs = await progress.stage("campaign_identities", () =>
+        loadRegionalCampaignProofs(targets, dependencies.fetchFn),
+      );
+      for (const target of targets) {
+        const proof = proofs.get(target.sourceKey);
+        if (proof && verifiedRegionalCampaignAlias(proof, target))
+          regionalProofs.set(target.id, proof);
+      }
+    } catch {
+      // Never fall back to a stored regional alias after a failed source fetch.
+      console.warn(
+        JSON.stringify({ event: "campaign_identity_collection_failed" }),
+      );
+      regionalCoverageLimited = true;
+    }
+  }
   if (
     records.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords ||
     records.some(
@@ -206,6 +276,8 @@ export async function collectAnnouncementsWithAuthority(
                 endsAtPrecision: true,
                 status: true,
                 updatedAt: true,
+                sourceStartsAt: true,
+                sourceEndsAt: true,
                 curation: true,
                 globalBaseline: publicEventGlobalBaselineSelect,
                 dateEvidence: publicDateEvidenceSelect,
@@ -250,6 +322,10 @@ export async function collectAnnouncementsWithAuthority(
                 execution.allowPublication !== false && assessment
                   ? verifiedAtlasAlias(assessment, event)
                   : null;
+              const regional = verifiedRegionalCampaignAlias(
+                regionalProofs.get(event.id),
+                event,
+              );
               return {
                 id: event.id,
                 type: event.type,
@@ -258,6 +334,7 @@ export async function collectAnnouncementsWithAuthority(
                     event.name,
                     effective.name,
                     ...(alias ? [alias] : []),
+                    ...(regional ? [regional] : []),
                   ]),
                 ],
                 startsAt: effective.startsAt,
@@ -267,7 +344,11 @@ export async function collectAnnouncementsWithAuthority(
           });
         }
         // Store the assessment privately. It is not an approved publication target.
-        const assessedRecords = announcementCandidateRows(report, events);
+        const assessedRecords = announcementCandidateRows(
+          report,
+          events,
+          regionalProofs,
+        );
         if (
           assessedRecords.some(
             (record) =>
@@ -284,7 +365,7 @@ export async function collectAnnouncementsWithAuthority(
           return {
             inserted: 0,
             examined: records.length,
-            coverageLimited: report.coverageLimited,
+            coverageLimited: report.coverageLimited || regionalCoverageLimited,
             published: false as const,
             publishedCount: 0,
             publishedBannerCount: 0,
@@ -323,7 +404,7 @@ export async function collectAnnouncementsWithAuthority(
                 inserted: result.count,
                 examined: records.length,
                 articles: report.articles.length,
-                coverageLimited: report.coverageLimited,
+                coverageLimited: report.coverageLimited || regionalCoverageLimited,
                 published: false,
               },
             },
@@ -331,7 +412,7 @@ export async function collectAnnouncementsWithAuthority(
         return {
           inserted: result.count,
           examined: records.length,
-          coverageLimited: report.coverageLimited,
+          coverageLimited: report.coverageLimited || regionalCoverageLimited,
           events,
           assessedRecords,
         };

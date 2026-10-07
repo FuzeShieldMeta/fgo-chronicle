@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../../generated/prisma";
 import {
   GLOBAL_SOURCE_LIMITS,
+  GLOBAL_CAMPAIGN_IDENTITY_LIMITS,
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
 import { safeSyncFailure } from "../../../scripts/lib/event-schedule-monitoring.mjs";
@@ -12,6 +13,7 @@ import {
 import { collectGlobalCandidatesWithAuthority } from "./global-candidate-queue";
 import { collectAnnouncementsWithAuthority } from "./global-announcement-collection";
 import { createImportProgress, type ImportProgress } from "./import-progress";
+import { boundedGlobalExportLoader } from "./global-export-source";
 
 type Dependencies = {
   collectAtlas?: typeof collectGlobalCandidatesWithAuthority;
@@ -69,19 +71,48 @@ export async function collectGlobalSourcesWithAuthority(
     publication: "official-dates" as "official-dates" | "blocked",
   };
   try {
+    const load = boundedGlobalExportLoader();
+    const exports = new Map<string, ReturnType<typeof load>>();
+    const cachedLoad: typeof load = (region, options) => {
+      const key = `${region}:${options?.sourceFile ?? ""}`;
+      let result = exports.get(key);
+      if (!result) {
+        result = load(region, options);
+        exports.set(key, result);
+      }
+      return result;
+    };
+    const collectAtlas =
+      dependencies.collectAtlas ?? collectGlobalCandidatesWithAuthority;
+    const recent = await progress.stage("atlas_global_recent", () =>
+      collectAtlas(
+        database,
+        authority,
+        {
+          from: new Date(
+            from.getTime() -
+              GLOBAL_CAMPAIGN_IDENTITY_LIMITS.lookbackDays *
+                MILLISECONDS_PER_DAY,
+          ),
+          through: new Date(from.getTime() - 1),
+        },
+        { loadSource: cachedLoad },
+        execution,
+      ),
+    );
     const atlas = await progress.stage("atlas_global", () =>
-      (dependencies.collectAtlas ?? collectGlobalCandidatesWithAuthority)(
+      collectAtlas(
         database,
         authority,
         { from, through },
-        {},
+        { loadSource: cachedLoad },
         execution,
       ),
     );
     result.atlas = {
       status: "success",
-      inserted: atlas.inserted,
-      examined: atlas.examined,
+      inserted: recent.inserted + atlas.inserted,
+      examined: recent.examined + atlas.examined,
     };
   } catch (error) {
     console.warn(

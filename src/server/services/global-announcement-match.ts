@@ -33,6 +33,7 @@ export function normaliseAnnouncementName(value: string) {
   return value
     .normalize("NFKC")
     .toLowerCase()
+    .replace(/\b(\d+)\s*million\b/gu, "$1m")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }

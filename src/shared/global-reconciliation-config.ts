@@ -33,10 +33,17 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
 
 export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   windowDays: [30, 60, 90],
-  revision: 2,
+  revision: 3,
   minNameTokens: 2,
   minNameCharacters: 12,
   minServantNameCharacters: 3,
+} as const;
+
+export const GLOBAL_CAMPAIGN_IDENTITY_LIMITS = {
+  maxPages: 50,
+  maxBodyBytes: 8 * 1_024 * 1_024,
+  fetchTimeoutMs: 15_000,
+  lookbackDays: 60,
 } as const;
 
 export const GLOBAL_EXPORT_LIMITS = {

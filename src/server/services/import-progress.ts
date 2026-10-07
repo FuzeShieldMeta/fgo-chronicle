@@ -4,6 +4,8 @@ import { IMPORT_EXECUTION_LIMITS } from "~/shared/global-reconciliation-config";
 type Stage =
   | "jp_fandom"
   | "atlas_global"
+  | "atlas_global_recent"
+  | "campaign_identities"
   | "publisher_download"
   | "publisher_matching"
   | "publisher_assessments"
