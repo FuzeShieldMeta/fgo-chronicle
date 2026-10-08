@@ -188,7 +188,7 @@ export async function publishAnnouncementFamily(
       source.rewards.map((reward) => ({ event, source, reward })),
     ),
   );
-  if (
+  const scheduleUnchanged =
     anchorUnchanged &&
     banners.every(
       (banner) => !!banner.dateOverlay || banner.status === "OFFICIAL",
@@ -198,9 +198,7 @@ export async function publishAnnouncementFamily(
         event.id === eventId ||
         !!event.dateOverlay ||
         event.status === "OFFICIAL",
-    )
-  )
-    return { changed: false, reason: "UNCHANGED" as const };
+    );
   // A newly linked imported member has not followed earlier curator/official moves.
   // Rebase it from the imported anchor, not from the already corrected anchor.
   const importedRelative = (
@@ -277,31 +275,46 @@ export async function publishAnnouncementFamily(
     confirmedStartsAt: candidate.startsAt,
     confirmedEndsAt: candidate.endsAt,
     members,
-    rewards: rewards.map(({ event, source, reward }) => ({
-      id: reward.id,
-      eventId: event.id,
-      expectedAt: effectiveReward(
-        reward,
-        rewardDateShift(event, reward) +
-          (!reward.dateOverlay &&
-          relativeSources.has(source.type) &&
-          reward.storyWarId === null &&
-          !(reward.curation?.active && ownsField(reward.curation, "expectedAt"))
-            ? members
-                .find(
-                  (member) => member.kind === "EVENT" && member.id === event.id,
-                )!
-                .startsAt.getTime() - effectiveEvent(event).startsAt.getTime()
-            : 0),
-      ).expectedAt,
-      behaviour:
-        relativeSources.has(source.type) && reward.storyWarId === null
-          ? ("EVENT_RELATIVE" as const)
-          : ("UNKNOWN" as const),
-      ownedDate:
-        !!reward.curation?.active && ownsField(reward.curation, "expectedAt"),
-      revision: String(reward.curation?.revision ?? 0),
-    })),
+    rewards: rewards.map(({ event, source, reward }) => {
+      const independentDate =
+        !!reward.globalBaseline ||
+        reward.storyWarId !== null ||
+        reward.dateBasis === "ABSOLUTE";
+      return {
+        id: reward.id,
+        eventId: event.id,
+        expectedAt: effectiveReward(
+          independentDate ? { ...reward, dateOverlay: null } : reward,
+          independentDate
+            ? 0
+            : rewardDateShift(event, reward) +
+                (!reward.dateOverlay &&
+                reward.dateBasis !== "EVENT_END" &&
+                relativeSources.has(source.type) &&
+                reward.storyWarId === null &&
+                !(
+                  reward.curation?.active &&
+                  ownsField(reward.curation, "expectedAt")
+                )
+                  ? members
+                      .find(
+                        (member) =>
+                          member.kind === "EVENT" && member.id === event.id,
+                      )!
+                      .startsAt.getTime() -
+                    effectiveEvent(event).startsAt.getTime()
+                  : 0),
+        ).expectedAt,
+        dateBasis: independentDate ? "ABSOLUTE" : reward.dateBasis,
+        behaviour:
+          relativeSources.has(source.type) && reward.storyWarId === null
+            ? ("EVENT_RELATIVE" as const)
+            : ("UNKNOWN" as const),
+        ownedDate:
+          !!reward.curation?.active && ownsField(reward.curation, "expectedAt"),
+        revision: String(reward.curation?.revision ?? 0),
+      };
+    }),
   });
   const evidence = dateEvidenceSchema.parse({
     sourceKind: "PUBLISHER_ANNOUNCEMENT",
@@ -318,6 +331,7 @@ export async function publishAnnouncementFamily(
   const eventRows: Prisma.EventDateOverlayUncheckedCreateInput[] = [];
   const bannerRows: Prisma.BannerDateOverlayUncheckedCreateInput[] = [];
   for (const member of plan.members) {
+    if (scheduleUnchanged) continue;
     const after = member.after;
     const data = {
       anchorEventId: eventId,
@@ -374,6 +388,8 @@ export async function publishAnnouncementFamily(
     };
     rewardRows.push({ rewardId: reward.id, ...data });
   }
+  if (scheduleUnchanged && !rewardRows.length)
+    return { changed: false, reason: "UNCHANGED" as const };
   if (eventRows.length)
     await tx.$executeRaw`INSERT INTO "EventDateOverlay"
     ("eventId", "anchorEventId", "candidateId", "startsAt", "endsAt", "startsAtPrecision", "endsAtPrecision", "startStatus", "endStatus", "curationRevision", "curationStartsAt", "curationEndsAt", "curationStartPrecision", "curationEndPrecision", "sourceUrl", "retrievedAt", "updatedAt")
@@ -432,6 +448,8 @@ export async function publishAnnouncementFamily(
         candidateId: candidate.id,
         anchorEventId: eventId,
         offsetMs: plan.offsetMs,
+        updatedRewardDates: rewardRows.length,
+        unresolvedRewardDates: plan.unresolvedRewardDates,
         unshiftedUnknownRewardIds: plan.rewards
           .filter(
             (reward) =>

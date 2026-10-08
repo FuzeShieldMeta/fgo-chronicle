@@ -19,6 +19,7 @@ export interface FamilyRewardDate {
   eventId: string;
   expectedAt: Date | null;
   behaviour: "EVENT_RELATIVE" | "ABSOLUTE" | "UNKNOWN";
+  dateBasis?: "UNKNOWN" | "EVENT_END" | "START_RELATIVE" | "ABSOLUTE";
   ownedDate: boolean;
   revision: string;
 }
@@ -132,6 +133,12 @@ export function calculateOfficialFamilyDates(input: {
       .filter((member) => member.kind === "EVENT")
       .map((member) => [member.id, member.startOffsetMs]),
   );
+  const eventEnds = new Map(
+    members
+      .filter((member) => member.kind === "EVENT")
+      .map((member) => [member.id, member.after.endsAt]),
+  );
+  let unresolvedRewardDates = 0;
   const rewards = [...input.rewards]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((reward) => {
@@ -141,17 +148,32 @@ export function calculateOfficialFamilyDates(input: {
         );
       if (reward.expectedAt && !validDate(reward.expectedAt))
         throw new RangeError("A reward has an invalid date.");
+      const endBound = reward.dateBasis === "EVENT_END" && !reward.ownedDate;
+      const eventEnd = eventEnds.get(reward.eventId);
+      if (endBound && !eventEnd) unresolvedRewardDates++;
       const offset =
-        reward.behaviour === "EVENT_RELATIVE" && !reward.ownedDate
+        !reward.ownedDate &&
+        (reward.dateBasis === "START_RELATIVE" ||
+          ((!reward.dateBasis || reward.dateBasis === "UNKNOWN") &&
+            reward.behaviour === "EVENT_RELATIVE"))
           ? eventOffsets.get(reward.eventId)!
           : 0;
       return {
         id: reward.id,
         before: reward,
-        expectedAt: shift(reward.expectedAt, offset),
+        expectedAt:
+          endBound && eventEnd
+            ? new Date(eventEnd)
+            : shift(reward.expectedAt, offset),
       };
     });
-  const plan = { anchorEventId: anchor.id, offsetMs, members, rewards };
+  const plan = {
+    anchorEventId: anchor.id,
+    offsetMs,
+    members,
+    rewards,
+    unresolvedRewardDates,
+  };
   return {
     ...plan,
     fingerprint: createHash("sha256")
