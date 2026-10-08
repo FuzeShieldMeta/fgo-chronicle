@@ -103,11 +103,12 @@ export function matchAnnouncementEvent(
             Math.abs(date.getTime() - start) <=
             windowDays * MILLISECONDS_PER_DAY,
         ) &&
-        event.names.some(
-          (name) =>
-            nameInContext(name, period.context) ||
-            (period.articleNameAllowed !== false &&
-              nameInContext(name, articleName)),
+        event.names.some((name) =>
+          period.subjectName
+            ? nameInContext(name, period.subjectName)
+            : nameInContext(name, period.context) ||
+              (period.articleNameAllowed !== false &&
+                nameInContext(name, articleName)),
         ),
     );
     // A verified overall campaign owns its introductory period, not its exchange component.

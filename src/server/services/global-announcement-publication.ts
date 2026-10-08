@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { GlobalEventCandidate, Prisma } from "../../../generated/prisma";
 import {
   GLOBAL_SOURCE_LIMITS,
+  GLOBAL_ANNOUNCEMENT_LIMITS,
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
 import {
@@ -37,6 +38,12 @@ const assessmentSchema = z.object({
   publicationAllowed: z.literal(false),
   articleName: z.string(),
   articleNameAllowed: z.boolean().optional(),
+  subjectName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(GLOBAL_ANNOUNCEMENT_LIMITS.maxTitleCharacters)
+    .optional(),
   regionalIdentity: z.unknown().optional(),
   matching: z.object({
     targetEventId: z.string(),

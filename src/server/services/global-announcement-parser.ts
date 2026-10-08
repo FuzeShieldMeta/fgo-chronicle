@@ -64,6 +64,7 @@ export interface AnnouncementPeriod {
   issues: string[];
   publicationAllowed: false;
   articleNameAllowed?: boolean;
+  subjectName?: string;
 }
 
 export function publisherArticleUrl(value: string) {
@@ -231,12 +232,25 @@ function boundary(
   };
 }
 
+function namedSubject(label: string) {
+  const match = /^"([^"]+)"\s+(.+)$/u.exec(label);
+  return match ? { name: match[1]!, label: match[2]! } : null;
+}
+
+function questSubsection(label: string) {
+  return /\braid\b|\b(?:part|section|act|episode)\s+(?:\d+|[ivx]+)\b/iu.test(
+    label.normalize("NFKC"),
+  );
+}
+
 function periodKind(label: string): AnnouncementPeriodKind {
   const kinds: AnnouncementPeriodKind[] = [];
   if (/maintenance/i.test(label)) kinds.push("MAINTENANCE");
   if (/summon.*period|pickup.*period/i.test(label)) kinds.push("SUMMON");
   if (/exchange period|shop.*period/i.test(label)) kinds.push("SHOP");
-  if (/quest period|quest availability|quest availability period/i.test(label))
+  if (
+    /(?:quest|chapter|story) (?:period|availability(?: period)?)/i.test(label)
+  )
     kinds.push("QUEST");
   if (/login bonus.*period/i.test(label)) kinds.push("LOGIN_BONUS");
   if (/campaign period/i.test(label)) kinds.push("CAMPAIGN");
@@ -274,15 +288,13 @@ export function parsePublisherAnnouncement(
     const line = lines[index]!;
     const matches = [...line.matchAll(RANGE)];
     const releaseLabel =
-      /^(?:quest|chapter) (?:release date|available from)\s*:?\s*$/i;
+      /^(?:quest|chapter|story) (?:release date|available from)\s*:?\s*$/i;
     if (!matches.length) {
       const match = RELEASE.exec(line);
       const label = match ? line.slice(0, match.index).trim() : "";
-      if (
-        match &&
-        (releaseLabel.test(label) ||
-          (!label && releaseLabel.test(lines[index - 1] ?? "")))
-      ) {
+      const releaseContext = label || (lines[index - 1] ?? "");
+      const subject = namedSubject(releaseContext);
+      if (match && releaseLabel.test(subject?.label ?? releaseContext)) {
         if (periods.length >= LIMITS.maxPeriodsPerArticle)
           throw new Error("The announcement has too many date ranges.");
         const groups = match.groups!;
@@ -294,6 +306,9 @@ export function parsePublisherAnnouncement(
         periods.push({
           sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
           kind: "QUEST",
+          ...(subject
+            ? { subjectName: subject.name, articleNameAllowed: false }
+            : {}),
           context: lines
             .slice(Math.max(0, index - LIMITS.contextLines), index + 1)
             .join("\n")
@@ -346,13 +361,14 @@ export function parsePublisherAnnouncement(
         .slice(-LIMITS.maxContextCharacters);
       const inlineLabel = line.slice(0, match.index).trim();
       const label = inlineLabel.length ? inlineLabel : (lines[index - 1] ?? "");
+      const subject = namedSubject(label);
       const kind =
         /\[New Chapter\]/i.test(name) &&
         /^"([^"]+)"/.test(inlineLabel) &&
         name.includes(/^"([^"]+)"/.exec(inlineLabel)![1]!) &&
         /will be available for a limited time during\s*$/i.test(inlineLabel)
           ? "QUEST"
-          : periodKind(label);
+          : periodKind(subject?.label ?? label);
       const periodIssues = [
         ...new Set(
           [start.issue, end.issue].filter((issue): issue is string => !!issue),
@@ -361,10 +377,16 @@ export function parsePublisherAnnouncement(
       if (start.value && end.value && end.value < start.value)
         periodIssues.push("INVALID_DATE_RANGE");
       if (kind === "OTHER") periodIssues.push("UNRESOLVED_PERIOD_CONTEXT");
+      if (kind === "QUEST" && questSubsection(subject?.label ?? label))
+        periodIssues.push("UNSUPPORTED_QUEST_SUBSECTION");
       periods.push({
         sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
         kind,
-        articleNameAllowed: kind !== "CAMPAIGN" || periods.length === 0,
+        articleNameAllowed:
+          subject && kind === "QUEST"
+            ? false
+            : kind !== "CAMPAIGN" || periods.length === 0,
+        ...(subject && kind === "QUEST" ? { subjectName: subject.name } : {}),
         context,
         rawPeriod: match[0],
         startsAt: start.value,
