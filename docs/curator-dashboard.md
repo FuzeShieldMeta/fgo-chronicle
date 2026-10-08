@@ -131,6 +131,20 @@ Fandom-only campaigns can use paired JP and NA headers from the same canonical w
 The importer checks the JP header against the stored source dates and saves the page revision and headers privately.
 Separate pages, matching rewards and similar names do not establish a regional identity.
 Missing, conflicting or unavailable identity evidence leaves the campaign unresolved.
+
+A Fandom campaign can also link to its official JP announcement through its JP header.
+The importer checks the exact Japanese campaign name against Atlas and verifies an explicit selector or exchange period in all three sources.
+The verified Atlas JP/NA identity then supplies the Global name, even when the campaign milestone differs between regions.
+
+The overall Fandom campaign and the narrower Atlas exchange remain separate records.
+An introductory Global campaign period targets the verified overall campaign rather than its exchange.
+The importer does not merge records, replace rewards or infer campaign-number offsets.
+It rechecks the source dates and latest Atlas assessment before publication.
+Unchanged evidence does not create another assessment merely because the retrieval time changed.
+
+JP announcement retrieval uses a fixed publisher origin, rejects redirects and limits each response to 2 MiB.
+Each run checks at most 12 linked articles within a 45-second JP lookup budget.
+Evidence remains private to curator APIs. No new migration is required.
 Unique valid event matches automatically confirm the announced dates and move relative family dates.
 Campaign periods can confirm campaign and pre-release records. Quest periods can confirm quest releases and finite chapter or quest events.
 These periods update only the matched record and its eligible relative reward dates. They do not move sibling events or summon banners.

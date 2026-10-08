@@ -7,6 +7,16 @@ import {
 } from "../../../scripts/lib/wikitext.mjs";
 import { parseFandomEventHeader } from "../../../scripts/lib/fandom-campaign-adapter.mjs";
 import {
+  buildJpCampaignProof,
+  campaignSourceWikitext,
+  hasJpCampaignExchange,
+  fetchJpCampaignArticle,
+  jpCampaignArticleUrl,
+  verifiedJpCampaignAlias,
+  type JpCampaignProof,
+  type AtlasCampaignAssessment,
+} from "./global-jp-campaign-identity";
+import {
   GLOBAL_CAMPAIGN_IDENTITY_LIMITS as LIMITS,
   GLOBAL_SOURCE_LIMITS,
   GLOBAL_ANNOUNCEMENT_LIMITS,
@@ -24,7 +34,8 @@ const proofSchema = z
     headerHash: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
-export type CampaignIdentityProof = z.infer<typeof proofSchema>;
+export type CampaignIdentityProof =
+  z.infer<typeof proofSchema> | JpCampaignProof;
 export type CampaignIdentityTarget = {
   id: string;
   type: string;
@@ -42,7 +53,15 @@ const hashHeaders = (jp: string, na: string) =>
 export function verifiedRegionalCampaignAlias(
   raw: unknown,
   event: CampaignIdentityTarget,
+  atlas?: AtlasCampaignAssessment,
 ) {
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "kind" in raw &&
+    raw.kind === "JP_PUBLISHER_ATLAS"
+  )
+    return verifiedJpCampaignAlias(raw, event, atlas);
   const parsed = proofSchema.safeParse(raw);
   if (
     !parsed.success ||
@@ -91,7 +110,7 @@ export function pairedRegionalCampaignProof(page: {
   revisionId: number;
   title: string;
   wikitext: string;
-}): CampaignIdentityProof | null {
+}): z.infer<typeof proofSchema> | null {
   const text = page.wikitext
     .replace(/<!--[^]*?-->/g, "")
     .replace(/<(nowiki|pre|syntaxhighlight)\b[^>]*>[^]*?<\/\1\s*>/gi, "");
@@ -113,6 +132,7 @@ export function pairedRegionalCampaignProof(page: {
 export async function loadRegionalCampaignProofs(
   events: readonly CampaignIdentityTarget[],
   fetchFn: typeof fetch = fetch,
+  atlases: readonly AtlasCampaignAssessment[] = [],
 ) {
   const ids = [
     ...new Set(
@@ -191,6 +211,11 @@ export async function loadRegionalCampaignProofs(
     })
     .parse(JSON.parse(body));
   const result = new Map<string, CampaignIdentityProof>();
+  const articles = new Map<
+    string,
+    Awaited<ReturnType<typeof fetchJpCampaignArticle>>
+  >();
+  const signal = AbortSignal.timeout(LIMITS.collectionTimeoutMs);
   const seen = new Set<number>();
   for (const page of parsed.query.pages) {
     if (!page.pageid) continue;
@@ -201,12 +226,48 @@ export async function loadRegionalCampaignProofs(
     seen.add(page.pageid);
     const revision = page.revisions?.[0];
     if (!revision) continue;
-    const proof = pairedRegionalCampaignProof({
+    const sourcePage = {
       pageId: page.pageid,
       revisionId: revision.revid,
       title: page.title,
       wikitext: revision.slots.main.content,
-    });
+    };
+    let proof: CampaignIdentityProof | null =
+      pairedRegionalCampaignProof(sourcePage);
+    if (!proof && hasJpCampaignExchange(sourcePage, atlases)) {
+      const headers = extractTemplates(
+        campaignSourceWikitext(sourcePage.wikitext),
+        "EventHeaderJP",
+      );
+      const link: unknown =
+        headers.length === 1
+          ? parseTemplateParameters(headers[0]!).get("link")
+          : null;
+      let articleUrl: string | null = null;
+      if (typeof link === "string") {
+        try {
+          articleUrl = jpCampaignArticleUrl(link.trim());
+        } catch {
+          /* Unsupported links do not establish identity. */
+        }
+      }
+      const event = events.find(
+        (row) =>
+          row.sourceKey === `fandom:JP:page:${page.pageid}:projection:NA`,
+      );
+      if (articleUrl && event) {
+        let article = articles.get(articleUrl);
+        if (!article) {
+          if (articles.size >= LIMITS.maxOfficialArticles)
+            throw new Error(
+              "The JP announcement lookup exceeds the article limit.",
+            );
+          article = await fetchJpCampaignArticle(articleUrl, fetchFn, signal);
+          articles.set(articleUrl, article);
+        }
+        proof = buildJpCampaignProof(sourcePage, article, event, atlases);
+      }
+    }
     if (proof) result.set(`fandom:JP:page:${page.pageid}:projection:NA`, proof);
   }
   return result;

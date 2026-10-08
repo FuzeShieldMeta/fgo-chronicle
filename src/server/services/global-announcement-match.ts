@@ -27,6 +27,7 @@ export interface AnnouncementMatchEvent {
   names: readonly string[];
   startsAt: Date;
   projectedStartsAt: Date;
+  campaignComponentId?: string;
 }
 
 export function normaliseAnnouncementName(value: string) {
@@ -109,7 +110,25 @@ export function matchAnnouncementEvent(
               nameInContext(name, articleName)),
         ),
     );
-    const candidateIds = [...new Set(matches.map((event) => event.id))].sort();
+    // A verified overall campaign owns its introductory period, not its exchange component.
+    const overallMatches =
+      period.kind === "CAMPAIGN" && period.articleNameAllowed !== false
+        ? matches.filter(
+            (event) =>
+              !events.some(
+                (parent) =>
+                  parent.campaignComponentId === event.id &&
+                  parent.names.some(
+                    (name) =>
+                      nameInContext(name, period.context) ||
+                      nameInContext(name, articleName),
+                  ),
+              ),
+          )
+        : matches;
+    const candidateIds = [
+      ...new Set(overallMatches.map((event) => event.id)),
+    ].sort();
     if (candidateIds.length)
       return {
         ...base,

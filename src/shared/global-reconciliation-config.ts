@@ -44,6 +44,9 @@ export const GLOBAL_CAMPAIGN_IDENTITY_LIMITS = {
   maxBodyBytes: 8 * 1_024 * 1_024,
   fetchTimeoutMs: 15_000,
   lookbackDays: 60,
+  maxOfficialArticles: 12,
+  collectionTimeoutMs: 45_000,
+  jstOffsetMinutes: 9 * 60,
 } as const;
 
 export const GLOBAL_EXPORT_LIMITS = {

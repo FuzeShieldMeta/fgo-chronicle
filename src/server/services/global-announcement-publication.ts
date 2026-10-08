@@ -21,6 +21,7 @@ import { publisherArticleUrl } from "./global-announcement-parser";
 import { matchAnnouncementEvent } from "./global-announcement-match";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { verifiedRegionalCampaignAlias } from "./global-campaign-identity";
+import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
 import { z } from "zod";
 
 const assessmentSchema = z.object({
@@ -104,9 +105,10 @@ export async function publishAnnouncementFamily(
       (candidate.endsAt?.getTime() ?? null)
   )
     throw new Error("Invalid announcement assessment.");
-  const atlasId = /^atlas:JP:event:(\d+):projection:NA$/.exec(
-    anchor.sourceKey,
-  )?.[1];
+  const bridge = jpCampaignProofSchema.safeParse(assessed.regionalIdentity);
+  const atlasId =
+    /^atlas:JP:event:(\d+):projection:NA$/.exec(anchor.sourceKey)?.[1] ??
+    (bridge.success ? bridge.data.atlasId : undefined);
   const atlas = atlasId
     ? await tx.globalEventCandidate.findFirst({
         where: { sourceKind: "GLOBAL_GAME_DATA", sourceRecordId: atlasId },
@@ -121,6 +123,7 @@ export async function publishAnnouncementFamily(
   const regional = verifiedRegionalCampaignAlias(
     assessed.regionalIdentity,
     anchor,
+    atlas ?? undefined,
   );
   const current = effectiveEvent(anchor);
   if (

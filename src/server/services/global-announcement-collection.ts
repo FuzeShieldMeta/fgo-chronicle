@@ -24,6 +24,7 @@ import {
 } from "./global-announcement-match";
 import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
+import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
 import {
   loadRegionalCampaignProofs,
   verifiedRegionalCampaignAlias,
@@ -68,6 +69,16 @@ export function announcementCandidateRows(
     const rows = article.periods.map((period, index) => {
       const invalidRange = period.issues.includes("INVALID_DATE_RANGE");
       const targetId = matches?.[index]?.targetEventId;
+      const regionalIdentity = targetId
+        ? regionalProofs.get(targetId)
+        : undefined;
+      const stableIdentity =
+        regionalIdentity && "kind" in regionalIdentity
+          ? {
+              ...regionalIdentity,
+              article: { ...regionalIdentity.article, retrievedAt: undefined },
+            }
+          : regionalIdentity;
       const snapshot = {
         ...period,
         articleName: article.name,
@@ -87,7 +98,10 @@ export function announcementCandidateRows(
           invalidRange || !period.startsAt ? null : new Date(period.startsAt),
         endsAt: invalidRange || !period.endsAt ? null : new Date(period.endsAt),
         reasons: ["ANNOUNCEMENT_REQUIRES_REVIEW", ...period.issues],
-        assessmentHash: hash(snapshot),
+        assessmentHash: hash({
+          ...snapshot,
+          ...(regionalIdentity ? { regionalIdentity: stableIdentity } : {}),
+        }),
         snapshot: json(snapshot),
       };
     });
@@ -194,12 +208,31 @@ export async function collectAnnouncementsWithAuthority(
       take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
     });
     try {
+      const atlases = await database.globalEventCandidate.findMany({
+        where: { sourceKind: "GLOBAL_GAME_DATA", startsAt: range },
+        distinct: ["sourceRecordId"],
+        orderBy: [
+          { sourceRecordId: "asc" },
+          { retrievedAt: "desc" },
+          { createdAt: "desc" },
+          { id: "desc" },
+        ],
+        take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
+      });
+      if (atlases.length > GLOBAL_SOURCE_LIMITS.maxBatchRecords)
+        throw new Error(
+          "The campaign identity lookup exceeds the record limit.",
+        );
       const proofs = await progress.stage("campaign_identities", () =>
-        loadRegionalCampaignProofs(targets, dependencies.fetchFn),
+        loadRegionalCampaignProofs(targets, dependencies.fetchFn, atlases),
       );
       for (const target of targets) {
         const proof = proofs.get(target.sourceKey);
-        if (proof && verifiedRegionalCampaignAlias(proof, target))
+        const bridge = jpCampaignProofSchema.safeParse(proof);
+        const atlas = bridge.success
+          ? atlases.find((row) => row.sourceRecordId === bridge.data.atlasId)
+          : undefined;
+        if (proof && verifiedRegionalCampaignAlias(proof, target, atlas))
           regionalProofs.set(target.id, proof);
       }
     } catch {
@@ -298,6 +331,10 @@ export async function collectAnnouncementsWithAuthority(
               );
               return match ? [match[1]!] : [];
             });
+            for (const proof of regionalProofs.values()) {
+              const bridge = jpCampaignProofSchema.safeParse(proof);
+              if (bridge.success) sourceIds.push(bridge.data.atlasId);
+            }
             const aliases = sourceIds.length
               ? await tx.globalEventCandidate.findMany({
                   where: {
@@ -322,9 +359,17 @@ export async function collectAnnouncementsWithAuthority(
                 execution.allowPublication !== false && assessment
                   ? verifiedAtlasAlias(assessment, event)
                   : null;
+              const proof = regionalProofs.get(event.id);
+              const bridge = jpCampaignProofSchema.safeParse(proof);
+              const component = bridge.success
+                ? aliases.find(
+                    (row) => row.sourceRecordId === bridge.data.atlasId,
+                  )
+                : undefined;
               const regional = verifiedRegionalCampaignAlias(
-                regionalProofs.get(event.id),
+                proof,
                 event,
+                component,
               );
               return {
                 id: event.id,
@@ -339,6 +384,9 @@ export async function collectAnnouncementsWithAuthority(
                 ],
                 startsAt: effective.startsAt,
                 projectedStartsAt: event.startsAt,
+                ...(regional && component?.targetEventId
+                  ? { campaignComponentId: component.targetEventId }
+                  : {}),
               };
             });
           });
@@ -404,7 +452,8 @@ export async function collectAnnouncementsWithAuthority(
                 inserted: result.count,
                 examined: records.length,
                 articles: report.articles.length,
-                coverageLimited: report.coverageLimited || regionalCoverageLimited,
+                coverageLimited:
+                  report.coverageLimited || regionalCoverageLimited,
                 published: false,
               },
             },

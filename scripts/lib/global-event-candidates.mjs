@@ -253,6 +253,7 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
                 id: jpEvent.id,
                 type: jpEvent.type,
                 name: jpEvent.name,
+                originalName: jpEvent.originalName ?? null,
                 startedAt: jpEvent.startedAt,
                 endedAt: jpEvent.endedAt,
                 warIds: origin?.ids ?? [],
