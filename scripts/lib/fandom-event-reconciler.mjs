@@ -1,5 +1,6 @@
 import {
   countEventRewardChanges,
+  rewardDateBasisChanged,
   checkReconciliationLimits,
   isProtectedRewardSource,
 } from "./reward-reconciliation.mjs";
@@ -41,6 +42,7 @@ function rewardData(reward, rewardSourceId) {
     itemType: reward.itemType,
     amount: reward.amount,
     expectedAt: toDate(reward.expectedAt),
+    dateBasis: reward.dateBasis ?? "UNKNOWN",
     nature: reward.nature,
     eligibility: reward.eligibility,
     storyWarId: reward.storyWarId ?? null,
@@ -160,7 +162,8 @@ async function saveRewardSource(
   const rewards = options.insertMissingOnly
     ? source.rewards.filter(
         (/** @type {Record<string, any>} */ reward) =>
-          !existingRewards.has(reward.sourceKey),
+          !existingRewards.has(reward.sourceKey) ||
+          rewardDateBasisChanged(existingRewards.get(reward.sourceKey), reward),
       )
     : source.rewards;
   if (rewards.length === 0) return;
@@ -188,7 +191,16 @@ async function saveRewardSource(
   });
 
   for (const reward of rewards) {
-    if (existingRewards.get(reward.sourceKey)?.reviewedAt) continue;
+    const existing = existingRewards.get(reward.sourceKey);
+    if (existing && (existing.reviewedAt || options.insertMissingOnly)) {
+      if (rewardDateBasisChanged(existing, reward)) {
+        await transaction.rewardDefinition.update({
+          where: { sourceKey: reward.sourceKey },
+          data: { dateBasis: reward.dateBasis ?? "UNKNOWN" },
+        });
+      }
+      continue;
+    }
     const data = rewardData(reward, savedSource.id);
     await transaction.rewardDefinition.upsert({
       where: { sourceKey: reward.sourceKey },

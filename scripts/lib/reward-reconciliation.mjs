@@ -3,17 +3,25 @@ export function isProtectedRewardSource(source) {
   return source.status === "CURATED" || source.status === "OFFICIAL";
 }
 
+/** @param {Record<string, any> | undefined} existing @param {Record<string, any>} desired */
+export function rewardDateBasisChanged(existing, desired) {
+  return (existing?.dateBasis ?? "UNKNOWN") !== (desired.dateBasis ?? "UNKNOWN");
+}
+
 /** @param {Record<string, any>} reward */
 function rewardSignature(reward) {
   return JSON.stringify([
     reward.itemType,
     reward.amount,
     reward.expectedAt ? new Date(reward.expectedAt).toISOString() : null,
+    reward.dateBasis ?? "UNKNOWN",
     reward.nature,
     reward.eligibility ?? null,
     reward.defaultIncluded,
     reward.storyWarId ?? null,
-    reward.storyReleaseAt ? new Date(reward.storyReleaseAt).toISOString() : null,
+    reward.storyReleaseAt
+      ? new Date(reward.storyReleaseAt).toISOString()
+      : null,
   ]);
 }
 
@@ -61,6 +69,7 @@ export function countEventRewardChanges(event, desiredSources, options = {}) {
     for (const reward of source.rewards) {
       const previous = rewards.get(reward.sourceKey);
       if (!previous) count += 1;
+      else if (rewardDateBasisChanged(previous, reward)) count += 1;
       else if (
         !options.insertMissingOnly &&
         !previous.reviewedAt &&

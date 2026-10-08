@@ -83,6 +83,10 @@ const rewardSchema = z.object({
   ]),
   amount: z.number().int().positive(),
   expectedAt: nullableDate,
+  dateBasis: z
+    .enum(["UNKNOWN", "EVENT_END", "START_RELATIVE", "ABSOLUTE"])
+    .optional()
+    .default("UNKNOWN"),
   nature: z.enum(["DETERMINISTIC", "CONDITIONAL", "CURATED_ESTIMATE"]),
   eligibility: z.string().trim().min(1).nullable(),
   storyWarId: z.number().int().positive().nullable().optional().default(null),
@@ -199,13 +203,7 @@ const eventDatasetSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Duplicate reward source key: ${reward.sourceKey}`,
-            path: [
-              "rewardSources",
-              index,
-              "rewards",
-              rewardIndex,
-              "sourceKey",
-            ],
+            path: ["rewardSources", index, "rewards", rewardIndex, "sourceKey"],
           });
         }
         rewardKeys.add(reward.sourceKey);

@@ -250,6 +250,7 @@ export function extractFandomQuestParameterRewards(wikitext, options) {
             itemType: reward.itemType,
             amount: reward.amount,
             expectedAt: options.eventEndsAt,
+            dateBasis: "EVENT_END",
             nature: "CONDITIONAL",
             eligibility: `Clear ${sectionName}.`,
             defaultIncluded: true,
@@ -445,6 +446,7 @@ function extractMaintenanceProse(wikitext, options) {
         expectedAt: range
           ? addCalendarYears(range.end, 2).toISOString()
           : options.eventEndsAt,
+        dateBasis: range ? "ABSOLUTE" : "UNKNOWN",
         nature: targeted ? "CONDITIONAL" : "DETERMINISTIC",
         eligibility: targeted ? context : null,
         defaultIncluded: !targeted,
@@ -457,9 +459,17 @@ function extractMaintenanceProse(wikitext, options) {
 
 /**
  * @param {string} wikitext
- * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string}} options
+ * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceEndsAt?: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string}} options
  */
 export function extractFandomRewardSources(wikitext, options) {
+  /** @param {{start: Date, end: Date} | null | undefined} range */
+  const coversEventPeriod = (range) =>
+    Boolean(
+      range &&
+      options.eventSourceEndsAt &&
+      range.start.toISOString() === options.eventSourceStartsAt &&
+      range.end.toISOString() === options.eventSourceEndsAt,
+    );
   const rewardSources = [];
   const issues = [];
   const dateWarnings = new Set();
@@ -556,6 +566,8 @@ export function extractFandomRewardSources(wikitext, options) {
               itemType: reward.itemType,
               amount: reward.amount,
               expectedAt,
+              dateBasis:
+                !range || coversEventPeriod(range) ? "EVENT_END" : "UNKNOWN",
               nature: "CONDITIONAL",
               eligibility: condition,
               defaultIncluded: !isPermanentMission,
@@ -737,6 +749,7 @@ export function extractFandomRewardSources(wikitext, options) {
               expectedAt: sourceDate
                 ? addCalendarYears(sourceDate, 2).toISOString()
                 : options.eventEndsAt,
+              dateBasis: sourceDate ? "START_RELATIVE" : "EVENT_END",
               nature: "CONDITIONAL",
               eligibility: loginRequirement
                 ? `Log in for day ${day}. Requirement: ${loginRequirement}.`
@@ -887,6 +900,18 @@ export function extractFandomRewardSources(wikitext, options) {
             itemType: reward.itemType,
             amount: reward.amount,
             expectedAt,
+            dateBasis:
+              type !== "LOGIN_BONUS" &&
+              !isMaintenance &&
+              coversEventPeriod(sectionRange ?? rowRange)
+                ? "EVENT_END"
+                : expectedSourceDate
+                  ? type === "LOGIN_BONUS"
+                    ? "START_RELATIVE"
+                    : "UNKNOWN"
+                  : isMaintenance
+                    ? "UNKNOWN"
+                    : "EVENT_END",
             nature: isMaintenance ? "DETERMINISTIC" : "CONDITIONAL",
             eligibility: isMaintenance ? null : eligibility,
             defaultIncluded: !isPermanentMission && !isPermanentQuestReward,
@@ -1015,6 +1040,7 @@ export function normaliseFandomCampaign(page, listEntry, options) {
     pageId: page.pageId,
     eventName: page.title,
     eventSourceStartsAt: sourceStartsAt,
+    eventSourceEndsAt: sourceEndsAt,
     eventSourceKey,
     evidenceSourceKey,
     evidenceUrl: page.url,

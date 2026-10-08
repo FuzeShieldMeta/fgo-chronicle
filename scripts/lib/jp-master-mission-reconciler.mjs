@@ -1,4 +1,5 @@
 import { parseEventDataset } from "./event-dataset.mjs";
+import { rewardDateBasisChanged } from "./reward-reconciliation.mjs";
 
 export const JP_MASTER_MISSION_SYNC_SOURCE = "ATLAS_JP_MASTER_MISSION_EXPORT";
 const ADVISORY_LOCK_ID = 734621907;
@@ -14,6 +15,7 @@ function rewardSignature(reward) {
     itemType: reward.itemType,
     amount: reward.amount,
     expectedAt: toDate(reward.expectedAt)?.toISOString() ?? null,
+    dateBasis: reward.dateBasis ?? "UNKNOWN",
     nature: reward.nature,
     eligibility: reward.eligibility ?? null,
     storyWarId: reward.storyWarId ?? null,
@@ -42,6 +44,7 @@ function rewardData(reward, rewardSourceId) {
     itemType: reward.itemType,
     amount: reward.amount,
     expectedAt: toDate(reward.expectedAt),
+    dateBasis: reward.dateBasis ?? "UNKNOWN",
     nature: reward.nature,
     eligibility: reward.eligibility,
     storyWarId: reward.storyWarId ?? null,
@@ -176,7 +179,15 @@ export async function reconcileProjectedMasterMissions(
           ...source.rewards.filter(
             (reward) => !reviewedKeys.has(reward.sourceKey),
           ),
-          ...reviewedRewards,
+          ...reviewedRewards.map(
+            (/** @type {Record<string, any>} */ reward) => ({
+              ...reward,
+              dateBasis:
+                desiredRewards.get(reward.sourceKey)?.dateBasis ??
+                reward.dateBasis ??
+                "UNKNOWN",
+            }),
+          ),
           ...retainedCuratorRewards,
         ],
       };
@@ -338,7 +349,16 @@ export async function reconcileProjectedMasterMissions(
             ),
           );
           for (const reward of source.rewards) {
-            if (existingRewards.get(reward.sourceKey)?.reviewedAt) continue;
+            const previous = existingRewards.get(reward.sourceKey);
+            if (previous?.reviewedAt) {
+              if (rewardDateBasisChanged(previous, reward)) {
+                await transaction.rewardDefinition.update({
+                  where: { sourceKey: reward.sourceKey },
+                  data: { dateBasis: reward.dateBasis ?? "UNKNOWN" },
+                });
+              }
+              continue;
+            }
             const data = rewardData(reward, savedSource.id);
             await transaction.rewardDefinition.upsert({
               where: { sourceKey: reward.sourceKey },

@@ -92,6 +92,7 @@ async function importRewardSource(source, eventIds, externalEventIds) {
         itemType: reward.itemType,
         amount: reward.amount,
         expectedAt: toDate(reward.expectedAt),
+        dateBasis: reward.dateBasis ?? "UNKNOWN",
         nature: reward.nature,
         eligibility: reward.eligibility,
         storyWarId: reward.storyWarId ?? null,

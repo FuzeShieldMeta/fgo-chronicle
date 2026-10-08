@@ -1,0 +1,4 @@
+CREATE TYPE "RewardDateBasis" AS ENUM ('UNKNOWN', 'EVENT_END', 'START_RELATIVE', 'ABSOLUTE');
+
+ALTER TABLE "RewardDefinition"
+ADD COLUMN "dateBasis" "RewardDateBasis" NOT NULL DEFAULT 'UNKNOWN';

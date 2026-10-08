@@ -118,6 +118,13 @@ enum RewardNature {
   CURATED_ESTIMATE
 }
 
+enum RewardDateBasis {
+  UNKNOWN
+  EVENT_END
+  START_RELATIVE
+  ABSOLUTE
+}
+
 enum ScheduleProjectionMethod {
   TWO_CALENDAR_YEARS
 }
@@ -206,6 +213,7 @@ model RewardDefinition {
   itemType        RewardItemType
   amount          Int
   expectedAt      DateTime?
+  dateBasis       RewardDateBasis       @default(UNKNOWN)
   nature          RewardNature
   eligibility     String?
   storyWarId      Int?
