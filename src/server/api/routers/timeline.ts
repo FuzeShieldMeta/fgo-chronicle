@@ -233,6 +233,7 @@ const rewardSourceSelect = {
       itemType: true,
       amount: true,
       expectedAt: true,
+      dateBasis: true,
       nature: true,
       eligibility: true,
       storyWarId: true,
@@ -254,6 +255,7 @@ const incomeContributionSelect = {
   itemType: true,
   amount: true,
   expectedAt: true,
+  dateBasis: true,
   nature: true,
   eligibility: true,
   storyWarId: true,
@@ -630,14 +632,14 @@ const cachedTimelineListPayload = unstable_cache(
 const cachedIncomePayload = unstable_cache(
   async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryIncome(db, restoreCacheInput(input))),
-  ["timeline-income-v4"],
+  ["timeline-income-v5"],
   publicTimelineCacheOptions,
 );
 
 const cachedTimelineWindowPayload = unstable_cache(
   async (input: TimelineWindowInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineWindow(db, input)),
-  ["timeline-window-v4"],
+  ["timeline-window-v5"],
   publicTimelineCacheOptions,
 );
 

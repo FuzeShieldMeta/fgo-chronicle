@@ -43,6 +43,7 @@ export type IncomeContribution = {
   itemType: ForecastResourceType;
   amount: number;
   expectedAt: Date;
+  expectedAtPrecision?: "DATE_ONLY" | "EXACT";
   nature: "DETERMINISTIC" | "CONDITIONAL" | "CURATED_ESTIMATE";
   eligibility: string | null;
   storyWarId?: number | null;
@@ -355,7 +356,11 @@ export function buildIncomeLedger(
       profile,
       catalogue,
     );
-    const day = calendarDayKey(contribution.expectedAt, "EXACT", timeZone);
+    const day = calendarDayKey(
+      contribution.expectedAt,
+      contribution.expectedAtPrecision ?? "EXACT",
+      timeZone,
+    );
     if (!daySet.has(day)) continue;
 
     const key = cellKey(day, contribution.itemType);
