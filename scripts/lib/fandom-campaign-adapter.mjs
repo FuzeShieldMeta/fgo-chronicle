@@ -567,7 +567,9 @@ export function extractFandomRewardSources(wikitext, options) {
               amount: reward.amount,
               expectedAt,
               dateBasis:
-                !range || coversEventPeriod(range) ? "EVENT_END" : "UNKNOWN",
+                !isPermanentMission && (!range || coversEventPeriod(range))
+                  ? "EVENT_END"
+                  : "UNKNOWN",
               nature: "CONDITIONAL",
               eligibility: condition,
               defaultIncluded: !isPermanentMission,
@@ -900,10 +902,11 @@ export function extractFandomRewardSources(wikitext, options) {
             itemType: reward.itemType,
             amount: reward.amount,
             expectedAt,
-            dateBasis:
-              type !== "LOGIN_BONUS" &&
-              !isMaintenance &&
-              coversEventPeriod(sectionRange ?? rowRange)
+            dateBasis: isPermanentMission
+              ? "UNKNOWN"
+              : type !== "LOGIN_BONUS" &&
+                  !isMaintenance &&
+                  coversEventPeriod(sectionRange ?? rowRange)
                 ? "EVENT_END"
                 : expectedSourceDate
                   ? type === "LOGIN_BONUS"
