@@ -324,14 +324,21 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
         { maxWait: 10_000, timeout: transactionTimeout },
       );
     } catch (error) {
-      await db.syncRun.update({
-        where: { id: syncRun.id },
-        data: {
-          status: "FAILED",
-          completedAt: new Date(),
-          errorMessage: safeSyncFailure(error),
-        },
-      });
+      try {
+        await db.syncRun.update({
+          where: { id: syncRun.id },
+          data: {
+            status: "FAILED",
+            completedAt: new Date(),
+            errorMessage: safeSyncFailure(error),
+          },
+        });
+      } catch (auditError) {
+        throw new AggregateError(
+          [error, auditError],
+          "Event schedule synchronisation failed and its failure could not be recorded.",
+        );
+      }
       throw error;
     }
   }

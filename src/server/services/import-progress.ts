@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { IMPORT_EXECUTION_LIMITS } from "~/shared/global-reconciliation-config";
+import {
+  primaryImportFailure,
+  reconciliationLimitDetails,
+} from "../../../scripts/lib/reward-reconciliation.mjs";
 
 type Stage =
   | "jp_fandom"
@@ -34,6 +38,9 @@ type Counters = {
 };
 
 export function importFailureCategory(error: unknown) {
+  error = primaryImportFailure(error);
+  const limit = reconciliationLimitDetails(error);
+  if (limit) return limit.category;
   if (isImportTransactionConflict(error)) return "TRANSACTION_CONFLICT";
   const code =
     error && typeof error === "object" && "code" in error
@@ -57,6 +64,7 @@ export function importFailureCategory(error: unknown) {
 }
 
 export function isImportTransactionConflict(error: unknown) {
+  error = primaryImportFailure(error);
   if (!error || typeof error !== "object" || !("code" in error)) return false;
   if (error.code === "P2034") return true;
   if (error.code !== "P2010" || !("meta" in error)) return false;

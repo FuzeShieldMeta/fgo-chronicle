@@ -1,11 +1,14 @@
 import {
-  countEventRewardChanges,
+  eventRewardChangeBreakdown,
   rewardDateBasisChanged,
+  rewardContentChanged,
   checkReconciliationLimits,
   isProtectedRewardSource,
 } from "./reward-reconciliation.mjs";
 import { parseEventDataset } from "./event-dataset.mjs";
 import { addCalendarYears, planEventReconciliation } from "./jp-event-sync.mjs";
+import { IMPORT_WRITE_LIMITS } from "../../src/shared/import-write-config.mjs";
+import { safeSyncFailure } from "./event-schedule-monitoring.mjs";
 
 const FANDOM_SYNC_SOURCE = "FANDOM_JP_COVERAGE";
 const FANDOM_SYNC_ADVISORY_LOCK_ID = 734621906;
@@ -148,59 +151,72 @@ async function saveFamily(transaction, family, existingFamily) {
  * @param {Record<string, any>} source
  * @param {string} eventId
  * @param {Map<string, Record<string, any>>} existingRewards
- * @param {{insertMissingOnly?: boolean, existingSource?: Record<string, any>}} [options]
+ * @param {{insertMissingOnly?: boolean, existingSource?: Record<string, any>, metadataUpdates: Map<string, Array<{sourceKey: string, sourceSourceKey: string}>>}} options
  */
 async function saveRewardSource(
   transaction,
   source,
   eventId,
   existingRewards,
-  options = {},
+  options,
 ) {
   if (options.existingSource && isProtectedRewardSource(options.existingSource))
     return;
-  const rewards = options.insertMissingOnly
-    ? source.rewards.filter(
-        (/** @type {Record<string, any>} */ reward) =>
-          !existingRewards.has(reward.sourceKey) ||
-          rewardDateBasisChanged(existingRewards.get(reward.sourceKey), reward),
-      )
-    : source.rewards;
-  if (rewards.length === 0) return;
+  const contentRewards = [];
+  for (const reward of source.rewards) {
+    const existing = existingRewards.get(reward.sourceKey);
+    const contentChange =
+      !existing ||
+      (!existing.reviewedAt &&
+        !options.insertMissingOnly &&
+        rewardContentChanged(existing, reward));
+    if (contentChange) contentRewards.push(reward);
+    else if (rewardDateBasisChanged(existing, reward)) {
+      const basis = reward.dateBasis ?? "UNKNOWN";
+      const updates = options.metadataUpdates.get(basis) ?? [];
+      updates.push({
+        sourceKey: reward.sourceKey,
+        sourceSourceKey: source.sourceKey,
+      });
+      options.metadataUpdates.set(basis, updates);
+    }
+  }
+  const sourceChanged =
+    !options.existingSource ||
+    (!options.insertMissingOnly &&
+      ["name", "type", "status", "evidenceUrl"].some(
+        (key) => source[key] !== options.existingSource?.[key],
+      ));
+  if (!sourceChanged && contentRewards.length === 0) return;
+  if (source.rewards.length === 0) return;
 
-  const savedSource = await transaction.rewardSource.upsert({
-    where: { sourceKey: source.sourceKey },
-    create: {
-      sourceKey: source.sourceKey,
-      eventId,
-      name: source.name,
-      type: source.type,
-      status: source.status,
-      evidenceUrl: source.evidenceUrl,
-      lastVerifiedAt: toDate(source.lastVerifiedAt),
-    },
-    update: options.insertMissingOnly
-      ? {}
-      : {
+  const savedSource = sourceChanged
+    ? await transaction.rewardSource.upsert({
+        where: { sourceKey: source.sourceKey },
+        create: {
+          sourceKey: source.sourceKey,
           eventId,
           name: source.name,
           type: source.type,
           status: source.status,
           evidenceUrl: source.evidenceUrl,
+          lastVerifiedAt: toDate(source.lastVerifiedAt),
         },
-  });
+        update: options.insertMissingOnly
+          ? {}
+          : {
+              eventId,
+              name: source.name,
+              type: source.type,
+              status: source.status,
+              evidenceUrl: source.evidenceUrl,
+            },
+      })
+    : options.existingSource;
 
-  for (const reward of rewards) {
-    const existing = existingRewards.get(reward.sourceKey);
-    if (existing && (existing.reviewedAt || options.insertMissingOnly)) {
-      if (rewardDateBasisChanged(existing, reward)) {
-        await transaction.rewardDefinition.update({
-          where: { sourceKey: reward.sourceKey },
-          data: { dateBasis: reward.dateBasis ?? "UNKNOWN" },
-        });
-      }
-      continue;
-    }
+  for (const reward of contentRewards) {
+    if (!savedSource)
+      throw new Error("The reward source could not be resolved.");
     const data = rewardData(reward, savedSource.id);
     await transaction.rewardDefinition.upsert({
       where: { sourceKey: reward.sourceKey },
@@ -483,17 +499,21 @@ export async function reconcileProjectedFandomEvents(
       ({ sourceKey }) => sourceKey,
     ),
   );
-  const rewardChanges = [...maintainedExistingEvents, ...externalEvents].reduce(
-    (count, event) => {
-      const desired = rewardsByEvent.get(event.sourceKey) ?? [];
-      return (
-        count +
-        countEventRewardChanges(event, desired, {
-          insertMissingOnly: frozenKeys.has(event.sourceKey),
-          obsoleteSourceIds: obsoleteManagedRewardSourceIds(event, desired),
-        })
-      );
-    },
+  const rewardChangeBreakdown = [
+    ...maintainedExistingEvents,
+    ...externalEvents,
+  ].reduce((changes, event) => {
+    const desired = rewardsByEvent.get(event.sourceKey) ?? [];
+    const eventChanges = eventRewardChangeBreakdown(event, desired, {
+      insertMissingOnly: frozenKeys.has(event.sourceKey),
+      obsoleteSourceIds: obsoleteManagedRewardSourceIds(event, desired),
+    });
+    for (const [key, count] of Object.entries(eventChanges))
+      changes[key] = (changes[key] ?? 0) + count;
+    return changes;
+  }, /** @type {Record<string, number>} */ ({ dateBasisOnly: 0, rewardUpdates: 0, newRewards: 0, sourceUpdates: 0, removedRecords: 0 }));
+  const rewardChanges = Object.values(rewardChangeBreakdown).reduce(
+    (total, count) => total + count,
     0,
   );
   const limits = checkReconciliationLimits({
@@ -509,6 +529,7 @@ export async function reconcileProjectedFandomEvents(
   );
   const report = {
     ...limits,
+    rewardChangeBreakdown,
     selected: dataset.events.length,
     inserted: plan.inserts.length,
     updated: plan.updates.length,
@@ -551,6 +572,7 @@ export async function reconcileProjectedFandomEvents(
   try {
     await db.$transaction(
       async (/** @type {Record<string, any>} */ transaction) => {
+        const metadataUpdates = new Map();
         const [lock] = await transaction.$queryRawUnsafe(
           `SELECT pg_try_advisory_xact_lock(${FANDOM_SYNC_ADVISORY_LOCK_ID}) AS acquired`,
         );
@@ -591,6 +613,7 @@ export async function reconcileProjectedFandomEvents(
               savedEvent.id,
               existingRewardMap(existing),
               {
+                metadataUpdates,
                 existingSource: existing?.rewardSources?.find(
                   (/** @type {Record<string, any>} */ value) =>
                     value.sourceKey === source.sourceKey,
@@ -622,6 +645,7 @@ export async function reconcileProjectedFandomEvents(
               existing.id,
               existingRewardMap(existing),
               {
+                metadataUpdates,
                 existingSource: existing?.rewardSources?.find(
                   (/** @type {Record<string, any>} */ value) =>
                     value.sourceKey === source.sourceKey,
@@ -646,6 +670,7 @@ export async function reconcileProjectedFandomEvents(
               existing.id,
               existingRewardMap(existing),
               {
+                metadataUpdates,
                 insertMissingOnly: true,
                 existingSource: existing?.rewardSources?.find(
                   (/** @type {Record<string, any>} */ value) =>
@@ -669,12 +694,44 @@ export async function reconcileProjectedFandomEvents(
               external.id,
               existingRewardMap(external),
               {
+                metadataUpdates,
                 existingSource: external.rewardSources?.find(
                   (/** @type {Record<string, any>} */ value) =>
                     value.sourceKey === source.sourceKey,
                 ),
               },
             );
+          }
+        }
+
+        for (const [dateBasis, updates] of metadataUpdates) {
+          for (
+            let index = 0;
+            index < updates.length;
+            index += IMPORT_WRITE_LIMITS.rewardMetadataBatchSize
+          ) {
+            await transaction.rewardDefinition.updateMany({
+              where: {
+                OR: updates
+                  .slice(
+                    index,
+                    index + IMPORT_WRITE_LIMITS.rewardMetadataBatchSize,
+                  )
+                  .map(
+                    (
+                      /** @type {{sourceKey: string, sourceSourceKey: string}} */ update,
+                    ) => ({
+                      sourceKey: update.sourceKey,
+                      rewardSource: {
+                        sourceKey: update.sourceSourceKey,
+                        status: { notIn: ["CURATED", "OFFICIAL"] },
+                      },
+                    }),
+                  ),
+                dateBasis: { not: dateBasis },
+              },
+              data: { dateBasis },
+            });
           }
         }
 
@@ -709,10 +766,7 @@ export async function reconcileProjectedFandomEvents(
         data: {
           status: "FAILED",
           completedAt: new Date(),
-          errorMessage:
-            error instanceof Error
-              ? error.message.slice(0, 2_000)
-              : String(error),
+          errorMessage: safeSyncFailure(error),
         },
       });
     } catch (auditError) {

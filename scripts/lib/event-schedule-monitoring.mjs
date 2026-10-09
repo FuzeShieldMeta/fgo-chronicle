@@ -1,3 +1,8 @@
+import {
+  primaryImportFailure,
+  reconciliationLimitDetails,
+} from "./reward-reconciliation.mjs";
+
 const MAX_COUNT = 2_147_483_647;
 
 /** @param {unknown} value */
@@ -29,7 +34,15 @@ function length(value) {
   return Array.isArray(value) ? value.length : 0;
 }
 
-/** Only named numeric counters can leave the pipeline. @param {Record<string, any>} report */
+/** @param {unknown} value */
+function flag(value) {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean")
+    throw new RangeError("Invalid synchronisation flag.");
+  return value;
+}
+
+/** Only named counters and flags can leave the pipeline. @param {Record<string, any>} report */
 export function summariseEventSchedule(report) {
   const atlas = counts(report.atlas, [
     "fetched",
@@ -75,7 +88,21 @@ export function summariseEventSchedule(report) {
     "missingSourceRecords",
     "missingExternalEvents",
     "supersededEvents",
+    "rewardChanges",
   ]);
+  const publicationLimits = {
+    rewardChangeBreakdown: counts(coverage.publication?.rewardChangeBreakdown, [
+      "dateBasisOnly",
+      "rewardUpdates",
+      "newRewards",
+      "sourceUpdates",
+      "removedRecords",
+    ]),
+    maxRewardChanges: count(coverage.publication?.rewardChangeLimit),
+    rewardChangeLimitExceeded: flag(
+      coverage.publication?.rewardChangeLimitExceeded,
+    ),
+  };
   const fandom = {
     ...counts(coverage, [
       "atlasFetched",
@@ -93,7 +120,7 @@ export function summariseEventSchedule(report) {
             entry?.status === "MISSING_SOURCE_EVENT",
         ).length
       : 0,
-    publication,
+    publication: { ...publication, ...publicationLimits },
   };
   const warnings = {
     atlas: atlas.warnings ?? 0,
@@ -151,6 +178,9 @@ export function summariseEventSchedule(report) {
 
 /** Raw error messages can contain credentials, query parameters, or source text. @param {unknown} error */
 export function safeSyncFailure(error) {
+  error = primaryImportFailure(error);
+  const limit = reconciliationLimitDetails(error);
+  if (limit) return limit.message;
   const code =
     error && typeof error === "object" && "code" in error ? error.code : null;
   if (typeof code === "string" && /^P\d{4}$/.test(code)) {
