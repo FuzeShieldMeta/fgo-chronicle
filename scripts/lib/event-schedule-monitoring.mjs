@@ -5,6 +5,17 @@ import {
 
 const MAX_COUNT = 2_147_483_647;
 
+/** @param {Array<{severity: string}>} issues */
+export function countImportIssues(issues) {
+  return {
+    warnings: issues.filter(
+      (issue) => issue.severity === "WARNING" || issue.severity === "ERROR",
+    ).length,
+    informationalIssues: issues.filter((issue) => issue.severity === "INFO")
+      .length,
+  };
+}
+
 /** @param {unknown} value */
 function count(value) {
   if (value === undefined) return 0;
@@ -52,6 +63,7 @@ export function summariseEventSchedule(report) {
     "rewardDefinitions",
     "omittedRewards",
     "warnings",
+    "informationalIssues",
     "frozenDifferences",
     "protectedDifferences",
     "missingSourceRecords",
@@ -73,6 +85,7 @@ export function summariseEventSchedule(report) {
     "omittedWeeklyMissions",
     "omittedUnsupportedMissions",
     "warnings",
+    "informationalIssues",
     "missingAssociationTargets",
   ]);
   const coverage = report.fandom ?? {};
@@ -82,6 +95,7 @@ export function summariseEventSchedule(report) {
     "updated",
     "rewardDefinitions",
     "warnings",
+    "informationalIssues",
     "heldEvents",
     "frozenDifferences",
     "protectedDifferences",
@@ -170,10 +184,24 @@ export function summariseEventSchedule(report) {
         fandom.heldMatchedRewardSources,
     ),
     warningCount: count(
-      Object.values(warnings).reduce((sum, value) => sum + value, 0),
+      warnings.atlas +
+        warnings.masterMissions +
+        warnings.fandom +
+        warnings.unresolvedFandom +
+        warnings.missingUpcoming,
     ),
   };
-  return { atlas, masterMissions, fandom, totals, warnings };
+  const informational = {
+    atlas: atlas.informationalIssues ?? 0,
+    masterMissions: masterMissions.informationalIssues ?? 0,
+    fandom: publication.informationalIssues ?? 0,
+    total: count(
+      (atlas.informationalIssues ?? 0) +
+        (masterMissions.informationalIssues ?? 0) +
+        (publication.informationalIssues ?? 0),
+    ),
+  };
+  return { atlas, masterMissions, fandom, totals, warnings, informational };
 }
 
 /** Raw error messages can contain credentials, query parameters, or source text. @param {unknown} error */

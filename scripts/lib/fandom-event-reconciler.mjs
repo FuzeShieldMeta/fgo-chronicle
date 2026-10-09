@@ -8,7 +8,10 @@ import {
 import { parseEventDataset } from "./event-dataset.mjs";
 import { addCalendarYears, planEventReconciliation } from "./jp-event-sync.mjs";
 import { IMPORT_WRITE_LIMITS } from "../../src/shared/import-write-config.mjs";
-import { safeSyncFailure } from "./event-schedule-monitoring.mjs";
+import {
+  countImportIssues,
+  safeSyncFailure,
+} from "./event-schedule-monitoring.mjs";
 
 const FANDOM_SYNC_SOURCE = "FANDOM_JP_COVERAGE";
 const FANDOM_SYNC_ADVISORY_LOCK_ID = 734621906;
@@ -529,6 +532,7 @@ export async function reconcileProjectedFandomEvents(
   );
   const report = {
     ...limits,
+    informationalIssues: countImportIssues(dataset.issues).informationalIssues,
     rewardChangeBreakdown,
     selected: dataset.events.length,
     inserted: plan.inserts.length,
@@ -544,7 +548,7 @@ export async function reconcileProjectedFandomEvents(
     protectedSupersededEvents: protectedSupersededEvents.length,
     rewardDefinitions,
     warnings:
-      dataset.issues.length +
+      countImportIssues(dataset.issues).warnings +
       missingExternalKeys.length +
       protectedSupersededEvents.length,
     dryRun: Boolean(options.dryRun),

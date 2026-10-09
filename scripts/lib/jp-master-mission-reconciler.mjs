@@ -1,5 +1,6 @@
 import { parseEventDataset } from "./event-dataset.mjs";
 import { rewardDateBasisChanged } from "./reward-reconciliation.mjs";
+import { countImportIssues } from "./event-schedule-monitoring.mjs";
 
 export const JP_MASTER_MISSION_SYNC_SOURCE = "ATLAS_JP_MASTER_MISSION_EXPORT";
 const ADVISORY_LOCK_ID = 734621907;
@@ -266,11 +267,12 @@ export async function reconcileProjectedMasterMissions(
     associationUpdateLimit: maxAssociationUpdates,
     associationLimitExceeded,
     warnings:
-      dataset.issues.length +
+      countImportIssues(dataset.issues).warnings +
       protectedDifferences.length +
       missingAssociationTargets.length +
       protectedAssociationDifferences +
       protectedRewardDifferences,
+    informationalIssues: countImportIssues(dataset.issues).informationalIssues,
     dryRun: Boolean(options.dryRun),
   };
   if (options.dryRun) return report;

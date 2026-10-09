@@ -6,6 +6,7 @@ import {
 } from "./reward-reconciliation.mjs";
 import { parseEventDataset } from "./event-dataset.mjs";
 import { addCalendarYears, planEventReconciliation } from "./jp-event-sync.mjs";
+import { countImportIssues } from "./event-schedule-monitoring.mjs";
 
 const SYNC_SOURCE = "ATLAS_JP_EVENT_EXPORT";
 
@@ -292,7 +293,7 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
     dryRun: options.dryRun,
   });
   const warningCount =
-    dataset.issues.length +
+    countImportIssues(dataset.issues).warnings +
     plan.frozenDifferences.length +
     plan.protectedDifferences.length +
     plan.missingSourceKeys.length;
@@ -344,6 +345,7 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
     rewardDefinitions: rewardCount,
     omittedRewards: dataset.issues.length,
     warnings: warningCount,
+    informationalIssues: countImportIssues(dataset.issues).informationalIssues,
     dryRun: Boolean(options.dryRun),
   };
   if (options.dryRun) return report;
