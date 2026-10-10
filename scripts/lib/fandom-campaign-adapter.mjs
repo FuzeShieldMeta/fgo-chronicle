@@ -304,6 +304,41 @@ function singleDayTimeRange(value, year) {
   return start && end && end >= start ? { start, end } : null;
 }
 
+/** @param {string} value @param {{start: Date, end: Date} | null} section */
+function sectionBackedCalendarRange(value, section) {
+  if (!section) return null;
+  const match = plainWikitext(value)
+    .trim()
+    .match(
+      /^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{1,2}:\d{2})\s*[~–—]\s*([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{1,2}:\d{2})(?:\s+JST)?$/i,
+    );
+  if (!match) return null;
+  const firstYear = new Date(
+    section.start.getTime() + JST_OFFSET_MILLISECONDS,
+  ).getUTCFullYear();
+  const lastYear = new Date(
+    section.end.getTime() + JST_OFFSET_MILLISECONDS,
+  ).getUTCFullYear();
+  if (lastYear < firstYear || lastYear - firstYear > 1) return null;
+  const ranges = [];
+  for (let year = firstYear; year <= lastYear; year++) {
+    const start = parseJstDate(`${match[1]} ${match[2]}, ${year} ${match[3]}`);
+    let end = parseJstDate(`${match[4]} ${match[5]}, ${year} ${match[6]}`);
+    if (start && end && end < start) {
+      end = parseJstDate(`${match[4]} ${match[5]}, ${year + 1} ${match[6]}`);
+    }
+    if (
+      start &&
+      end &&
+      end >= start &&
+      start >= section.start &&
+      end <= section.end
+    )
+      ranges.push({ start, end });
+  }
+  return ranges.length === 1 ? ranges[0] : null;
+}
+
 /** @param {string} value @param {number} year */
 function partialCalendarRanges(value, year) {
   const results = [];
@@ -498,6 +533,10 @@ export function extractFandomRewardSources(wikitext, options) {
       `${options.eventName}\n${table.headingPath}\n${table.prelude.slice(0, 500)}`,
     );
     const sectionRange = firstRange(table.prelude);
+    const dailyLoginSection =
+      headingType === "LOGIN_BONUS" && allRanges(table.prelude).length === 1
+        ? sectionRange
+        : null;
     const parsedRows = table.body
       .split(/\n\|-\s*\n/)
       .slice(1)
@@ -857,6 +896,7 @@ export function extractFandomRewardSources(wikitext, options) {
         }
         const rowRange =
           firstRange(contextCell) ??
+          sectionBackedCalendarRange(contextCell, dailyLoginSection) ??
           singleDayTimeRange(
             contextCell,
             new Date(options.eventSourceStartsAt).getUTCFullYear(),
