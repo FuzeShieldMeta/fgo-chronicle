@@ -169,23 +169,157 @@ function extractTables(wikitext) {
 
 /** @param {string} row */
 function extractCells(row) {
+  return extractCellDetails(row).map(({ value }) => value);
+}
+
+/** @param {string} row */
+function extractCellDetails(row) {
   const normalised = row.replace(/\|\|/g, "\n|");
   const matches = [
     ...normalised.matchAll(
       /(?:^|\n)[|!](?![}|-])\s*([^]*?)(?=(?:\n[|!](?![}|-]))|$)/g,
     ),
   ];
-  return matches.map((match) =>
-    (match[1] ?? "")
-      .trim()
-      .replace(
+  return matches.map((match) => {
+    const raw = (match[1] ?? "").trim();
+    const attributes =
+      raw.match(
         /^(?:(?:rowspan|colspan|style|class|align|width)\s*=\s*(?:"[^"]*"|'[^']*'|[^|]+)\s*)+\|/i,
-        "",
-      )
-      .replace(/^\|\s*/, "")
-      .replace(/\s*\|}\s*$/, "")
-      .trim(),
+      )?.[0] ?? "";
+    const span = attributes.match(/\browspan\s*=\s*["']?(\d+)/i);
+    return {
+      rowspan: span ? Number(span[1]) : 1,
+      value: raw
+        .replace(
+          /^(?:(?:rowspan|colspan|style|class|align|width)\s*=\s*(?:"[^"]*"|'[^']*'|[^|]+)\s*)+\|/i,
+          "",
+        )
+        .replace(/^\|\s*/, "")
+        .replace(/\s*\|}\s*$/, "")
+        .trim(),
+    };
+  });
+}
+
+/**
+ * Read only explicitly labelled mission periods; claim periods are separate.
+ * @param {string} value
+ * @param {{start: Date, end: Date} | null} enclosing
+ */
+function labelledMissionPeriod(value, enclosing) {
+  const text = plainWikitext(value);
+  const label =
+    /(?:\bmission\s+(?:duration|period|timeframe)\s*:?|\[mission\])\s*/i.exec(
+      text,
+    );
+  if (!label) return { present: false, range: null };
+  const period =
+    text
+      .slice(label.index + label[0].length)
+      .split(
+        /(?:\b(?:reward|claim|receiving)\s+(?:duration|period)\b|\[(?:reward|claim)\])/i,
+      )[0] ?? "";
+  let ranges = allRanges(period);
+  if (!ranges.length && enclosing) {
+    // One endpoint may omit its year. Never overwrite an explicit year.
+    const partial = period.match(
+      /^([A-Za-z]+\s+\d{1,2})(?:,?\s+(\d{4}))?\s+(\d{1,2}:\d{2})\s*[~–—]\s*([A-Za-z]+\s+\d{1,2})(?:,?\s+(\d{4}))?\s+(\d{1,2}:\d{2})(?:\s+JST)?/i,
+    );
+    if (partial) {
+      const firstYear = new Date(
+        enclosing.start.getTime() + JST_OFFSET_MILLISECONDS,
+      ).getUTCFullYear();
+      const lastYear = new Date(
+        enclosing.end.getTime() + JST_OFFSET_MILLISECONDS,
+      ).getUTCFullYear();
+      if (lastYear < firstYear || lastYear - firstYear > 1) {
+        return { present: true, range: null };
+      }
+      for (let year = firstYear; year <= lastYear; year++) {
+        const start = parseJstDate(
+          `${partial[1]}, ${partial[2] ?? year} ${partial[3]}`,
+        );
+        let end = parseJstDate(
+          `${partial[4]}, ${partial[5] ?? year} ${partial[6]}`,
+        );
+        if (start && end && end < start && !partial[5]) {
+          end = parseJstDate(`${partial[4]}, ${year + 1} ${partial[6]}`);
+        }
+        if (
+          start &&
+          end &&
+          end >= start &&
+          start >= enclosing.start &&
+          end <= enclosing.end
+        ) {
+          ranges.push({ start, end });
+        }
+      }
+    }
+  }
+  ranges = ranges.filter(
+    ({ start, end }) =>
+      !enclosing || (start >= enclosing.start && end <= enclosing.end),
   );
+  const unique = new Map(
+    ranges.map((range) => [
+      `${range.start.toISOString()}/${range.end.toISOString()}`,
+      range,
+    ]),
+  );
+  return {
+    present: true,
+    range: unique.size === 1 ? ([...unique.values()][0] ?? null) : null,
+  };
+}
+
+/**
+ * Carry period cells only over their declared rows. Original reward cells stay
+ * untouched, so adding period support does not change source identities.
+ * @param {string[]} rawRows
+ * @param {{start: Date, end: Date} | null} enclosing
+ */
+function missionPeriodsByRow(rawRows, enclosing) {
+  /** @type {Array<{remaining: number, value: string}>} */
+  let shared = [];
+  return rawRows.map((row) => {
+    const details = extractCellDetails(row);
+    const texts = [
+      ...shared.map(({ value }) => value),
+      ...details.map(({ value }) => value),
+    ];
+    shared = shared
+      .map((cell) => ({ ...cell, remaining: cell.remaining - 1 }))
+      .filter(({ remaining }) => remaining > 0);
+    for (const cell of details) {
+      if (
+        Number.isSafeInteger(cell.rowspan) &&
+        cell.rowspan > 1 &&
+        cell.rowspan <= rawRows.length &&
+        labelledMissionPeriod(cell.value, enclosing).present
+      ) {
+        shared.push({ remaining: cell.rowspan - 1, value: cell.value });
+      }
+    }
+    const periods = texts
+      .map((text) => labelledMissionPeriod(text, enclosing))
+      .filter(({ present }) => present);
+    const ranges = new Map(
+      periods
+        .filter(({ range }) => range)
+        .map(({ range }) => [
+          `${range?.start.toISOString()}/${range?.end.toISOString()}`,
+          range,
+        ]),
+    );
+    return {
+      present: periods.length > 0,
+      range:
+        periods.every(({ range }) => range) && ranges.size === 1
+          ? ([...ranges.values()][0] ?? null)
+          : null,
+    };
+  });
 }
 
 /** @param {string} cell */
@@ -537,10 +671,23 @@ export function extractFandomRewardSources(wikitext, options) {
       headingType === "LOGIN_BONUS" && allRanges(table.prelude).length === 1
         ? sectionRange
         : null;
-    const parsedRows = table.body
-      .split(/\n\|-\s*\n/)
-      .slice(1)
-      .map((row) => ({ row, cells: extractCells(row) }));
+    const rawRows = table.body.split(/\n\|-\s*\n/).slice(1);
+    const enclosingPeriod = options.eventSourceEndsAt
+      ? {
+          start: new Date(options.eventSourceStartsAt),
+          end: new Date(options.eventSourceEndsAt),
+        }
+      : null;
+    const missionPeriods = missionPeriodsByRow(rawRows, enclosingPeriod);
+    const sectionMissionPeriod = labelledMissionPeriod(
+      table.prelude,
+      enclosingPeriod,
+    );
+    const parsedRows = rawRows.map((row, index) => ({
+      row,
+      cells: extractCells(row),
+      missionPeriod: missionPeriods[index],
+    }));
     const hasDetailedRewards = parsedRows.some(
       ({ cells }) =>
         !isSummaryRow(cells) &&
@@ -742,7 +889,7 @@ export function extractFandomRewardSources(wikitext, options) {
     let pendingLoginCounts = null;
     let fallbackLoginCount = 0;
     let interludeSubject = null;
-    for (const [rowIndex, { cells }] of rows.entries()) {
+    for (const [rowIndex, { cells, missionPeriod }] of rows.entries()) {
       if (consumedMatrixRows.has(rowIndex)) continue;
       if (
         headingType === "LOGIN_BONUS" &&
@@ -901,8 +1048,17 @@ export function extractFandomRewardSources(wikitext, options) {
             contextCell,
             new Date(options.eventSourceStartsAt).getUTCFullYear(),
           );
-        const expectedSourceDate =
-          type === "LOGIN_BONUS"
+        const missionDate = ["LIMITED_MISSION", "MASTER_MISSION"].includes(type)
+          ? missionPeriod?.present
+            ? missionPeriod
+            : sectionMissionPeriod
+          : null;
+        const effectiveRange = missionDate?.present
+          ? missionDate.range
+          : (sectionRange ?? rowRange);
+        const expectedSourceDate = missionDate?.present
+          ? missionDate.range?.end
+          : type === "LOGIN_BONUS"
             ? rowRange?.start
             : (sectionRange?.end ?? rowRange?.end);
         const expectedAt = expectedSourceDate
@@ -946,7 +1102,7 @@ export function extractFandomRewardSources(wikitext, options) {
               ? "UNKNOWN"
               : type !== "LOGIN_BONUS" &&
                   !isMaintenance &&
-                  coversEventPeriod(sectionRange ?? rowRange)
+                  coversEventPeriod(effectiveRange)
                 ? "EVENT_END"
                 : expectedSourceDate
                   ? type === "LOGIN_BONUS"
@@ -963,7 +1119,9 @@ export function extractFandomRewardSources(wikitext, options) {
         });
         if (!expectedSourceDate) {
           dateWarnings.add(
-            `${table.heading} has no parseable reward date. The projected event end date was used.`,
+            missionDate?.present
+              ? `${table.heading} has an ambiguous, invalid or out-of-event mission period. The projected event end date was used.`
+              : `${table.heading} has no parseable reward date. The projected event end date was used.`,
           );
         }
       }
