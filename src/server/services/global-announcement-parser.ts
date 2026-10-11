@@ -237,6 +237,37 @@ function namedSubject(label: string) {
   return match ? { name: match[1]!, label: match[2]! } : null;
 }
 
+function resolvedQuestSubject(
+  subject: string,
+  articleName: string,
+  lines: readonly string[],
+) {
+  const normalise = (value: string) =>
+    value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLowerCase();
+  const prefix = `${normalise(subject)}:`;
+  const heading = normalise(articleName);
+  const titles = new Map<string, string>();
+  for (const line of lines) {
+    for (const match of line.matchAll(/"([^"\n]+)"/gu)) {
+      const title = match[1]!.trim();
+      const key = normalise(title);
+      // A short subject alone cannot identify a chapter. Its full title must
+      // be quoted in the article and appear in that article's heading too.
+      if (
+        !questSubsection(articleName) &&
+        key.startsWith(prefix) &&
+        heading.includes(key) &&
+        !questSubsection(title)
+      )
+        titles.set(key, title);
+    }
+  }
+  return {
+    name: titles.size === 1 ? [...titles.values()][0]! : subject,
+    issue: titles.size > 1 ? "AMBIGUOUS_QUEST_SUBJECT" : null,
+  };
+}
+
 function questSubsection(label: string) {
   return /\braid\b|\b(?:part|section|act|episode)\s+(?:\d+|[ivx]+)\b/iu.test(
     label.normalize("NFKC"),
@@ -303,11 +334,14 @@ export function parsePublisherAnnouncement(
           groups.startTime,
           groups.startZone,
         );
+        const resolved = subject
+          ? resolvedQuestSubject(subject.name, name, lines)
+          : null;
         periods.push({
           sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
           kind: "QUEST",
           ...(subject
-            ? { subjectName: subject.name, articleNameAllowed: false }
+            ? { subjectName: resolved!.name, articleNameAllowed: false }
             : {}),
           context: lines
             .slice(Math.max(0, index - LIMITS.contextLines), index + 1)
@@ -318,7 +352,15 @@ export function parsePublisherAnnouncement(
           endsAt: null,
           startTimezone: groups.startZone ?? null,
           endTimezone: null,
-          issues: start.issue ? [start.issue] : [],
+          issues: [
+            start.issue,
+            resolved?.issue,
+            questSubsection(
+              `${subject?.name ?? ""} ${subject?.label ?? releaseContext}`,
+            )
+              ? "UNSUPPORTED_QUEST_SUBSECTION"
+              : null,
+          ].filter((issue): issue is string => !!issue),
           publicationAllowed: false,
         });
         continue;
@@ -374,10 +416,18 @@ export function parsePublisherAnnouncement(
           [start.issue, end.issue].filter((issue): issue is string => !!issue),
         ),
       ];
+      const resolved =
+        subject && kind === "QUEST"
+          ? resolvedQuestSubject(subject.name, name, lines)
+          : null;
+      if (resolved?.issue) periodIssues.push(resolved.issue);
       if (start.value && end.value && end.value < start.value)
         periodIssues.push("INVALID_DATE_RANGE");
       if (kind === "OTHER") periodIssues.push("UNRESOLVED_PERIOD_CONTEXT");
-      if (kind === "QUEST" && questSubsection(subject?.label ?? label))
+      if (
+        kind === "QUEST" &&
+        questSubsection(`${subject?.name ?? ""} ${subject?.label ?? label}`)
+      )
         periodIssues.push("UNSUPPORTED_QUEST_SUBSECTION");
       periods.push({
         sourceRecordId: `${new URL(url).pathname}:period:${periods.length}`,
@@ -386,7 +436,7 @@ export function parsePublisherAnnouncement(
           subject && kind === "QUEST"
             ? false
             : kind !== "CAMPAIGN" || periods.length === 0,
-        ...(subject && kind === "QUEST" ? { subjectName: subject.name } : {}),
+        ...(resolved ? { subjectName: resolved.name } : {}),
         context,
         rawPeriod: match[0],
         startsAt: start.value,

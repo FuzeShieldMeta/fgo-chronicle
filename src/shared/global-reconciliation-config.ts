@@ -24,7 +24,7 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   maxContextCharacters: 1_200,
   maxTitleCharacters: 500,
   maxArticlePathCharacters: 160,
-  parserRevision: 3,
+  parserRevision: 4,
   fetchTimeoutMs: 15_000,
   collectionTimeoutMs: 45_000,
   maxArticles: 30,
