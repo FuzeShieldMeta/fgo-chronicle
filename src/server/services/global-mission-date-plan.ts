@@ -1,4 +1,4 @@
-import type { ChapterMissionProof } from "./global-chapter-mission-identity";
+import type { MissionEvidence } from "./global-mission-evidence";
 
 type ImportedReward = {
   id: string;
@@ -13,7 +13,7 @@ type ImportedReward = {
 // Recheck the locked imported records. A source revision or changed mission
 // label invalidates the whole proof; curator-owned dates are simply preserved.
 export function officialMissionDates(
-  proof: Pick<ChapterMissionProof, "missions">,
+  proof: { missions: readonly MissionEvidence[] },
   rewards: readonly ImportedReward[],
 ) {
   const dates = new Map<string, Date>();

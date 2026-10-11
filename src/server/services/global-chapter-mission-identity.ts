@@ -25,15 +25,16 @@ import type { CampaignIdentityTarget } from "./global-campaign-identity";
 import {
   missionSignature,
   normaliseMissionName,
-  officialMissionRowSchema,
   type OfficialMissionRow,
 } from "./global-mission-periods";
+import {
+  missionEvidenceSchema,
+  missionRewardEvidenceSchema as reward,
+  sameMissionRewards as sameRewards,
+} from "./global-mission-evidence";
 
 const text = z.string().min(1).max(LIMITS.maxContextCharacters);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const reward = officialMissionRowSchema.shape.rewards.element
-  .extend({ sourceKey: text, eligibility: text })
-  .strict();
 export const chapterMissionProofSchema = z
   .object({
     kind: z.literal("JP_CHAPTER_MISSIONS"),
@@ -64,15 +65,7 @@ export const chapterMissionProofSchema = z
       })
       .strict(),
     missions: z
-      .array(
-        z
-          .object({
-            signature: text,
-            rewards: z.array(reward).min(1),
-            official: officialMissionRowSchema,
-          })
-          .strict(),
-      )
+      .array(missionEvidenceSchema)
       .min(1)
       .max(LIMITS.maxPeriodsPerArticle),
   })
@@ -86,12 +79,6 @@ const atlasIdentity = z.object({
 });
 const canonical = (value: string) =>
   value.normalize("NFKC").replace(/\s+/gu, " ").trim();
-const sameRewards = (
-  a: readonly { itemType: string; amount: number }[],
-  b: readonly { itemType: string; amount: number }[],
-) =>
-  JSON.stringify(a.map((r) => [r.itemType, r.amount]).sort()) ===
-  JSON.stringify(b.map((r) => [r.itemType, r.amount]).sort());
 
 export function hasChapterMissionCandidate(
   page: { title: string; wikitext: string },

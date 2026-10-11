@@ -365,9 +365,11 @@ export async function publishAnnouncementFamily(
       };
     }),
   });
-  if (chapter.success || campaignMissions) {
+  const missionEvidence =
+    campaignMissions ?? (chapter.success ? chapter.data : null);
+  if (missionEvidence) {
     const dates = officialMissionDates(
-      campaignMissions ?? (chapter.success ? chapter.data : { missions: [] }),
+      missionEvidence,
       rewards
         .filter(({ event }) => event.id === eventId)
         .map(({ source, reward }) => ({

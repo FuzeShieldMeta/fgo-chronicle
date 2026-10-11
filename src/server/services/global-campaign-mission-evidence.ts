@@ -6,7 +6,11 @@ import {
   parseFandomEventHeader,
 } from "../../../scripts/lib/fandom-campaign-adapter.mjs";
 import { GLOBAL_ANNOUNCEMENT_LIMITS as LIMITS } from "~/shared/global-reconciliation-config";
-import { chapterMissionProofSchema } from "./global-chapter-mission-identity";
+import {
+  missionEvidenceSchema,
+  missionRewardEvidenceSchema,
+  sameMissionRewards as sameRewards,
+} from "./global-mission-evidence";
 import type { CampaignIdentityTarget } from "./global-campaign-identity";
 import { campaignSourceWikitext } from "./global-jp-campaign-identity";
 import { matchAnnouncementEvent } from "./global-announcement-match";
@@ -22,7 +26,13 @@ import {
 } from "./global-mission-periods";
 
 const text = z.string().min(1).max(LIMITS.maxContextCharacters);
-export const campaignMissionEvidenceSchema = z
+const importedRewardsSchema = z.array(
+  z
+    .array(missionRewardEvidenceSchema.strip())
+    .min(1)
+    .max(LIMITS.maxPeriodsPerArticle),
+);
+const campaignMissionEvidenceSchema = z
   .object({
     kind: z.literal("CAMPAIGN_MISSION_DATES"),
     eventSourceKey: text,
@@ -42,20 +52,17 @@ export const campaignMissionEvidenceSchema = z
       .strict(),
     missions: z
       .array(
-        chapterMissionProofSchema.shape.missions.element.extend({
-          rewards:
-            chapterMissionProofSchema.shape.missions.element.shape.rewards.max(
-              LIMITS.maxPeriodsPerArticle,
-            ),
+        missionEvidenceSchema.extend({
+          rewards: missionEvidenceSchema.shape.rewards.max(
+            LIMITS.maxPeriodsPerArticle,
+          ),
         }),
       )
       .min(1)
       .max(LIMITS.maxPeriodsPerArticle),
   })
   .strict();
-export type CampaignMissionEvidence = z.infer<
-  typeof campaignMissionEvidenceSchema
->;
+type CampaignMissionEvidence = z.infer<typeof campaignMissionEvidenceSchema>;
 type Target = CampaignIdentityTarget & { name: string; startsAt: Date };
 type Page = {
   pageId: number;
@@ -63,17 +70,7 @@ type Page = {
   title: string;
   wikitext: string;
 };
-type ArticleBinding = Pick<
-  CampaignMissionEvidence["globalArticle"],
-  "url" | "contentHash" | "sourceRecordId" | "name" | "startsAt" | "endsAt"
->;
-
-const sameRewards = (
-  a: readonly { itemType: string; amount: number }[],
-  b: readonly { itemType: string; amount: number }[],
-) =>
-  JSON.stringify(a.map((r) => [r.itemType, r.amount]).sort()) ===
-  JSON.stringify(b.map((r) => [r.itemType, r.amount]).sort());
+type ArticleBinding = CampaignMissionEvidence["globalArticle"];
 
 // Only explicit catalogue aliases qualify. The campaign tag must be an exact
 // imported/verified name, not a display-name correction or a broad substring.
@@ -238,6 +235,10 @@ export function buildCampaignMissionEvidence(
     ["MASTER_MISSION", "LIMITED_MISSION"].includes(source.type),
   );
   if (sources.length !== article.missions.length) return null;
+  const importedRewards = importedRewardsSchema.safeParse(
+    sources.map((source) => source.rewards),
+  );
+  if (!importedRewards.success) return null;
   const binding = {
     url: article.sourceUrl,
     contentHash: article.contentHash,
@@ -257,17 +258,9 @@ export function buildCampaignMissionEvidence(
     }
     if (official.size !== article.missions.length) continue;
     const missions: CampaignMissionEvidence["missions"] = [];
-    for (const source of sources) {
-      const rewards = z
-        .array(
-          chapterMissionProofSchema.shape.missions.element.shape.rewards.element.strip(),
-        )
-        .min(1)
-        .max(LIMITS.maxPeriodsPerArticle)
-        .safeParse(source.rewards);
-      if (!rewards.success) break;
+    for (const rewards of importedRewards.data) {
       const signature = sectionSignature(
-        rewards.data[0]!.eligibility,
+        rewards[0]!.eligibility,
         chapter.warId,
         names,
       );
@@ -275,11 +268,11 @@ export function buildCampaignMissionEvidence(
       if (
         !signature ||
         !row ||
-        !sameRewards(rewards.data, row.rewards) ||
+        !sameRewards(rewards, row.rewards) ||
         missions.some((mission) => mission.signature === signature)
       )
         break;
-      missions.push({ signature, rewards: rewards.data, official: row });
+      missions.push({ signature, rewards, official: row });
     }
     if (missions.length !== sources.length) continue;
     const proof = verifyCampaignMissionEvidence(

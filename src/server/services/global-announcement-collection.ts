@@ -297,6 +297,8 @@ export async function collectAnnouncementsWithAuthority(
       }
     } catch {
       // Never fall back to a stored regional alias after a failed source fetch.
+      regionalProofs.clear();
+      missionSources.clear();
       console.warn(
         JSON.stringify({ event: "campaign_identity_collection_failed" }),
       );
