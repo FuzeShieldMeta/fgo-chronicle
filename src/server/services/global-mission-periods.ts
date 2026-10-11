@@ -72,6 +72,56 @@ const escape = (value: string) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 
+function missionPeriodText(value: string) {
+  const labels = [...value.matchAll(/\bMission Period\s*:/giu)];
+  if (labels.length !== 1) return null;
+  const period =
+    /(?:^|\n)\s*Mission Period\s*:\s*([^]*?)(?=Rewards Claimable Period\s*:|$)/iu
+      .exec(value)?.[1]
+      ?.trim();
+  return period?.length ? period : null;
+}
+
+// Keep external periods local to the next table. Headings, intervening tables
+// and conflicting period labels end that scope; duplicate labels are ambiguous.
+function missionTables(article: Node) {
+  const tables: { table: Node; missionPeriod: string | null }[] = [];
+  const stack = [article];
+  let visited = 0;
+  let missionPeriod: string | null = null;
+  let hasPeriod = false;
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (++visited > LIMITS.maxTreeNodes)
+      throw new Error("The mission source exceeds the parser limit.");
+    if (skipped.has(node.nodeName)) continue;
+    if (/^h[1-6]$/u.test(node.nodeName)) {
+      missionPeriod = null;
+      hasPeriod = false;
+      continue;
+    }
+    if (node.nodeName === "table") {
+      tables.push({ table: node, missionPeriod });
+      missionPeriod = null;
+      hasPeriod = false;
+      continue;
+    }
+    if (node.nodeName === "p") {
+      const value = text(node);
+      if (/\bMission Period\s*:/iu.test(value)) {
+        missionPeriod = hasPeriod ? null : missionPeriodText(value);
+        hasPeriod = true;
+      } else if (/\b(?:Campaign|Event|Quest) Period\s*:/iu.test(value)) {
+        missionPeriod = null;
+        hasPeriod = false;
+      }
+      continue;
+    }
+    if ("childNodes" in node) stack.push(...[...node.childNodes].reverse());
+  }
+  return tables;
+}
+
 export function trackedMissionRewards(value: string) {
   const rewards: OfficialMissionRow["rewards"] = [];
   const names = [
@@ -107,9 +157,7 @@ export function parseOfficialMissionRows(
   );
   if (!article) return [];
   const result: OfficialMissionRow[] = [];
-  for (const table of walk(article).filter(
-    (node) => node.nodeName === "table",
-  )) {
+  for (const { table, missionPeriod } of missionTables(article)) {
     let columns: { mission: number; rewards: number; period: number } | null =
       null;
     const carried = new Map<number, { node: Node; remaining: number }>();
@@ -154,22 +202,30 @@ export function parseOfficialMissionRows(
         const mission = headings.findIndex((value) =>
           /^(?:mission|mission name)$/u.test(value),
         );
-        const rewards = headings.findIndex((value) =>
-          /^(?:mission rewards?|rewards?)$/u.test(value),
+        const details = headings.findIndex(
+          (value) => value === "reward details",
         );
+        const rewards =
+          details >= 0
+            ? details
+            : headings.findIndex((value) =>
+                /^(?:mission rewards?|rewards?)$/u.test(value),
+              );
         const period = headings.findIndex((value) => value === "period");
-        if ([mission, rewards, period].every((value) => value >= 0))
+        if (mission >= 0 && rewards >= 0 && (period >= 0 || missionPeriod))
           columns = { mission, rewards, period };
         continue;
       }
       const label = values[columns.mission],
         rewardText = values[columns.rewards],
         periodText = values[columns.period];
-      if (!label || !rewardText || !periodText) continue;
+      if (!label || !rewardText) continue;
       const mission =
-        /(?:^|\n)\s*Mission Period\s*:\s*([^]*?)(?=Rewards Claimable Period\s*:|$)/iu
-          .exec(periodText)?.[1]
-          ?.trim();
+        columns.period >= 0
+          ? periodText
+            ? missionPeriodText(periodText)
+            : null
+          : missionPeriod;
       if (!mission) continue;
       const parsed = parsePublisherAnnouncement(
         `<div class="article"><p>Event Period: ${escape(mission)}</p></div>`,
@@ -230,8 +286,27 @@ export function missionSignature(label: string, chapterName: string) {
   const chapter = normaliseMissionName(chapterName.split(":")[0]!);
   if (!chapter || !scope.startsWith(`${chapter} `)) return null;
   const part = /\bpart (\d+)\b/u.exec(scope)?.[1];
-  if (!part) return null;
   const body = normaliseMissionName(label.slice(tag[0].length));
+  if (!part) {
+    const section =
+      /^(?:clear|complete) section (\d+)(?: progress node (\d+))?(?: of (.+))?$/u.exec(
+        body,
+      );
+    if (section && (!section[3] || section[3] === chapter)) {
+      const count = Number(section[1]);
+      const node = section[2] ? Number(section[2]) : null;
+      if (
+        !Number.isSafeInteger(count) ||
+        count < 1 ||
+        (node !== null && (!Number.isSafeInteger(node) || node < 1))
+      )
+        return null;
+      return `chapter:${chapter}:section:${count}${node === null ? "" : `:node:${node}`}`;
+    }
+    if (body === `clear ${chapter}` || body === `complete ${chapter}`)
+      return `chapter:${chapter}:chapter-clear`;
+    return null;
+  }
   const subtitle = normaliseMissionName(chapterName.split(",").at(-1)!);
   const identifiesChapter =
     body.includes(chapter) ||
