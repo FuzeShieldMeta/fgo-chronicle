@@ -25,6 +25,8 @@ import {
 } from "~/app/timeline/_components/timeline-entry-details";
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
 import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
+import { TimelineSearchDetails } from "./timeline-search-details";
+import type { TimelineSearchEntry } from "~/shared/timeline-search";
 import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
 import {
   TimelineAccountMenu,
@@ -82,6 +84,7 @@ import { timelineLayout } from "~/app/timeline/_lib/timeline-layout-config";
 import {
   mergeContiguousTimelineWindows,
   prioritiseTimelineWindowIndexes,
+  timelineWindows,
 } from "~/app/timeline/_lib/progressive-timeline";
 import {
   fetchTimelineWindow,
@@ -362,6 +365,8 @@ function TimelineScheduleContent({
     string | null
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const searchNavigationRef = useRef<AbortController | null>(null);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const { open: methodologyPanelOpen, setOpen: setMethodologyPanelOpen } =
     useTimelineMethodology();
@@ -428,6 +433,13 @@ function TimelineScheduleContent({
   const entries = loadedTimeline.entries;
   const incomeContributions = loadedTimeline.incomeContributions;
   const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
+
+  useEffect(() => {
+    if (searchPanelOpen) return;
+    searchNavigationRef.current?.abort();
+  }, [searchPanelOpen]);
+
+  useEffect(() => () => searchNavigationRef.current?.abort(), []);
 
   useEffect(() => {
     if (nextWindowIndex === null || timelineLoadError) return;
@@ -509,6 +521,7 @@ function TimelineScheduleContent({
 
   useEffect(() => {
     if (!methodologyPanelOpen) return;
+    setSearchPanelOpen(false);
     setIsChoosingSummonDate(false);
     setSelectedKey(null);
     setSelectedIncomeKey(null);
@@ -526,6 +539,7 @@ function TimelineScheduleContent({
       accountPanelOpen
     ) {
       setMethodologyPanelOpen(false);
+      setSearchPanelOpen(false);
     }
   }, [
     selectedKey,
@@ -772,6 +786,78 @@ function TimelineScheduleContent({
     });
   }
 
+  async function selectSearchResult(entry: TimelineSearchEntry) {
+    searchNavigationRef.current?.abort();
+    const controller = new AbortController();
+    searchNavigationRef.current = controller;
+    const firstDay = calendarDayKey(
+      entry.startsAt,
+      entry.startsAtPrecision,
+      calendar.timeZone,
+    );
+    const day =
+      firstDay < calendar.today
+        ? calendar.today
+        : firstDay > scheduleEndDay
+          ? scheduleEndDay
+          : firstDay;
+    const windows = timelineWindows(scheduleStartDay);
+    const target = windows.find(
+      (window) => window.fromDay <= day && window.throughDay >= day,
+    );
+    if (!target) throw new Error("The result is outside the timeline.");
+    const missing = windows.filter(
+      (window) =>
+        window.index <= target.index && !loadedWindows.has(window.index),
+    );
+    const fetched = await Promise.all(
+      missing.map((window) =>
+        fetchTimelineWindow(
+          { scheduleStartDay, index: window.index },
+          { signal: controller.signal },
+        ),
+      ),
+    ).catch((error: unknown) => {
+      controller.abort();
+      throw error;
+    });
+    if (controller.signal.aborted) return;
+    const combined = new Map(loadedWindows);
+    for (const window of fetched) combined.set(window.index, window);
+    if (
+      !mergeContiguousTimelineWindows(combined).entries.some(
+        (item) => item.key === entry.key,
+      )
+    ) {
+      throw new Error("This result is no longer available.");
+    }
+    setLoadedWindows((current) => {
+      const next = new Map(current);
+      for (const window of fetched) next.set(window.index, window);
+      return next;
+    });
+    setTimelineLoadError(false);
+    setSearchPanelOpen(false);
+    setSelectedKey(entry.key);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const index = calendarDays(calendar.today, day).length - 1;
+        const scroll = scrollRef.current;
+        scroll?.scrollTo({
+          left: Math.max(
+            0,
+            index * timelineLayout.dayWidth -
+              (scroll.clientWidth - timelineLayout.dayWidth) / 2,
+          ),
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? "auto"
+            : "smooth",
+        });
+      }),
+    );
+  }
+
   function toggleSummonDateSelection() {
     if (isChoosingSummonDate) {
       setIsChoosingSummonDate(false);
@@ -784,6 +870,7 @@ function TimelineScheduleContent({
     setSelectedDayBannerId(null);
     setSelectedDay(null);
     setAccountPanelOpen(false);
+    setSearchPanelOpen(false);
     setIsChoosingSummonDate(true);
   }
 
@@ -886,32 +973,43 @@ function TimelineScheduleContent({
     selectedDay !== null ||
     profilePanelOpen ||
     accountPanelOpen ||
+    searchPanelOpen ||
     methodologyPanelOpen,
   );
-  const detailsSelectionKey = methodologyPanelOpen
-    ? "methodology"
-    : selectedDay
-      ? `day:${selectedDay}`
-      : profilePanelOpen
-        ? "profile"
-        : accountPanelOpen
-          ? "account"
-          : selectedIncomeCell
-            ? `income:${selectedIncomeCell.key}`
-            : selectedEntry
-              ? `entry:${selectedEntry.key}`
-              : "placeholder";
-  const detailsHeadingId = methodologyPanelOpen
-    ? "timeline-methodology-heading"
-    : selectedDay
-      ? "timeline-day-heading"
-      : profilePanelOpen
-        ? "timeline-profile-heading"
-        : accountPanelOpen
-          ? "timeline-account-heading"
-          : "timeline-details-heading";
+  const detailsSelectionKey = searchPanelOpen
+    ? "search"
+    : methodologyPanelOpen
+      ? "methodology"
+      : selectedDay
+        ? `day:${selectedDay}`
+        : profilePanelOpen
+          ? "profile"
+          : accountPanelOpen
+            ? "account"
+            : selectedIncomeCell
+              ? `income:${selectedIncomeCell.key}`
+              : selectedEntry
+                ? `entry:${selectedEntry.key}`
+                : "placeholder";
+  const detailsHeadingId = searchPanelOpen
+    ? "timeline-search-heading"
+    : methodologyPanelOpen
+      ? "timeline-methodology-heading"
+      : selectedDay
+        ? "timeline-day-heading"
+        : profilePanelOpen
+          ? "timeline-profile-heading"
+          : accountPanelOpen
+            ? "timeline-account-heading"
+            : "timeline-details-heading";
 
   function closeActiveDetails() {
+    if (searchPanelOpen) {
+      searchNavigationRef.current?.abort();
+      setSearchPanelOpen(false);
+      document.getElementById("timeline-search-button")?.focus();
+      return;
+    }
     if (methodologyPanelOpen) {
       setMethodologyPanelOpen(false);
       document.getElementById("timeline-methodology-button")?.focus();
@@ -974,6 +1072,32 @@ function TimelineScheduleContent({
           </button>
 
           <button
+            id="timeline-search-button"
+            type="button"
+            className="timeline-tonal-button timeline-toolbar-action"
+            aria-label="Search timeline"
+            aria-expanded={searchPanelOpen}
+            onClick={() => {
+              setIsChoosingSummonDate(false);
+              setSelectedKey(null);
+              setSelectedIncomeKey(null);
+              setSelectedDay(null);
+              setProfilePanelOpen(false);
+              setAccountPanelOpen(false);
+              setMethodologyPanelOpen(false);
+              setSearchPanelOpen(true);
+            }}
+          >
+            <span
+              className="timeline-toolbar-action-label"
+              data-short-label="Search"
+              aria-hidden="true"
+            >
+              <span>Search</span>
+            </span>
+          </button>
+
+          <button
             type="button"
             className="timeline-tonal-button timeline-toolbar-action"
             aria-label="Balances"
@@ -1001,6 +1125,7 @@ function TimelineScheduleContent({
             aria-label="Today"
             onClick={() => {
               setIsChoosingSummonDate(false);
+              setSearchPanelOpen(false);
               returnToToday();
             }}
           >
@@ -1269,17 +1394,26 @@ function TimelineScheduleContent({
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
           returnFocusId={
-            methodologyPanelOpen
-              ? "timeline-methodology-button"
-              : selectedDay
-                ? `timeline-day-${selectedDay}`
-                : accountPanelOpen
-                  ? "timeline-account-button"
-                  : undefined
+            searchPanelOpen
+              ? "timeline-search-button"
+              : methodologyPanelOpen
+                ? "timeline-methodology-button"
+                : selectedDay
+                  ? `timeline-day-${selectedDay}`
+                  : accountPanelOpen
+                    ? "timeline-account-button"
+                    : undefined
           }
           onClose={closeActiveDetails}
         >
-          {methodologyPanelOpen ? (
+          {searchPanelOpen ? (
+            <TimelineSearchDetails
+              scheduleStartDay={scheduleStartDay}
+              timeZone={calendar.timeZone}
+              onSelect={selectSearchResult}
+              onClose={closeActiveDetails}
+            />
+          ) : methodologyPanelOpen ? (
             <TimelineMethodologyDetails onClose={closeActiveDetails} />
           ) : selectedDay && selectedDayBalances ? (
             <TimelineDayDetails

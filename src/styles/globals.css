@@ -482,6 +482,71 @@ button {
   align-items: center;
 }
 
+.timeline-search-field {
+  margin-top: 16px;
+}
+
+.timeline-search-details > p {
+  margin: 6px 0 0;
+  color: var(--md-on-surface-variant);
+  font-size: var(--timeline-type-label);
+  line-height: 1.5;
+}
+
+.timeline-search-details > p[role="alert"] {
+  color: var(--md-error);
+}
+
+.timeline-search-group {
+  margin-top: 24px;
+}
+.timeline-search-group h4 {
+  margin: 0 0 8px;
+  color: var(--md-on-surface-variant);
+  font-size: var(--timeline-type-label);
+  font-weight: 650;
+}
+.timeline-search-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline-search-result {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 10px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  border: 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: transparent;
+  color: var(--md-on-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--timeline-type-body);
+  line-height: 1.5;
+}
+.timeline-search-result:hover:not(:disabled) {
+  background: var(--md-surface-low);
+}
+.timeline-search-result:active:not(:disabled) {
+  background: var(--md-primary-container);
+}
+.timeline-search-result:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.timeline-search-result > span {
+  color: var(--md-on-surface-variant);
+  font-size: var(--timeline-type-label);
+}
+.timeline-search-result:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 1px;
+}
+
 .planner-conflict-actions button {
   display: inline-flex;
   min-height: 44px;
@@ -2018,7 +2083,8 @@ button {
   background: var(--md-surface-low);
 }
 
-.summon-field {
+.summon-field,
+.timeline-search-field {
   display: grid;
   min-width: 0;
   gap: 6px;
@@ -2028,7 +2094,8 @@ button {
 }
 
 .summon-field input,
-.summon-field select {
+.summon-field select,
+.timeline-search-field input {
   width: 100%;
   min-height: 44px;
   padding: 8px 10px;
@@ -2040,7 +2107,8 @@ button {
 }
 
 .summon-field input:focus-visible,
-.summon-field select:focus-visible {
+.summon-field select:focus-visible,
+.timeline-search-field input:focus-visible {
   outline: 3px solid var(--md-primary);
   outline-offset: 1px;
 }

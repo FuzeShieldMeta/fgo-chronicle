@@ -5,7 +5,15 @@ import superjson from "superjson";
 import { z } from "zod";
 
 import type { Prisma } from "../../../../generated/prisma";
-import { timelineWindowAt } from "~/app/timeline/_lib/progressive-timeline";
+import {
+  timelineWindowAt,
+  timelineWindows,
+} from "~/app/timeline/_lib/progressive-timeline";
+import {
+  searchTimelineEntries,
+  timelineSearchLimits,
+  type TimelineSearchEntry,
+} from "~/shared/timeline-search";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
@@ -678,7 +686,93 @@ export async function getCachedTimelineWindow(input: TimelineWindowInput) {
   );
 }
 
+const cachedSearchIndex = unstable_cache(
+  async (input: TimelineListInput, _revision: number) => {
+    const [entries, banners] = await Promise.all([
+      queryTimelineList(db, input),
+      db.banner.findMany({
+        relationLoadStrategy: "join",
+        where: commonWhere(input),
+        select: {
+          id: true,
+          featured: {
+            select: {
+              servant: { select: { id: true, name: true, className: true } },
+            },
+          },
+          summonLineups: {
+            select: {
+              featured: {
+                select: {
+                  servant: {
+                    select: { id: true, name: true, className: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    const servants = new Map(
+      banners.map((banner) => [
+        banner.id,
+        [
+          ...new Map(
+            [
+              ...banner.featured,
+              ...banner.summonLineups.flatMap((lineup) => lineup.featured),
+            ].map(({ servant }) => [servant.id, servant]),
+          ).values(),
+        ],
+      ]),
+    );
+    const index: TimelineSearchEntry[] = entries.map((entry) => ({
+      key: entry.key,
+      name: entry.name,
+      kind: entry.kind,
+      startsAt: entry.startsAt,
+      endsAt: entry.endsAt,
+      startsAtPrecision: entry.startsAtPrecision,
+      endsAtPrecision: entry.endsAtPrecision,
+      status: entry.status,
+      servants: entry.kind === "BANNER" ? (servants.get(entry.id) ?? []) : [],
+    }));
+    return superjson.stringify(index);
+  },
+  ["timeline-search-v1"],
+  publicTimelineCacheOptions,
+);
+
 export const timelineRouter = createTRPCRouter({
+  search: publicProcedure
+    .input(
+      z
+        .object({
+          scheduleStartDay: z.string(),
+          query: z
+            .string()
+            .trim()
+            .min(timelineSearchLimits.minimumQueryCharacters)
+            .max(timelineSearchLimits.maximumQueryCharacters),
+        })
+        .strict(),
+    )
+    .query(async ({ input }) => {
+      timelineWindowSchema.parse({
+        scheduleStartDay: input.scheduleStartDay,
+        index: 0,
+      });
+      const end = timelineWindows(input.scheduleStartDay).at(-1)!.throughDay;
+      const range = {
+        from: new Date(`${input.scheduleStartDay}T00:00:00Z`),
+        to: new Date(`${end}T23:59:59.999Z`),
+      };
+      const entries = superjson.parse<TimelineSearchEntry[]>(
+        await cachedSearchIndex(range, await getCuratorRevision()),
+      );
+      return searchTimelineEntries(entries, input.query);
+    }),
   stories: publicProcedure.query(async ({ ctx }) => {
     return queryStories(ctx.db);
   }),
