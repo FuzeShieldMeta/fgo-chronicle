@@ -26,6 +26,7 @@ import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
 import { chapterMissionProofSchema } from "./global-chapter-mission-identity";
+import { buildCampaignMissionEvidence } from "./global-campaign-mission-evidence";
 import {
   loadRegionalCampaignProofs,
   verifiedRegionalCampaignAlias,
@@ -51,11 +52,17 @@ const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+type CampaignMissionSource = {
+  page: Parameters<typeof buildCampaignMissionEvidence>[0];
+  target: Parameters<typeof buildCampaignMissionEvidence>[1];
+  verifiedNames: readonly string[];
+};
 
 export function announcementCandidateRows(
   report: Report,
   events?: readonly AnnouncementMatchEvent[],
   regionalProofs: ReadonlyMap<string, CampaignIdentityProof> = new Map(),
+  missionSources: ReadonlyMap<string, CampaignMissionSource> = new Map(),
 ): Prisma.GlobalEventCandidateCreateManyInput[] {
   return report.articles.flatMap((article) => {
     const matches = events ? assessAnnouncementArticle(article, events) : null;
@@ -89,6 +96,16 @@ export function announcementCandidateRows(
               article: { ...regionalIdentity.article, retrievedAt: undefined },
             }
           : regionalIdentity;
+      const source = targetId ? missionSources.get(targetId) : undefined;
+      const missionEvidence = source
+        ? buildCampaignMissionEvidence(
+            source.page,
+            source.target,
+            article,
+            period,
+            source.verifiedNames,
+          )
+        : null;
       const snapshot = {
         ...period,
         articleName: article.name,
@@ -100,6 +117,7 @@ export function announcementCandidateRows(
               regionalIdentity,
             }
           : {}),
+        ...(missionEvidence ? { missionEvidence } : {}),
       };
       return {
         ...shared,
@@ -199,6 +217,7 @@ export async function collectAnnouncementsWithAuthority(
       }
     : null;
   const regionalProofs = new Map<string, CampaignIdentityProof>();
+  const missionSources = new Map<string, CampaignMissionSource>();
   let regionalCoverageLimited = false;
   if (range && execution.allowPublication !== false) {
     const targets = await database.event.findMany({
@@ -219,6 +238,8 @@ export async function collectAnnouncementsWithAuthority(
         type: true,
         sourceStartsAt: true,
         sourceEndsAt: true,
+        name: true,
+        startsAt: true,
       },
       take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
     });
@@ -238,12 +259,16 @@ export async function collectAnnouncementsWithAuthority(
         throw new Error(
           "The campaign identity lookup exceeds the record limit.",
         );
+      const pages = new Map<string, CampaignMissionSource["page"]>();
       const proofs = await progress.stage("campaign_identities", () =>
         loadRegionalCampaignProofs(
           targets,
           dependencies.fetchFn,
           atlases,
           report.articles,
+          (page) => {
+            pages.set(`fandom:JP:page:${page.pageId}:projection:NA`, page);
+          },
         ),
       );
       for (const target of targets) {
@@ -258,8 +283,17 @@ export async function collectAnnouncementsWithAuthority(
         const atlas = atlasId
           ? atlases.find((row) => row.sourceRecordId === atlasId)
           : undefined;
-        if (proof && verifiedRegionalCampaignAlias(proof, target, atlas))
-          regionalProofs.set(target.id, proof);
+        const alias = proof
+          ? verifiedRegionalCampaignAlias(proof, target, atlas)
+          : null;
+        if (proof && alias) regionalProofs.set(target.id, proof);
+        const page = pages.get(target.sourceKey);
+        if (page)
+          missionSources.set(target.id, {
+            page,
+            target,
+            verifiedNames: alias ? [alias] : [],
+          });
       }
     } catch {
       // Never fall back to a stored regional alias after a failed source fetch.
@@ -428,6 +462,7 @@ export async function collectAnnouncementsWithAuthority(
           report,
           events,
           regionalProofs,
+          missionSources,
         );
         if (
           assessedRecords.some(

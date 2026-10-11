@@ -25,6 +25,7 @@ import { verifiedRegionalCampaignAlias } from "./global-campaign-identity";
 import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
 import { chapterMissionProofSchema } from "./global-chapter-mission-identity";
 import { officialMissionDates } from "./global-mission-date-plan";
+import { verifyCampaignMissionEvidence } from "./global-campaign-mission-evidence";
 import { z } from "zod";
 
 const assessmentSchema = z.object({
@@ -47,6 +48,7 @@ const assessmentSchema = z.object({
     .max(GLOBAL_ANNOUNCEMENT_LIMITS.maxTitleCharacters)
     .optional(),
   regionalIdentity: z.unknown().optional(),
+  missionEvidence: z.unknown().optional(),
   matching: z.object({
     targetEventId: z.string(),
     reason: z.literal("UNIQUE_EVENT_MATCH"),
@@ -153,6 +155,26 @@ export async function publishAnnouncementFamily(
   )
     throw new Error("The chapter mission evidence changed.");
   const current = effectiveEvent(anchor);
+  const campaignMissions =
+    assessed.missionEvidence === undefined ||
+    assessed.kind !== "CAMPAIGN" ||
+    !assessed.endsAt
+      ? null
+      : verifyCampaignMissionEvidence(
+          assessed.missionEvidence,
+          anchor,
+          {
+            url: candidate.sourceUrl,
+            contentHash: candidate.contentHash,
+            sourceRecordId: candidate.sourceRecordId,
+            name: assessed.articleName,
+            startsAt: assessed.startsAt,
+            endsAt: assessed.endsAt,
+          },
+          regional ? [regional] : [],
+        );
+  if (assessed.missionEvidence !== undefined && !campaignMissions)
+    throw new Error("The campaign mission evidence changed.");
   if (
     matchAnnouncementEvent(assessed, assessed.articleName, [
       {
@@ -343,9 +365,9 @@ export async function publishAnnouncementFamily(
       };
     }),
   });
-  if (chapter.success) {
+  if (chapter.success || campaignMissions) {
     const dates = officialMissionDates(
-      chapter.data,
+      campaignMissions ?? (chapter.success ? chapter.data : { missions: [] }),
       rewards
         .filter(({ event }) => event.id === eventId)
         .map(({ source, reward }) => ({

@@ -13,7 +13,7 @@ type ImportedReward = {
 // Recheck the locked imported records. A source revision or changed mission
 // label invalidates the whole proof; curator-owned dates are simply preserved.
 export function officialMissionDates(
-  proof: ChapterMissionProof,
+  proof: Pick<ChapterMissionProof, "missions">,
   rewards: readonly ImportedReward[],
 ) {
   const dates = new Map<string, Date>();

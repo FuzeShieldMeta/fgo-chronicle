@@ -148,6 +148,12 @@ export async function loadRegionalCampaignProofs(
   fetchFn: typeof fetch = fetch,
   atlases: readonly AtlasCampaignAssessment[] = [],
   announcements: readonly PublisherArticle[] = [],
+  onPage?: (page: {
+    pageId: number;
+    revisionId: number;
+    title: string;
+    wikitext: string;
+  }) => void,
 ) {
   const ids = [
     ...new Set(
@@ -247,6 +253,7 @@ export async function loadRegionalCampaignProofs(
       title: page.title,
       wikitext: revision.slots.main.content,
     };
+    onPage?.(sourcePage);
     let proof: CampaignIdentityProof | null =
       pairedRegionalCampaignProof(sourcePage);
     if (
