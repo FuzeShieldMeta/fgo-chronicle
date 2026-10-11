@@ -25,6 +25,7 @@ import {
 import { effectiveEvent } from "./effective-schedule";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
+import { chapterMissionProofSchema } from "./global-chapter-mission-identity";
 import {
   loadRegionalCampaignProofs,
   verifiedRegionalCampaignAlias,
@@ -69,9 +70,18 @@ export function announcementCandidateRows(
     const rows = article.periods.map((period, index) => {
       const invalidRange = period.issues.includes("INVALID_DATE_RANGE");
       const targetId = matches?.[index]?.targetEventId;
-      const regionalIdentity = targetId
+      let regionalIdentity = targetId
         ? regionalProofs.get(targetId)
         : undefined;
+      const chapter = chapterMissionProofSchema.safeParse(regionalIdentity);
+      if (
+        chapter.success &&
+        (chapter.data.globalArticle.url !== article.sourceUrl ||
+          chapter.data.globalArticle.contentHash !== article.contentHash ||
+          chapter.data.globalArticle.startsAt !== period.startsAt ||
+          chapter.data.globalArticle.endsAt !== period.endsAt)
+      )
+        regionalIdentity = undefined;
       const stableIdentity =
         regionalIdentity && "kind" in regionalIdentity
           ? {
@@ -85,9 +95,9 @@ export function announcementCandidateRows(
         parserRevision: GLOBAL_ANNOUNCEMENT_LIMITS.parserRevision,
         targetEventId: null,
         ...(matches ? { matching: matches[index] } : {}),
-        ...(targetId && regionalProofs.has(targetId)
+        ...(regionalIdentity
           ? {
-              regionalIdentity: regionalProofs.get(targetId),
+              regionalIdentity,
             }
           : {}),
       };
@@ -229,13 +239,24 @@ export async function collectAnnouncementsWithAuthority(
           "The campaign identity lookup exceeds the record limit.",
         );
       const proofs = await progress.stage("campaign_identities", () =>
-        loadRegionalCampaignProofs(targets, dependencies.fetchFn, atlases),
+        loadRegionalCampaignProofs(
+          targets,
+          dependencies.fetchFn,
+          atlases,
+          report.articles,
+        ),
       );
       for (const target of targets) {
         const proof = proofs.get(target.sourceKey);
         const bridge = jpCampaignProofSchema.safeParse(proof);
-        const atlas = bridge.success
-          ? atlases.find((row) => row.sourceRecordId === bridge.data.atlasId)
+        const chapterBridge = chapterMissionProofSchema.safeParse(proof);
+        const atlasId = bridge.success
+          ? bridge.data.atlasId
+          : chapterBridge.success
+            ? chapterBridge.data.atlasId
+            : null;
+        const atlas = atlasId
+          ? atlases.find((row) => row.sourceRecordId === atlasId)
           : undefined;
         if (proof && verifiedRegionalCampaignAlias(proof, target, atlas))
           regionalProofs.set(target.id, proof);
@@ -339,6 +360,8 @@ export async function collectAnnouncementsWithAuthority(
             for (const proof of regionalProofs.values()) {
               const bridge = jpCampaignProofSchema.safeParse(proof);
               if (bridge.success) sourceIds.push(bridge.data.atlasId);
+              const chapter = chapterMissionProofSchema.safeParse(proof);
+              if (chapter.success) sourceIds.push(chapter.data.atlasId);
             }
             const aliases = sourceIds.length
               ? await tx.globalEventCandidate.findMany({
@@ -366,10 +389,14 @@ export async function collectAnnouncementsWithAuthority(
                   : null;
               const proof = regionalProofs.get(event.id);
               const bridge = jpCampaignProofSchema.safeParse(proof);
-              const component = bridge.success
-                ? aliases.find(
-                    (row) => row.sourceRecordId === bridge.data.atlasId,
-                  )
+              const chapter = chapterMissionProofSchema.safeParse(proof);
+              const componentId = bridge.success
+                ? bridge.data.atlasId
+                : chapter.success
+                  ? chapter.data.atlasId
+                  : undefined;
+              const component = componentId
+                ? aliases.find((row) => row.sourceRecordId === componentId)
                 : undefined;
               const regional = verifiedRegionalCampaignAlias(
                 proof,

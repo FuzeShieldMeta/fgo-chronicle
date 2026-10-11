@@ -55,6 +55,8 @@ export const GLOBAL_CAMPAIGN_IDENTITY_LIMITS = {
   maxOfficialArticles: 12,
   collectionTimeoutMs: 45_000,
   jstOffsetMinutes: 9 * 60,
+  maxMissionTableColumns: 12,
+  minMissionSubtitleCharacters: 12,
 } as const;
 
 export const GLOBAL_EXPORT_LIMITS = {

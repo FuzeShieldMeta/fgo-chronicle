@@ -21,6 +21,13 @@ import {
   GLOBAL_SOURCE_LIMITS,
   GLOBAL_ANNOUNCEMENT_LIMITS,
 } from "~/shared/global-reconciliation-config";
+import {
+  buildChapterMissionProof,
+  hasChapterMissionCandidate,
+  verifiedChapterMissionAlias,
+  type ChapterMissionProof,
+} from "./global-chapter-mission-identity";
+import type { PublisherArticle } from "./global-announcement-source";
 
 const API = "https://fategrandorder.fandom.com/api.php";
 const header = z.string().min(1).max(GLOBAL_SOURCE_LIMITS.maxSnapshotBytes);
@@ -35,7 +42,7 @@ const proofSchema = z
   })
   .strict();
 export type CampaignIdentityProof =
-  z.infer<typeof proofSchema> | JpCampaignProof;
+  z.infer<typeof proofSchema> | JpCampaignProof | ChapterMissionProof;
 export type CampaignIdentityTarget = {
   id: string;
   type: string;
@@ -55,6 +62,13 @@ export function verifiedRegionalCampaignAlias(
   event: CampaignIdentityTarget,
   atlas?: AtlasCampaignAssessment,
 ) {
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "kind" in raw &&
+    raw.kind === "JP_CHAPTER_MISSIONS"
+  )
+    return verifiedChapterMissionAlias(raw, event, atlas);
   if (
     raw &&
     typeof raw === "object" &&
@@ -133,6 +147,7 @@ export async function loadRegionalCampaignProofs(
   events: readonly CampaignIdentityTarget[],
   fetchFn: typeof fetch = fetch,
   atlases: readonly AtlasCampaignAssessment[] = [],
+  announcements: readonly PublisherArticle[] = [],
 ) {
   const ids = [
     ...new Set(
@@ -234,7 +249,11 @@ export async function loadRegionalCampaignProofs(
     };
     let proof: CampaignIdentityProof | null =
       pairedRegionalCampaignProof(sourcePage);
-    if (!proof && hasJpCampaignExchange(sourcePage, atlases)) {
+    if (
+      !proof &&
+      (hasJpCampaignExchange(sourcePage, atlases) ||
+        hasChapterMissionCandidate(sourcePage, atlases, announcements))
+    ) {
       const headers = extractTemplates(
         campaignSourceWikitext(sourcePage.wikitext),
         "EventHeaderJP",
@@ -266,6 +285,13 @@ export async function loadRegionalCampaignProofs(
           articles.set(articleUrl, article);
         }
         proof = buildJpCampaignProof(sourcePage, article, event, atlases);
+        proof ??= buildChapterMissionProof(
+          sourcePage,
+          article,
+          event,
+          atlases,
+          announcements,
+        );
       }
     }
     if (proof) result.set(`fandom:JP:page:${page.pageid}:projection:NA`, proof);

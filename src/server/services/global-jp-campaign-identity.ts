@@ -182,12 +182,35 @@ export function parseJpCampaignArticle(
       (value) =>
         value.length <= BODY.maxContextCharacters && jpExchangePeriod(value),
     );
+  const campaignPeriods = nodes
+    .filter((node) => node.nodeName === "p")
+    .map(plain)
+    .filter(
+      (value) =>
+        value.length <= BODY.maxContextCharacters &&
+        value.includes("キャンペーン開催期間") &&
+        jpExchangePeriod(value.replace("キャンペーン開催期間", "交換期間")),
+    );
+  const quotedNames = [
+    ...new Set(
+      [...plain(parse(body)).matchAll(/[「『]([^「」『』]+)[」』]/gu)].map(
+        (match) => match[1]!.trim(),
+      ),
+    ),
+  ];
+  if (
+    campaignPeriods.length > BODY.maxPeriodsPerArticle ||
+    quotedNames.length > BODY.maxTreeNodes
+  )
+    throw new Error("The JP announcement contains too much identity evidence.");
   if (exchanges.length > BODY.maxPeriodsPerArticle)
     throw new Error("The JP announcement contains too many periods.");
   return {
     url,
     title: title ? plain(title) : "",
     exchanges,
+    campaignPeriods,
+    quotedNames,
     contentHash: createHash("sha256").update(body).digest("hex"),
     retrievedAt: retrievedAt.toISOString(),
   };
@@ -312,7 +335,13 @@ export function buildJpCampaignProof(
     .filter((line) => wikiExchangePeriod(line));
   if (exchanges.length > BODY.maxPeriodsPerArticle) return null;
   const proofs: JpCampaignProof[] = [];
-  const { exchanges: articleExchanges, ...articleMetadata } = article;
+  const articleExchanges = article.exchanges;
+  const articleMetadata = {
+    url: article.url,
+    title: article.title,
+    contentHash: article.contentHash,
+    retrievedAt: article.retrievedAt,
+  };
   for (const atlas of matchingJpCampaignAtlases(page, atlases))
     for (const wikiExchange of exchanges)
       for (const exchange of articleExchanges) {

@@ -10,6 +10,14 @@ import {
   publisherIndexUrl,
   PUBLISHER_ORIGIN,
 } from "./global-announcement-parser";
+import {
+  parseOfficialMissionRows,
+  type OfficialMissionRow,
+} from "./global-mission-periods";
+
+export type PublisherArticle = ReturnType<typeof parsePublisherAnnouncement> & {
+  missions?: OfficialMissionRow[];
+};
 
 export const PUBLISHER_FEEDS = [
   `${PUBLISHER_ORIGIN}/`,
@@ -160,16 +168,17 @@ export async function loadPublisherAnnouncements(
     }
     if (next) coverageLimited = true;
   }
-  const articles: ReturnType<typeof parsePublisherAnnouncement>[] = [];
+  const articles: PublisherArticle[] = [];
   for (const url of articleUrls) {
     const body = await fetchPublisherHtml(url, { ...dependencies, signal });
-    articles.push(
-      parsePublisherAnnouncement(
+    articles.push({
+      ...parsePublisherAnnouncement(
         body,
         url,
         (dependencies.now ?? (() => new Date()))(),
       ),
-    );
+      missions: parseOfficialMissionRows(body, url),
+    });
   }
   return {
     articles,

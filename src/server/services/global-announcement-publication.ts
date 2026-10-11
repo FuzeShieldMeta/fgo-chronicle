@@ -23,6 +23,8 @@ import { matchAnnouncementEvent } from "./global-announcement-match";
 import { verifiedAtlasAlias } from "./global-announcement-alias";
 import { verifiedRegionalCampaignAlias } from "./global-campaign-identity";
 import { jpCampaignProofSchema } from "./global-jp-campaign-identity";
+import { chapterMissionProofSchema } from "./global-chapter-mission-identity";
+import { officialMissionDates } from "./global-mission-date-plan";
 import { z } from "zod";
 
 const assessmentSchema = z.object({
@@ -113,9 +115,16 @@ export async function publishAnnouncementFamily(
   )
     throw new Error("Invalid announcement assessment.");
   const bridge = jpCampaignProofSchema.safeParse(assessed.regionalIdentity);
+  const chapter = chapterMissionProofSchema.safeParse(
+    assessed.regionalIdentity,
+  );
   const atlasId =
     /^atlas:JP:event:(\d+):projection:NA$/.exec(anchor.sourceKey)?.[1] ??
-    (bridge.success ? bridge.data.atlasId : undefined);
+    (bridge.success
+      ? bridge.data.atlasId
+      : chapter.success
+        ? chapter.data.atlasId
+        : undefined);
   const atlas = atlasId
     ? await tx.globalEventCandidate.findFirst({
         where: { sourceKind: "GLOBAL_GAME_DATA", sourceRecordId: atlasId },
@@ -132,6 +141,17 @@ export async function publishAnnouncementFamily(
     anchor,
     atlas ?? undefined,
   );
+  if (
+    chapter.success &&
+    (!regional ||
+      assessed.kind !== "CAMPAIGN" ||
+      chapter.data.globalArticle.url !== candidate.sourceUrl ||
+      chapter.data.globalArticle.contentHash !== candidate.contentHash ||
+      chapter.data.globalArticle.name !== assessed.articleName ||
+      chapter.data.globalArticle.startsAt !== assessed.startsAt ||
+      chapter.data.globalArticle.endsAt !== assessed.endsAt)
+  )
+    throw new Error("The chapter mission evidence changed.");
   const current = effectiveEvent(anchor);
   if (
     matchAnnouncementEvent(assessed, assessed.articleName, [
@@ -323,6 +343,31 @@ export async function publishAnnouncementFamily(
       };
     }),
   });
+  if (chapter.success) {
+    const dates = officialMissionDates(
+      chapter.data,
+      rewards
+        .filter(({ event }) => event.id === eventId)
+        .map(({ source, reward }) => ({
+          id: reward.id,
+          sourceKey: reward.sourceKey,
+          itemType: reward.itemType,
+          amount: reward.amount,
+          eligibility: reward.eligibility,
+          sourceType: source.type,
+          protectedDate:
+            !!reward.globalBaseline ||
+            reward.storyWarId !== null ||
+            reward.dateBasis === "ABSOLUTE" ||
+            (!!reward.curation?.active &&
+              ownsField(reward.curation, "expectedAt")),
+        })),
+    );
+    for (const reward of plan.rewards) {
+      const deadline = dates.get(reward.id);
+      if (deadline) reward.expectedAt = deadline;
+    }
+  }
   const evidence = dateEvidenceSchema.parse({
     sourceKind: "PUBLISHER_ANNOUNCEMENT",
     sourceUrl: candidate.sourceUrl,
