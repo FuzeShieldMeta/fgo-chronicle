@@ -353,7 +353,7 @@ export async function collectAnnouncementsWithAuthority(
             return candidates.map((event) => {
               const effective = effectiveEvent(event);
               const assessment = aliases.find(
-                (alias) => alias.targetEventId === event.id,
+                (alias) => verifiedAtlasAlias(alias, event) !== null,
               );
               const alias =
                 execution.allowPublication !== false && assessment

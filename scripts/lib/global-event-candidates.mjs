@@ -126,6 +126,12 @@ function embeddedAssociations(event) {
   ).filter((key) => /^(shop|missions):[1-9]\d*$/.test(key)).sort();
 }
 
+/** @param {Record<string, any>} event */
+function hasNoContentAssociations(event) {
+  return ["warIds", "shop", "missions", "campaignQuests", "questReleaseOverwrites", "warBoards", "missionGroups"]
+    .every((field) => Array.isArray(event[field] ?? []) && !(event[field] ?? []).length);
+}
+
 /**
  * Identity candidates require a shared event ID, type and content association.
  * This report does not authorise publication or infer links from translated names.
@@ -210,6 +216,16 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
         warIds: linked.ids,
         embeddedIds,
       };
+      // This proof permits a translated title, not Atlas date/reward publication.
+      const titleAlias =
+        options.databaseInspected === true &&
+        reasons.length === 1 && reasons[0] === "MISSING_WAR_ASSOCIATION" &&
+        targets.length === 1 && targets[0].sourceRegion === "JP" &&
+        targets[0].type === eventType && event.type === "eventQuest" &&
+        jpEvent?.type === event.type && hasNoContentAssociations(event) &&
+        hasNoContentAssociations(jpEvent)
+          ? { scope: "TITLE_ONLY", targetEventId: targets[0].id }
+          : null;
       return {
         sourceRecordId: event.id,
         identity: reasons.some(
@@ -226,6 +242,7 @@ export function buildGlobalEventReport(jp, na, existingEvents, options) {
         targetEventId:
           !reasons.length && targets.length === 1 ? targets[0].id : null,
         projectedSourceKey: projectedKey,
+        titleAlias,
         jpName: jpEvent?.name ?? null,
         globalName: event.name,
         sourceType: event.type,
@@ -334,6 +351,7 @@ export async function reportGlobalEvents(database, options, dependencies = {}) {
             id: true,
             sourceKey: true,
             sourceRegion: true,
+            type: true,
             curation: { select: { active: true, revision: true } },
           },
           orderBy: { id: "asc" },

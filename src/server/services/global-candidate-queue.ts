@@ -58,6 +58,7 @@ export function globalCandidateRows(
     contentHash: candidate.evidence.contentHash,
     assessmentHash: hash({
       targetEventId: z.string().nullable().parse(candidate.targetEventId),
+      titleAlias: candidate.titleAlias,
       reasons: candidate.reasons,
       jpRecord: candidate.jpEvidence?.record ?? null,
       coverageIssues: candidate.coverageIssues,
