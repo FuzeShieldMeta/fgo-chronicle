@@ -1,6 +1,7 @@
 import { PrismaClient } from "../generated/prisma/index.js";
 import { runCompleteEventSchedule } from "../src/server/services/complete-event-schedule.js";
 import { cliSourceAuthority } from "../src/server/services/global-source-authority.js";
+import { validateAnnouncementBackfillDays } from "../src/server/services/global-announcement-source.js";
 import {
   safeSyncFailure,
   summariseEventSchedule,
@@ -16,10 +17,15 @@ function parseArguments(values) {
     warSourceFile: null,
     masterMissionSourceFile: null,
     outputPath: process.env.FANDOM_COVERAGE_DATA_PATH?.trim() || null,
+    announcementBackfillDays: /** @type {number | undefined} */ (undefined),
   };
   for (const value of values) {
     if (value === "--dry-run") {
       options.dryRun = true;
+    } else if (value.startsWith("--announcement-backfill-days=")) {
+      const days = value.slice("--announcement-backfill-days=".length);
+      if (!/^\d+$/.test(days)) throw new Error("Announcement backfill days must be an integer.");
+      options.announcementBackfillDays = validateAnnouncementBackfillDays(Number(days));
     } else if (value.startsWith("--as-of=")) {
       const date = value.slice("--as-of=".length);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {

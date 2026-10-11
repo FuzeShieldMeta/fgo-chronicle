@@ -1,4 +1,8 @@
-import { GLOBAL_ANNOUNCEMENT_LIMITS as LIMITS } from "~/shared/global-reconciliation-config";
+import {
+  GLOBAL_ANNOUNCEMENT_LIMITS as LIMITS,
+  GLOBAL_ANNOUNCEMENT_BACKFILL_LIMITS as BACKFILL,
+  MILLISECONDS_PER_DAY,
+} from "~/shared/global-reconciliation-config";
 import {
   discoverPublisherArticles,
   parsePublisherAnnouncement,
@@ -11,6 +15,28 @@ export const PUBLISHER_FEEDS = [
   `${PUBLISHER_ORIGIN}/`,
   `${PUBLISHER_ORIGIN}/maintenance/`,
 ] as const;
+
+export function validateAnnouncementBackfillDays(days: number | undefined) {
+  if (
+    days !== undefined &&
+    (!Number.isSafeInteger(days) || days < 1 || days > BACKFILL.maxDays)
+  )
+    throw new Error(
+      `Announcement backfill must be from 1 through ${BACKFILL.maxDays} days.`,
+    );
+  return days;
+}
+
+function articleDate(url: string) {
+  const match = /^\/(\d{4})\/(\d{2})(\d{2})(?:_|-)/.exec(new URL(url).pathname);
+  if (!match) return null;
+  const value = `${match[1]}-${match[2]}-${match[3]}`;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString().slice(0, 10) === value
+    ? timestamp
+    : null;
+}
 
 export async function fetchPublisherHtml(
   url: string,
@@ -78,24 +104,44 @@ export async function fetchPublisherHtml(
 
 export async function loadPublisherAnnouncements(
   dependencies: { fetchFn?: typeof fetch; now?: () => Date } = {},
+  options: { backfillDays?: number; asOf?: Date } = {},
 ) {
-  const signal = AbortSignal.timeout(LIMITS.collectionTimeoutMs);
+  const days = validateAnnouncementBackfillDays(options.backfillDays);
+  const limits = days === undefined ? LIMITS : BACKFILL;
+  const asOf = options.asOf ?? (dependencies.now ?? (() => new Date()))();
+  if (!Number.isFinite(asOf.getTime()))
+    throw new Error("Invalid announcement collection date.");
+  const endDay = Date.UTC(
+    asOf.getUTCFullYear(),
+    asOf.getUTCMonth(),
+    asOf.getUTCDate(),
+  );
+  const cutoff =
+    days === undefined ? null : endDay - days * MILLISECONDS_PER_DAY;
+  const signal = AbortSignal.timeout(limits.collectionTimeoutMs);
   const articleUrls = new Set<string>();
   const visited = new Set<string>();
   let coverageLimited = false;
-  const perFeedLimit = Math.floor(LIMITS.maxArticles / PUBLISHER_FEEDS.length);
+  const perFeedLimit = Math.floor(limits.maxArticles / PUBLISHER_FEEDS.length);
   for (const feed of PUBLISHER_FEEDS) {
     let feedArticles = 0;
     let next: string | null = feed;
-    for (let page = 0; next && page < LIMITS.maxIndexPages; page++) {
+    for (let page = 0; next && page < limits.maxIndexPages; page++) {
       if (visited.has(next)) break;
       visited.add(next);
       const body = await fetchPublisherHtml(next, { ...dependencies, signal });
       const discovered = discoverPublisherArticles(body, next);
       for (const url of discovered.articleUrls) {
+        if (articleUrls.has(url)) continue;
+        if (cutoff !== null) {
+          const published = articleDate(url);
+          // Unknown path dates are not proof that the article is outside the window.
+          if (published === null) coverageLimited = true;
+          else if (published < cutoff || published > endDay) continue;
+        }
         if (
           feedArticles >= perFeedLimit ||
-          articleUrls.size >= LIMITS.maxArticles
+          articleUrls.size >= limits.maxArticles
         ) {
           coverageLimited = true;
           break;
@@ -106,7 +152,7 @@ export async function loadPublisherAnnouncements(
       next = discovered.nextUrl;
       if (
         feedArticles >= perFeedLimit ||
-        articleUrls.size >= LIMITS.maxArticles
+        articleUrls.size >= limits.maxArticles
       ) {
         coverageLimited = true;
         break;

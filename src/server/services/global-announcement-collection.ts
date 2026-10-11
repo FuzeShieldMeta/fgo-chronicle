@@ -157,13 +157,18 @@ export async function collectAnnouncementsWithAuthority(
     dryRun?: boolean;
     allowPublication?: boolean;
     progress?: ImportProgress;
+    announcementBackfillDays?: number;
+    asOf?: Date;
   } = {},
 ) {
   collectAnnouncementsSchema.parse(rawInput);
   await requireSourceAuthority(database, authority);
   const progress = execution.progress ?? createImportProgress();
   const report = await progress.stage("publisher_download", () =>
-    loadPublisherAnnouncements(dependencies),
+    loadPublisherAnnouncements(dependencies, {
+      backfillDays: execution.announcementBackfillDays,
+      asOf: execution.asOf,
+    }),
   );
   const records = announcementCandidateRows(report);
   const starts = report.articles.flatMap((article) =>

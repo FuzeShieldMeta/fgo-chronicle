@@ -7,8 +7,11 @@ import {
 } from "./global-source-authority";
 import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 import { createImportProgress } from "./import-progress";
+import { validateAnnouncementBackfillDays } from "./global-announcement-source";
 
-type Options = Parameters<typeof runEventSchedulePipeline>[1];
+type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
+  announcementBackfillDays?: number;
+};
 type Dependencies = {
   runSync?: typeof runEventSchedulePipeline;
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
@@ -21,6 +24,7 @@ export async function runCompleteEventSchedule(
   dependencies: Dependencies = {},
 ) {
   // Check collection authority before the JP importer can write.
+  validateAnnouncementBackfillDays(options.announcementBackfillDays);
   await requireSourceAuthority(database, authority);
   const progress = createImportProgress();
   const report = await progress.stage("jp_fandom", () =>
@@ -39,7 +43,11 @@ export async function runCompleteEventSchedule(
       authority,
       options.asOf,
       {},
-      { dryRun: options.dryRun, progress },
+      {
+        dryRun: options.dryRun,
+        progress,
+        announcementBackfillDays: options.announcementBackfillDays,
+      },
     );
   } catch (error) {
     globalSources = {

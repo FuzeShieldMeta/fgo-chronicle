@@ -39,6 +39,14 @@ export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   minServantNameCharacters: 3,
 } as const;
 
+// Opt-in archive collection; daily cron retains the smaller announcement limits.
+export const GLOBAL_ANNOUNCEMENT_BACKFILL_LIMITS = {
+  maxDays: 90,
+  maxArticles: 200,
+  maxIndexPages: 12,
+  collectionTimeoutMs: 180_000,
+} as const;
+
 export const GLOBAL_CAMPAIGN_IDENTITY_LIMITS = {
   maxPages: 50,
   maxBodyBytes: 8 * 1_024 * 1_024,

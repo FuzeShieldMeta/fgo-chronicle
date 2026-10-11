@@ -26,7 +26,11 @@ export async function collectDailyGlobalSources(
   secret: string | undefined,
   asOf: Date,
   dependencies: Dependencies = {},
-  execution: { dryRun?: boolean; progress?: ImportProgress } = {},
+  execution: {
+    dryRun?: boolean;
+    progress?: ImportProgress;
+    announcementBackfillDays?: number;
+  } = {},
 ) {
   const authority = cronSourceAuthority(request, secret);
   return collectGlobalSourcesWithAuthority(
@@ -43,7 +47,11 @@ export async function collectGlobalSourcesWithAuthority(
   authority: GlobalSourceAuthority,
   asOf: Date,
   dependencies: Dependencies = {},
-  execution: { dryRun?: boolean; progress?: ImportProgress } = {},
+  execution: {
+    dryRun?: boolean;
+    progress?: ImportProgress;
+    announcementBackfillDays?: number;
+  } = {},
 ) {
   await requireSourceAuthority(database, authority);
   const progress = execution.progress ?? createImportProgress();
@@ -133,6 +141,7 @@ export async function collectGlobalSourcesWithAuthority(
       {},
       {
         ...execution,
+        asOf,
         progress,
         allowPublication: result.atlas.status === "success",
       },
