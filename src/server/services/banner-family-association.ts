@@ -53,7 +53,11 @@ export async function associateBannerFamilies(
   if (!banners.length) return 0;
   const events = await tx.event.findMany({
     relationLoadStrategy: "join",
-    where: { type: "MAIN_EVENT", sourceRegion: "JP", familyId: { not: null } },
+    where: {
+      type: { in: ["MAIN_EVENT", "CAMPAIGN", "PRE_RELEASE_CAMPAIGN"] },
+      sourceRegion: "JP",
+      familyId: { not: null },
+    },
     select: {
       id: true,
       sourceKey: true,

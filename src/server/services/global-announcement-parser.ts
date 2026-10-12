@@ -410,7 +410,11 @@ export function parsePublisherAnnouncement(
         name.includes(/^"([^"]+)"/.exec(inlineLabel)![1]!) &&
         /will be available for a limited time during\s*$/i.test(inlineLabel)
           ? "QUEST"
-          : periodKind(subject?.label ?? label);
+          : periodKind(
+              subject && /^period\s*:?$/i.test(subject.label)
+                ? `${subject.name} ${subject.label}`
+                : (subject?.label ?? label),
+            );
       const periodIssues = [
         ...new Set(
           [start.issue, end.issue].filter((issue): issue is string => !!issue),

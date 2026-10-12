@@ -37,7 +37,27 @@ export function matchesSummonBanner(
   const text = normaliseAnnouncementName(
     `${period.articleName} ${period.context}`,
   );
-  if (!stem || !` ${text} `.includes(` ${stem} `)) return false;
+  const friendPoint =
+    /\bfp\s+banner$/i.test(banner.name) &&
+    /\bfriend point summon\b/i.test(period.articleName);
+  // A campaign-wide summon describes the aggregate banner, not an individual rotation.
+  const campaignTitle = normaliseAnnouncementName(period.articleName).replace(
+    /\bpickup summon\b/g,
+    "campaign",
+  );
+  const campaignMatch =
+    !friendPoint &&
+    /\bcampaign$/i.test(banner.name) &&
+    banner.featuredNames.length > 0 &&
+    stem !== null &&
+    (campaignTitle === stem || campaignTitle.endsWith(` ${stem}`)) &&
+    /\b(?:rerun|revival)\b/.test(campaignTitle) ===
+      /\b(?:rerun|revival)\b/.test(stem);
+  if (
+    !stem ||
+    (!friendPoint && !campaignMatch && !` ${text} `.includes(` ${stem} `))
+  )
+    return false;
   const start = new Date(period.startsAt).getTime();
   const windowDays = GLOBAL_ANNOUNCEMENT_MATCHING.windowDays.at(-1)!;
   if (
@@ -47,8 +67,11 @@ export function matchesSummonBanner(
     )
   )
     return false;
-  return banner.featuredNames.some((name) => {
-    const normalised = normaliseAnnouncementName(name);
+  const namedServant = banner.featuredNames.some((name) => {
+    const fullName = normaliseAnnouncementName(name);
+    const normalised = friendPoint
+      ? fullName.replace(/\s+(?:male|female)$/, "")
+      : fullName;
     // Short names and pool-wide servant mentions cannot establish identity.
     return (
       normalised.length >=
@@ -58,6 +81,7 @@ export function matchesSummonBanner(
       )
     );
   });
+  return namedServant || campaignMatch;
 }
 
 // The caller holds source authority and the Global source lock.
@@ -93,7 +117,9 @@ export async function publishOfficialBannerDates(
       family: {
         include: {
           events: {
-            where: { type: "MAIN_EVENT" },
+            where: {
+              type: { in: ["MAIN_EVENT", "CAMPAIGN", "PRE_RELEASE_CAMPAIGN"] },
+            },
             select: {
               id: true,
               curation: { select: { active: true, hidden: true } },
@@ -135,7 +161,11 @@ export async function publishOfficialBannerDates(
         startsAt: effectiveBanner(banner).startsAt,
         projectedStartsAt: banner.startsAt,
         featuredNames: banner.featured
-          .filter((featured) => featured.servant.rarity === 5)
+          .filter((featured) =>
+            /\bfp\s+banner$/i.test(banner.name)
+              ? featured.servant.rarity === 4
+              : featured.servant.rarity === 5,
+          )
           .map((featured) => featured.servant.name),
       }),
     );
