@@ -5,6 +5,7 @@ import {
   type StoryChapter,
 } from "~/app/timeline/_lib/story-progress";
 import type { PlayerForecastProfile } from "~/app/timeline/_lib/player-forecast";
+import { storyEligibility } from "./story-eligibility";
 
 export const rewardPreferencesSchema = z.object({
   version: z.literal(1),
@@ -70,6 +71,7 @@ export function resolveRewardInclusion(
     defaultIncluded: boolean;
     storyWarId?: number | null;
     storyReleaseAt?: Date | null;
+    eligibility?: string | null;
   },
   preferences: RewardPreferences,
   profile?: PlayerForecastProfile | null,
@@ -97,6 +99,23 @@ export function resolveRewardInclusion(
           : newlyAvailable
             ? "Included from your story progress."
             : "Story complete. This reward may already be in your starting balances. Include it only if it is unclaimed.",
+      };
+    }
+  }
+  if (!hasPlayerDecision && !reward.storyWarId && profile?.storyProgress) {
+    const requirement = storyEligibility(
+      reward.eligibility,
+      profile.storyProgress,
+      catalogue,
+    );
+    if (requirement && requirement.completed !== true) {
+      return {
+        included: false,
+        inclusionResolved: false,
+        inclusionReason:
+          requirement.completed === false
+            ? `Story requirement not met: ${requirement.requiredChapters.map((chapter) => chapter.name).join(", ")}. Include manually if you plan to meet it.`
+            : "Story eligibility is not confirmed. Set your story progress or choose Include/Exclude.",
       };
     }
   }
