@@ -6,6 +6,7 @@ import {
 } from "../../../scripts/lib/reward-reconciliation.mjs";
 
 type Stage =
+  | "servant_catalogue"
   | "jp_fandom"
   | "atlas_global"
   | "atlas_global_recent"

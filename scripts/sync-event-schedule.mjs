@@ -68,6 +68,7 @@ async function main() {
         dryRun: options.dryRun,
         ...summariseEventSchedule(report),
         globalSources: report.globalSources,
+        servants: report.servants,
       },
       null,
       2,

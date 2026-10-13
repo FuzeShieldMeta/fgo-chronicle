@@ -38,6 +38,9 @@ async function importServants(banners) {
         name: servant.name,
         className: servant.class,
         rarity: servant.rarity ?? null,
+        ...(Number.isInteger(servant.faceId) && servant.faceId > 0
+          ? { faceId: servant.faceId }
+          : {}),
       });
     }
   }
@@ -52,6 +55,7 @@ async function importServants(banners) {
         name: servant.name,
         className: servant.className,
         rarity: servant.rarity,
+        ...(servant.faceId ? { faceId: servant.faceId } : {}),
       },
     });
   }

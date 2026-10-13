@@ -2,7 +2,7 @@ export const atlasJpServantCatalogueUrl =
   "https://api.atlasacademy.io/export/JP/basic_servant_lang_en.json";
 
 /**
- * @typedef {{ name: string, rarity: number }} AtlasServantSummary
+ * @typedef {{ name: string, rarity: number, faceId: number | null }} AtlasServantSummary
  */
 
 /**
@@ -39,13 +39,33 @@ export function parseAtlasServantCatalogue(value) {
       );
     }
 
+    const match =
+      typeof record.face === "string"
+        ? /^https:\/\/static\.atlasacademy\.io\/JP\/Faces\/f_(\d+)\.png$/.exec(
+            record.face,
+          )
+        : null;
+    const parsedFace = match ? Number(match[1]) : null;
+    const faceId =
+      parsedFace !== null &&
+      Number.isInteger(parsedFace) &&
+      parsedFace > 0 &&
+      parsedFace <= 2_147_483_647
+        ? parsedFace
+        : null;
     const existing = catalogue.get(collectionNo);
     if (existing && existing.rarity !== rarity) {
       throw new Error(
         `Atlas Servant ${collectionNo} has conflicting rarities.`,
       );
     }
+    if (existing?.faceId && faceId && existing.faceId !== faceId) {
+      throw new Error(
+        `Atlas Servant ${collectionNo} has conflicting thumbnails.`,
+      );
+    }
     catalogue.set(collectionNo, {
+      faceId: faceId ?? existing?.faceId ?? null,
       name:
         typeof record.name === "string" && record.name.trim()
           ? record.name.trim()
@@ -61,7 +81,9 @@ export function parseAtlasServantCatalogue(value) {
  * @param {typeof fetch} [fetcher]
  */
 export async function downloadAtlasServantCatalogue(fetcher = fetch) {
-  const response = await fetcher(atlasJpServantCatalogueUrl);
+  const response = await fetcher(atlasJpServantCatalogueUrl, {
+    signal: AbortSignal.timeout(30_000),
+  });
   if (!response.ok) {
     throw new Error(
       `Failed to download the Atlas Servant catalogue: ${response.status}`,

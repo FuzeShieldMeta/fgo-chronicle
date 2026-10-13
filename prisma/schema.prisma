@@ -517,6 +517,7 @@ model Servant {
   name      String
   className String
   rarity    Int?
+  faceId    Int?
   banners   BannerServant[]
   lineups   SummonLineupServant[]
 }

@@ -8,6 +8,7 @@ import {
 import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 import { createImportProgress } from "./import-progress";
 import { validateAnnouncementBackfillDays } from "./global-announcement-source";
+import { syncServantCatalogue } from "./servant-catalogue-sync";
 
 type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
   announcementBackfillDays?: number;
@@ -15,6 +16,7 @@ type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
 type Dependencies = {
   runSync?: typeof runEventSchedulePipeline;
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
+  syncServants?: typeof syncServantCatalogue;
 };
 
 export async function runCompleteEventSchedule(
@@ -27,6 +29,30 @@ export async function runCompleteEventSchedule(
   validateAnnouncementBackfillDays(options.announcementBackfillDays);
   await requireSourceAuthority(database, authority);
   const progress = createImportProgress();
+  let servants: {
+    examined: number;
+    updated: number;
+    status: "success" | "failed";
+  };
+  try {
+    servants = {
+      ...(await progress.stage("servant_catalogue", () =>
+        (dependencies.syncServants ?? syncServantCatalogue)(
+          database,
+          options.dryRun,
+        ),
+      )),
+      status: "success",
+    };
+  } catch (error) {
+    servants = { examined: 0, updated: 0, status: "failed" };
+    console.warn(
+      JSON.stringify({
+        event: "servant_catalogue_sync_failed",
+        error: safeSyncFailure(error),
+      }),
+    );
+  }
   const report = await progress.stage("jp_fandom", () =>
     (dependencies.runSync ?? runEventSchedulePipeline)(database, options, {
       progress,
@@ -71,11 +97,13 @@ export async function runCompleteEventSchedule(
     );
   }
   const failed =
+    servants.status === "failed" ||
     globalSources.atlas.status === "failed" ||
     globalSources.publisher.status === "failed" ||
     globalSources.publisher.publicationFailures > 0;
   return {
     ...report,
+    servants,
     globalSources,
     runId: progress.runId,
     importStatus: failed

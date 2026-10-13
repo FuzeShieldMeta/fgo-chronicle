@@ -130,6 +130,7 @@ for (const sheet of sheets) {
           name: servantName,
           class: sheet,
           rarity: atlasServant.rarity,
+          faceId: atlasServant.faceId,
           soloRateUp: solo === "Yes",
         });
       }
