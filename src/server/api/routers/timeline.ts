@@ -1,6 +1,8 @@
 import storyChapters from "~/data/story-chapters.json";
 import { TRPCError } from "@trpc/server";
 import { unstable_cache } from "next/cache";
+import { withServantThumbnail } from "~/server/services/servant-thumbnails";
+import type { FeaturedServant } from "~/shared/featured-servants";
 import superjson from "superjson";
 import { z } from "zod";
 
@@ -160,6 +162,12 @@ const eventSelect = {
 } as const;
 
 const bannerSelect = {
+  featured: {
+    select: {
+      servant: { select: { id: true, name: true, rarity: true, faceId: true } },
+    },
+    orderBy: { servantId: "asc" },
+  },
   dateOverlay: publicBannerDateOverlaySelect,
   id: true,
   name: true,
@@ -514,8 +522,15 @@ async function queryTimelineList(
           overlapsRange(banner, input.from, input.to) &&
           (!input.statuses || input.statuses.includes(banner.status)),
       )
-      .map((banner) => ({
+      .map(({ featured, ...banner }) => ({
         ...banner,
+        ...({
+          featuredServants: (featured ?? []).map(({ servant }) =>
+            withServantThumbnail(servant),
+          ),
+        } as {
+          featuredServants?: FeaturedServant[];
+        }),
         family: banner.family ? effectiveFamily(banner.family) : null,
         key: `banner:${banner.id}`,
         kind: "BANNER" as const,
@@ -633,7 +648,7 @@ const cachedStoriesPayload = unstable_cache(
 const cachedTimelineListPayload = unstable_cache(
   async (input: CachedTimelineListInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineList(db, restoreCacheInput(input))),
-  ["timeline-list-v3"],
+  ["timeline-list-v5"],
   publicTimelineCacheOptions,
 );
 
@@ -647,7 +662,7 @@ const cachedIncomePayload = unstable_cache(
 const cachedTimelineWindowPayload = unstable_cache(
   async (input: TimelineWindowInput, _curatorRevision: number) =>
     superjson.stringify(await queryTimelineWindow(db, input)),
-  ["timeline-window-v5"],
+  ["timeline-window-v7"],
   publicTimelineCacheOptions,
 );
 
@@ -804,6 +819,7 @@ export const timelineRouter = createTRPCRouter({
                     name: true,
                     className: true,
                     rarity: true,
+                    faceId: true,
                   },
                 },
               },
@@ -828,6 +844,10 @@ export const timelineRouter = createTRPCRouter({
 
         return {
           ...schedule,
+          featured: schedule.featured.map((item) => ({
+            ...item,
+            servant: withServantThumbnail(item.servant),
+          })),
           summonLineups: schedule.summonLineups.map((lineup) => ({
             ...lineup,
             startsAt: new Date(lineup.startsAt.getTime() + offset),

@@ -2,6 +2,7 @@
 import { useStoryCatalogue } from "./story-catalogue-provider";
 
 import Image from "next/image";
+import { FeaturedServantList } from "./featured-servant-list";
 import { englishRewardLabel } from "~/app/timeline/_lib/reward-labels";
 import { useState } from "react";
 
@@ -512,17 +513,7 @@ export function TimelineEntryDetails({
         <section className="timeline-detail-section">
           <h4>Featured Servants</h4>
           {details.data.featured.length > 0 ? (
-            <ul>
-              {details.data.featured.map(({ servant, soloRateUp }) => (
-                <li key={servant.id}>
-                  <span>{servant.name}</span>
-                  <small>
-                    {servant.className}
-                    {soloRateUp ? " · Solo rate-up" : " · Shared rate-up"}
-                  </small>
-                </li>
-              ))}
-            </ul>
+            <FeaturedServantList featured={details.data.featured} />
           ) : (
             <p>No featured Servant data is available.</p>
           )}

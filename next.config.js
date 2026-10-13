@@ -13,6 +13,13 @@ const config = {
         protocol: "https",
         hostname: "static.atlasacademy.io",
         port: "",
+        pathname: "/JP/Faces/f_*.png",
+        search: "",
+      },
+      {
+        protocol: "https",
+        hostname: "static.atlasacademy.io",
+        port: "",
         pathname: "/JP/Banner/**",
         search: "",
       },
