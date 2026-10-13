@@ -17,6 +17,13 @@ export const timelineLayout = {
   eventRailArtworkSizes: "(max-width: 768px) 120px, 160px",
   eventDetailsArtworkSizes: "(max-width: 768px) 100vw, 520px",
   stickyLabelInset: 4,
+  servantSummaryMaximum: 3,
+  servantThumbnailSize: 28,
+  servantThumbnailVerticalPadding: 2,
+  servantThumbnailMinimumSize: 18,
+  servantThumbnailGap: 4,
+  servantThumbnailOverflowWidth: 28,
+  servantThumbnailLabelPadding: 20,
   servantDetailsThumbnailSize: 48,
 } as const;
 

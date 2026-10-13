@@ -6,6 +6,8 @@ import {
 import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
+import { RailServantThumbnails } from "./rail-servant-thumbnails";
+import { sortFeaturedServants } from "~/shared/featured-servants";
 import {
   startTransition,
   useEffect,
@@ -156,7 +158,19 @@ function intervalLabel(entry: TimelineEntry, timeZone: string) {
     ? calendarDayKey(entry.endsAt, entry.endsAtPrecision ?? "EXACT", timeZone)
     : start;
 
-  return `${entry.name}. ${statusNames[entry.status]}. ${start} to ${end}.`;
+  const servants =
+    entry.kind === "BANNER"
+      ? sortFeaturedServants(entry.featuredServants ?? [])
+      : [];
+  const featured = servants.length
+    ? ` Featured: ${servants
+        .slice(0, timelineLayout.servantSummaryMaximum)
+        .map((servant) => servant.name)
+        .join(
+          ", ",
+        )}${servants.length > timelineLayout.servantSummaryMaximum ? ` and ${servants.length - timelineLayout.servantSummaryMaximum} more` : ""}.`
+    : "";
+  return `${entry.name}. ${statusNames[entry.status]}. ${start} to ${end}.${featured}`;
 }
 
 function Rail({
@@ -194,6 +208,8 @@ function Rail({
     (entry.endRow - entry.startRow + 1) * timelineLayout.dayWidth -
     timelineLayout.railHorizontalInset * 2;
   const [failedArtworkUrl, setFailedArtworkUrl] = useState<string | null>(null);
+  const labelTrackRef = useRef<HTMLSpanElement>(null);
+  const labelTitleRef = useRef<HTMLSpanElement>(null);
   const candidateArtworkUrl = railArtworkUrl(entry, {
     availableWidth: railWidth,
     minimumWidth: timelineLayout.minimumEventArtworkRailWidth,
@@ -245,7 +261,11 @@ function Rail({
         onBlur={() => onHideTooltip(entry.key)}
       />
       <span className="timeline-rail-start" aria-hidden="true" />
-      <span className="timeline-rail-label-track" aria-hidden="true">
+      <span
+        ref={labelTrackRef}
+        className="timeline-rail-label-track"
+        aria-hidden="true"
+      >
         <span
           className="timeline-rail-name"
           data-has-artwork={artworkUrl ? "true" : undefined}
@@ -262,7 +282,16 @@ function Rail({
               onError={() => setFailedArtworkUrl(artworkUrl)}
             />
           ) : null}
-          <span className="timeline-rail-name-text">{entry.name}</span>
+          <span ref={labelTitleRef} className="timeline-rail-name-text">
+            {entry.name}
+          </span>
+          {entry.kind === "BANNER" && entry.featuredServants?.length ? (
+            <RailServantThumbnails
+              servants={entry.featuredServants}
+              trackRef={labelTrackRef}
+              titleRef={labelTitleRef}
+            />
+          ) : null}
         </span>
       </span>
       <span className="timeline-rail-end" aria-hidden="true" />

@@ -1448,6 +1448,33 @@ button {
   object-fit: contain;
 }
 
+.timeline-rail-servants {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: 6px;
+}
+
+.timeline-rail-servants-more {
+  color: var(--md-on-surface-variant);
+  font-size: var(--timeline-type-dense);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.timeline-rail-servants[hidden] {
+  display: none;
+}
+
+.timeline-rail-servant-slot {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.timeline-rail-servant-slot[hidden] {
+  display: none;
+}
+
 .timeline-featured-servants {
   display: grid;
   gap: 16px;

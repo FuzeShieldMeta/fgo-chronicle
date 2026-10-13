@@ -12,3 +12,27 @@ export function sortFeaturedServants<T extends FeaturedServant>(
     (a, b) => (b.rarity ?? -1) - (a.rarity ?? -1) || a.id - b.id,
   );
 }
+
+export function fitServantThumbnails({
+  count,
+  freeWidth,
+  size,
+  gap,
+  overflowWidth,
+}: {
+  count: number;
+  freeWidth: number;
+  size: number;
+  gap: number;
+  overflowWidth: number;
+}) {
+  if (size <= 0 || freeWidth <= 0 || !Number.isFinite(freeWidth)) return 0;
+  for (let visible = count; visible > 0; visible--) {
+    const width =
+      visible * size +
+      (visible - 1) * gap +
+      (visible < count ? gap + overflowWidth : 0);
+    if (width <= freeWidth) return visible;
+  }
+  return 0;
+}
