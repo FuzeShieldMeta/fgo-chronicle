@@ -18,6 +18,7 @@ import { runJpEventSync } from "./jp-event-sync-runner.mjs";
 import { reconcileProjectedMasterMissions } from "./jp-master-mission-reconciler.mjs";
 import { buildProjectedMasterMissionDataset } from "./jp-master-mission-sync.mjs";
 import { preferAtlasMasterMissions } from "./master-mission-precedence.mjs";
+import { preferAtlasPanelMissions } from "./panel-mission-precedence.mjs";
 import {
   loadJpEventSource,
   loadJpMasterMissionSource,
@@ -205,20 +206,23 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
         progress?.event("fandom_download", "batch_completed", counts),
     }),
   );
+  const atlasDataset = buildProjectedEventDataset(supportedAtlasEvents, {
+    asOf: options.asOf,
+    retrievedAt,
+    contentHash: `sha256:${createHash("sha256").update(atlasBody).digest("hex")}`,
+    rawWars: atlasWars,
+    warContentHash,
+  });
   const fandomPublicationDataset = (
     dependencies.applyMasterMissionPrecedenceFn ?? preferAtlasMasterMissions
-  )(coverage.dataset, masterMissionDataset, supportedAtlasEvents);
+  )(
+    preferAtlasPanelMissions(coverage.dataset, atlasDataset),
+    masterMissionDataset,
+    supportedAtlasEvents,
+  );
   parseEventDataset(masterMissionDataset);
   parseEventDataset(fandomPublicationDataset.dataset);
-  parseEventDataset(
-    buildProjectedEventDataset(supportedAtlasEvents, {
-      asOf: options.asOf,
-      retrievedAt,
-      contentHash: `sha256:${createHash("sha256").update(atlasBody).digest("hex")}`,
-      rawWars: atlasWars,
-      warContentHash,
-    }),
-  );
+  parseEventDataset(atlasDataset);
   /** @param {Record<string, any>} publicationDb */
   const publish = async (publicationDb) => {
     const storyReport = await stage("story_publication", () =>
