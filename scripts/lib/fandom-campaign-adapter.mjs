@@ -666,7 +666,23 @@ export function extractFandomRewardSources(wikitext, options) {
     const headingType = rewardSourceType(
       `${options.eventName}\n${table.headingPath}\n${table.prelude.slice(0, 500)}`,
     );
-    const sectionRange = firstRange(table.prelude);
+    const parsedSectionRange = firstRange(table.prelude);
+    const sourceStart = new Date(options.eventSourceStartsAt);
+    const sourceEnd = options.eventSourceEndsAt
+      ? new Date(options.eventSourceEndsAt)
+      : null;
+    const invalidExchangePeriod =
+      headingType === "MANA_PRISM_EXCHANGE" &&
+      parsedSectionRange &&
+      sourceEnd &&
+      (parsedSectionRange.start < sourceStart ||
+        parsedSectionRange.end > sourceEnd);
+    const sectionRange = invalidExchangePeriod ? null : parsedSectionRange;
+    if (invalidExchangePeriod) {
+      dateWarnings.add(
+        `${table.heading} has an out-of-event exchange period. The projected event end date was used pending review.`,
+      );
+    }
     const dailyLoginSection =
       headingType === "LOGIN_BONUS" && allRanges(table.prelude).length === 1
         ? sectionRange
@@ -864,7 +880,8 @@ export function extractFandomRewardSources(wikitext, options) {
         ? loginRangeForCount(table.prelude, maximumLoginCount)
         : null;
     const loginSourceYear = new Date(
-      options.eventSourceStartsAt,
+      (tableLoginRange?.start ?? sourceStart).getTime() +
+        JST_OFFSET_MILLISECONDS,
     ).getUTCFullYear();
     const loginCalendarRanges =
       headingType === "LOGIN_BONUS"
@@ -1046,7 +1063,9 @@ export function extractFandomRewardSources(wikitext, options) {
           sectionBackedCalendarRange(contextCell, dailyLoginSection) ??
           singleDayTimeRange(
             contextCell,
-            new Date(options.eventSourceStartsAt).getUTCFullYear(),
+            new Date(
+              sourceStart.getTime() + JST_OFFSET_MILLISECONDS,
+            ).getUTCFullYear(),
           );
         const missionDate = ["LIMITED_MISSION", "MASTER_MISSION"].includes(type)
           ? missionPeriod?.present
@@ -1098,22 +1117,26 @@ export function extractFandomRewardSources(wikitext, options) {
             itemType: reward.itemType,
             amount: reward.amount,
             expectedAt,
-            dateBasis: isPermanentMission
-              ? "UNKNOWN"
-              : type !== "LOGIN_BONUS" &&
-                  !isMaintenance &&
-                  coversEventPeriod(effectiveRange)
-                ? "EVENT_END"
-                : expectedSourceDate
-                  ? type === "LOGIN_BONUS"
-                    ? "START_RELATIVE"
-                    : "UNKNOWN"
-                  : isMaintenance
-                    ? "UNKNOWN"
-                    : "EVENT_END",
+            dateBasis:
+              isPermanentMission || invalidExchangePeriod
+                ? "UNKNOWN"
+                : type !== "LOGIN_BONUS" &&
+                    !isMaintenance &&
+                    coversEventPeriod(effectiveRange)
+                  ? "EVENT_END"
+                  : expectedSourceDate
+                    ? type === "LOGIN_BONUS"
+                      ? "START_RELATIVE"
+                      : "UNKNOWN"
+                    : isMaintenance
+                      ? "UNKNOWN"
+                      : "EVENT_END",
             nature: isMaintenance ? "DETERMINISTIC" : "CONDITIONAL",
             eligibility: isMaintenance ? null : eligibility,
-            defaultIncluded: !isPermanentMission && !isPermanentQuestReward,
+            defaultIncluded:
+              !isPermanentMission &&
+              !isPermanentQuestReward &&
+              !invalidExchangePeriod,
             reviewedAt: null,
           })),
         });
