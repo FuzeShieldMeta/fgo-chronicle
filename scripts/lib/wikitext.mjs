@@ -34,6 +34,17 @@ export function extractTemplates(wikitext, expectedName) {
   return results;
 }
 
+/** @param {string} wikitext */
+export function transcludedPageTitles(wikitext) {
+  return [
+    ...new Set(
+      [...wikitext.matchAll(/\{\{:\s*([^|}\n]+)(?:[|}])/g)]
+        .map((match) => plainWikitext(match[1] ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 /**
  * Extract matching templates even when they are nested inside a parser
  * function or another template.

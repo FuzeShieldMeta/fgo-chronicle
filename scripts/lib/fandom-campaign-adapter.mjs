@@ -22,6 +22,28 @@ const DAY_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const MINUTE_MILLISECONDS = 60 * 1_000;
 const JST_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1_000;
 
+/** Explicit bilingual quest headers, never inferred translations.
+ * @param {{pageId: number, wikitext: string}[]} pages
+ */
+export function questNameEvidence(pages) {
+  return pages.flatMap((page) =>
+    extractNestedTemplates(page.wikitext, "Questheader").flatMap((template) => {
+      const parameters = parseTemplateParameters(template);
+      const japanese = parameters.get("jpname");
+      const english = parameters.get("enname");
+      return japanese && english
+        ? [
+            {
+              evidenceSourceKey: `fandom:JP:page:${page.pageId}`,
+              japanese,
+              english,
+            },
+          ]
+        : [];
+    }),
+  );
+}
+
 const MONTHS = new Map(
   [
     "january",
@@ -132,16 +154,18 @@ function isUnsupportedRewardTable(heading) {
   return /\b20\d{2} New Year CE\b/i.test(heading);
 }
 
-/** @param {string} wikitext */
-function extractTables(wikitext) {
+/** @param {string} wikitext @param {boolean} tableCaptions */
+function extractTables(wikitext, tableCaptions = false) {
   const tables = [];
   const expression = /\{\|[^]*?\n\|\}/g;
   for (const match of wikitext.matchAll(expression)) {
     const index = match.index ?? 0;
-    const before = wikitext.slice(0, index);
+    const allBefore = wikitext.slice(0, index);
+    const tabStart = tableCaptions ? allBefore.lastIndexOf("|-|") : -1;
+    const before = allBefore.slice(tabStart < 0 ? 0 : tabStart);
     const headings = [...before.matchAll(/^(={2,5})\s*(.+?)\s*\1\s*$/gm)];
     const latest = headings.at(-1);
-    const sectionStart = latest?.index ?? Math.max(0, index - 1_500);
+    const sectionStart = latest?.index ?? Math.max(0, before.length - 1_500);
     const headingStack = [];
     for (const headingMatch of headings) {
       const level = headingMatch[1]?.length ?? 2;
@@ -153,14 +177,21 @@ function extractTables(wikitext) {
         name: plainWikitext(headingMatch[2] ?? ""),
       });
     }
+    const caption = tableCaptions
+      ? plainWikitext(
+          match[0].match(
+            /^!\s*colspan\s*=\s*["']?\d+["']?\s*\|([^\n]+)/m,
+          )?.[1] ?? "",
+        )
+      : "";
     tables.push({
       body: match[0],
-      heading: plainWikitext(latest?.[2] ?? "Other rewards"),
+      heading: caption || plainWikitext(latest?.[2] ?? "Other rewards"),
       headingPath:
         headingStack
           .map(({ name }) => name)
           .filter(Boolean)
-          .join(" / ") || "Other rewards",
+          .join(" / ") + (caption ? ` / ${caption}` : "") || "Other rewards",
       prelude: before.slice(sectionStart),
     });
   }
@@ -541,6 +572,32 @@ function loginRangeForCount(value, rewardCount) {
   );
 }
 
+/** Read a labelled metadata row, without borrowing an item's usage period.
+ * @param {string} value @param {RegExp} label
+ */
+function tableMetadata(value, label) {
+  return extractTables(value).flatMap((table) =>
+    table.body.split(/\n\|-\s*/).flatMap((row) => {
+      const cells = extractCells(row);
+      return label.test(plainWikitext(cells[0] ?? "")) && cells[1]
+        ? [plainWikitext(cells[1])]
+        : [];
+    }),
+  );
+}
+
+/** @param {string} body @param {string} prelude */
+function embeddedLoginRange(body, prelude) {
+  const own = tableMetadata(body, /^(?:campaign )?duration$/i);
+  const values = own.length
+    ? own
+    : tableMetadata(prelude, /^campaign duration$/i);
+  const ranges = values.map(firstRange);
+  if (!ranges.length || ranges.some((range) => !range)) return null;
+  const signatures = new Set(ranges.map((range) => JSON.stringify(range)));
+  return signatures.size === 1 ? ranges[0] : null;
+}
+
 /** @param {string} value */
 function rowIdentity(value) {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
@@ -628,7 +685,7 @@ function extractMaintenanceProse(wikitext, options) {
 
 /**
  * @param {string} wikitext
- * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceEndsAt?: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string}} options
+ * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceEndsAt?: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string, tableCaptions?: boolean}} options
  */
 export function extractFandomRewardSources(wikitext, options) {
   /** @param {{start: Date, end: Date} | null | undefined} range */
@@ -646,7 +703,12 @@ export function extractFandomRewardSources(wikitext, options) {
   const loginTableOccurrences = new Map();
   const sourceIdentityOccurrences = new Map();
 
-  for (const table of extractTables(wikitext)) {
+  for (const table of extractTables(wikitext, options.tableCaptions)) {
+    if (
+      options.tableCaptions &&
+      /\bpermanent\b.*login|login.*\bmilestones?\b/i.test(table.headingPath)
+    )
+      continue;
     if (isOutOfScopeAccountReward(table.headingPath)) {
       issues.push({
         sourceKey: `fandom:JP:page:${options.pageId}:excluded:${stableSlug(table.heading)}`,
@@ -664,7 +726,7 @@ export function extractFandomRewardSources(wikitext, options) {
       continue;
     }
     const headingType = rewardSourceType(
-      `${options.eventName}\n${table.headingPath}\n${table.prelude.slice(0, 500)}`,
+      `${options.eventName}\n${table.headingPath}\n${options.tableCaptions ? "" : table.prelude.slice(0, 500)}`,
     );
     const parsedSectionRange = firstRange(table.prelude);
     const sourceStart = new Date(options.eventSourceStartsAt);
@@ -877,22 +939,27 @@ export function extractFandomRewardSources(wikitext, options) {
     );
     const tableLoginRange =
       headingType === "LOGIN_BONUS"
-        ? loginRangeForCount(table.prelude, maximumLoginCount)
+        ? options.tableCaptions
+          ? embeddedLoginRange(table.body, table.prelude)
+          : loginRangeForCount(table.prelude, maximumLoginCount)
         : null;
     const loginSourceYear = new Date(
       (tableLoginRange?.start ?? sourceStart).getTime() +
         JST_OFFSET_MILLISECONDS,
     ).getUTCFullYear();
     const loginCalendarRanges =
-      headingType === "LOGIN_BONUS"
+      headingType === "LOGIN_BONUS" &&
+      (!options.tableCaptions || tableLoginRange)
         ? partialCalendarRanges(table.body, loginSourceYear)
         : [];
     const loginRequirementMatch = table.prelude.match(
       /(?:'''Requirements?'''|Requirements?)\s*:\s*([^\n]+)/i,
     );
-    const loginRequirement = loginRequirementMatch
-      ? plainWikitext(loginRequirementMatch[1] ?? "")
-      : null;
+    const loginRequirement = options.tableCaptions
+      ? (tableMetadata(table.prelude, /^requirements?$/i).at(-1) ?? null)
+      : loginRequirementMatch
+        ? plainWikitext(loginRequirementMatch[1] ?? "")
+        : null;
     const loginTableOccurrence =
       headingType === "LOGIN_BONUS"
         ? (loginTableOccurrences.get(table.heading) ?? 0) + 1
@@ -930,7 +997,7 @@ export function extractFandomRewardSources(wikitext, options) {
           const day = counts[loginIndex];
           if (!day) return;
           const sourceKey = `fandom:JP:page:${options.pageId}:${stableSlug(table.heading)}${loginMatrixSuffix}:day-${day}:projection:NA`;
-          const sourceDate =
+          const candidateDate =
             loginCalendarRanges[day - 1]?.start ??
             (tableLoginRange
               ? new Date(
@@ -938,6 +1005,14 @@ export function extractFandomRewardSources(wikitext, options) {
                     (day - 1) * DAY_MILLISECONDS,
                 )
               : null);
+          const sourceDate =
+            options.tableCaptions &&
+            candidateDate &&
+            tableLoginRange &&
+            (candidateDate < tableLoginRange.start ||
+              candidateDate > tableLoginRange.end)
+              ? null
+              : candidateDate;
           rewardSources.push({
             sourceKey,
             eventSourceKey: options.eventSourceKey,
@@ -954,18 +1029,24 @@ export function extractFandomRewardSources(wikitext, options) {
               expectedAt: sourceDate
                 ? addCalendarYears(sourceDate, 2).toISOString()
                 : options.eventEndsAt,
-              dateBasis: sourceDate ? "START_RELATIVE" : "EVENT_END",
+              dateBasis: sourceDate
+                ? "START_RELATIVE"
+                : options.tableCaptions
+                  ? "UNKNOWN"
+                  : "EVENT_END",
               nature: "CONDITIONAL",
               eligibility: loginRequirement
                 ? `Log in for day ${day}. Requirement: ${loginRequirement}.`
                 : `Log in for day ${day}.`,
-              defaultIncluded: true,
+              defaultIncluded: !options.tableCaptions || Boolean(sourceDate),
               reviewedAt: null,
             })),
           });
           if (!sourceDate) {
             dateWarnings.add(
-              `${table.heading} has no parseable reward date. The projected event end date was used.`,
+              options.tableCaptions
+                ? `${table.heading} has no unambiguous reward date. Its event-end placeholder is excluded until reviewed.`
+                : `${table.heading} has no parseable reward date. The projected event end date was used.`,
             );
           }
         });

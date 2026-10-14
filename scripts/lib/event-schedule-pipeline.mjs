@@ -19,6 +19,7 @@ import { reconcileProjectedMasterMissions } from "./jp-master-mission-reconciler
 import { buildProjectedMasterMissionDataset } from "./jp-master-mission-sync.mjs";
 import { preferAtlasMasterMissions } from "./master-mission-precedence.mjs";
 import { preferAtlasPanelMissions } from "./panel-mission-precedence.mjs";
+import { preferAtlasQuestRewards } from "./quest-reward-precedence.mjs";
 import {
   loadJpEventSource,
   loadJpMasterMissionSource,
@@ -70,7 +71,7 @@ export async function writeDatasetAtomically(outputPath, dataset) {
  *   buildMasterMissionsFn?: (missions: any[], options: Record<string, any>) => Record<string, any>,
  *   reconcileMasterMissionsFn?: (db: Record<string, any>, dataset: Record<string, any>, options: Record<string, any>) => Promise<Record<string, any>>,
  *   applyMasterMissionPrecedenceFn?: (fandom: Record<string, any>, missions: Record<string, any>, events: Array<Record<string, any>>) => Record<string, any>,
- *   buildCoverageFn?: (events: Parameters<typeof buildFandomCoverage>[0], options: Parameters<typeof buildFandomCoverage>[1]) => Promise<{dataset: Record<string, any>, supersededEvents?: Array<{sourceEventKey: string, targetEventKey: string, matchMethod: string | null, sourceName: string, targetName: string}>, report: Record<string, any>}>,
+ *   buildCoverageFn?: (events: Parameters<typeof buildFandomCoverage>[0], options: Parameters<typeof buildFandomCoverage>[1]) => Promise<{dataset: Record<string, any>, questEvidence?: ReturnType<typeof import("./fandom-campaign-adapter.mjs").questNameEvidence>, supersededEvents?: Array<{sourceEventKey: string, targetEventKey: string, matchMethod: string | null, sourceName: string, targetName: string}>, report: Record<string, any>}>,
  *   reconcileFandomFn?: (db: Record<string, any>, dataset: Record<string, any>, options: Record<string, any>) => Promise<Record<string, any>>,
  *   writeDatasetFn?: (outputPath: string, dataset: Record<string, any>) => Promise<void>,
  *   fetchFn?: (url: string, init: Record<string, any>) => Promise<{ok: boolean, status: number, text: () => Promise<string>}>,
@@ -216,7 +217,11 @@ export async function runEventSchedulePipeline(db, options, dependencies = {}) {
   const fandomPublicationDataset = (
     dependencies.applyMasterMissionPrecedenceFn ?? preferAtlasMasterMissions
   )(
-    preferAtlasPanelMissions(coverage.dataset, atlasDataset),
+    preferAtlasQuestRewards(
+      preferAtlasPanelMissions(coverage.dataset, atlasDataset),
+      atlasDataset,
+      coverage.questEvidence,
+    ),
     masterMissionDataset,
     supportedAtlasEvents,
   );

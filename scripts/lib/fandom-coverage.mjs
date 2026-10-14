@@ -1,4 +1,5 @@
 import { parseEventDataset } from "./event-dataset.mjs";
+import { embeddedCampaignRewards } from "./fandom-embedded-campaigns.mjs";
 import {
   compareFandomWithAtlas,
   classifyFandomScheduleEntry,
@@ -9,6 +10,7 @@ import {
   extractFandomQuestParameterRewards,
   normaliseFandomCampaign,
   parseFandomEventHeader,
+  questNameEvidence,
 } from "./fandom-campaign-adapter.mjs";
 import { inferAtlasEventWarAssociations } from "./atlas-event-war-association.mjs";
 import { associateFandomWarRewards } from "./atlas-war-association.mjs";
@@ -27,6 +29,7 @@ import {
   parseTemplateParameters,
   plainWikitext,
   stableSlug,
+  transcludedPageTitles,
 } from "./wikitext.mjs";
 
 export const FANDOM_UPCOMING_TITLE = "Event List (US)/Upcoming Events";
@@ -255,17 +258,6 @@ function archiveTitleCandidates(entry) {
         const alias = value.replace(ARCHIVE_UMBRELLA_PREFIX, "").trim();
         return alias && alias !== value ? [alias] : [];
       }),
-    ),
-  ];
-}
-
-/** @param {string} wikitext */
-function transcludedPageTitles(wikitext) {
-  return [
-    ...new Set(
-      [...wikitext.matchAll(/\{\{:\s*([^|}\n]+)(?:[|}])/g)]
-        .map((match) => plainWikitext(match[1] ?? ""))
-        .filter(Boolean),
     ),
   ];
 }
@@ -648,6 +640,11 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
   const supportedComparisons = comparisons.filter(
     ({ status }) => status !== "EXCLUDED",
   );
+  const independentTitles = new Set(
+    supportedComparisons.flatMap(({ entry }) =>
+      entry.pageTitle ? [entry.pageTitle] : [],
+    ),
+  );
   const newlyFetchedCandidatePages = await fetchRevisions(
     [
       ...supportedComparisons.flatMap(({ entry }) =>
@@ -674,6 +671,7 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
   const limitedQuestFallbackArticles = new Set();
   const unmatchedQuestReleaseMetadata = [];
   const embeddedPermanentQuestReleases = [];
+  const questEvidence = [];
 
   for (const comparison of supportedComparisons) {
     const entry =
@@ -747,6 +745,16 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
     ) {
       continue;
     }
+    const embedded = await embeddedCampaignRewards(
+      page,
+      result.event,
+      fetchRevisions,
+      retrievedAt,
+      independentTitles,
+    );
+    result.rewardSources.push(...embedded.rewardSources);
+    result.issues.push(...embedded.issues);
+    questEvidence.push(...questNameEvidence([page, ...embedded.pages]));
     const refinedComparison =
       comparison.status === "REVIEW_CANDIDATE"
         ? compareFandomWithAtlas(
@@ -845,7 +853,7 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
       );
       matchedSupplements.push({
         source: result.source,
-        sources: [result.source, ...fallbackSources],
+        sources: [result.source, ...embedded.sources, ...fallbackSources],
         rewardSources: [...rewardSources, ...fallbackRewardSources],
         heldRewardSources,
         issues: [
@@ -877,7 +885,11 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
       );
       const normalizedResult = {
         ...result,
-        sources: [result.source, ...warAssociation.sources],
+        sources: [
+          result.source,
+          ...embedded.sources,
+          ...warAssociation.sources,
+        ],
         rewardSources: [
           ...result.rewardSources.filter(
             ({ sourceKey }) => !replacedKeys.has(sourceKey),
@@ -995,6 +1007,7 @@ export async function buildFandomCoverage(rawAtlasEvents, options) {
 
   return {
     dataset,
+    questEvidence,
     supersededEvents,
     report: {
       atlasFetched: rawAtlasEvents.length,
