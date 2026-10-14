@@ -3,7 +3,15 @@ export type FeaturedServant = {
   name: string;
   rarity: number | null;
   thumbnailUrl?: string | null;
+  atlasNaAvailable?: boolean | null;
 };
+
+export function servantAtlasUrl(
+  servant: Pick<FeaturedServant, "id" | "atlasNaAvailable">,
+) {
+  const region = servant.atlasNaAvailable === true ? "NA" : "JP";
+  return `https://apps.atlasacademy.io/db/${region}/servant/${servant.id}/skill-1`;
+}
 
 export function sortFeaturedServants<T extends FeaturedServant>(
   servants: readonly T[],

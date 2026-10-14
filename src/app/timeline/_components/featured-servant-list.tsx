@@ -2,6 +2,7 @@
 
 import {
   sortFeaturedServants,
+  servantAtlasUrl,
   type FeaturedServant,
 } from "~/shared/featured-servants";
 import { timelineLayout } from "../_lib/timeline-layout-config";
@@ -33,7 +34,7 @@ export function FeaturedServantList({
                 <li key={servant.id}>
                   <a
                     className="timeline-servant-link"
-                    href={`https://apps.atlasacademy.io/db/JP/servant/${servant.id}/skill-1`}
+                    href={servantAtlasUrl(servant)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`${servant.name} - Atlas Academy Servant Page (opens in a new tab)`}

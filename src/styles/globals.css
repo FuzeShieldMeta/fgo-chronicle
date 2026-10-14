@@ -1476,6 +1476,7 @@ button {
 }
 
 .timeline-featured-servants {
+  container-type: inline-size;
   display: grid;
   gap: 16px;
 }
@@ -1501,7 +1502,9 @@ button {
 
 .timeline-detail-section .timeline-servant-group li > .timeline-servant-link {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr) 7rem;
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -1537,8 +1540,24 @@ button {
 }
 
 .timeline-detail-section .timeline-servant-rate-up {
-  max-width: 8ch;
+  white-space: nowrap;
   text-align: right;
+}
+
+@container (max-width: 300px) {
+  .timeline-detail-section .timeline-servant-group li > .timeline-servant-link {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 4px;
+  }
+
+  .timeline-servant-link > .servant-thumbnail {
+    grid-row: span 2;
+  }
+
+  .timeline-detail-section .timeline-servant-rate-up {
+    grid-column: 2;
+    text-align: left;
+  }
 }
 
 .timeline-rail[data-density="compact"] .timeline-rail-name {

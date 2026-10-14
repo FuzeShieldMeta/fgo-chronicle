@@ -519,6 +519,7 @@ model Servant {
   rarity    Int?
   faceId    Int?
   thumbnailPath String?
+  atlasNaAvailable Boolean?
   banners   BannerServant[]
   lineups   SummonLineupServant[]
 }
