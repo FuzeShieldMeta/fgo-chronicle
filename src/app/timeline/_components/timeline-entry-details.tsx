@@ -518,13 +518,15 @@ export function TimelineEntryDetails({
             <p>No featured Servant data is available.</p>
           )}
           {onPlanSummons ? (
-            <button
-              type="button"
-              className="timeline-primary-button"
-              onClick={onPlanSummons}
-            >
-              Plan summons
-            </button>
+            <div className="timeline-detail-actions">
+              <button
+                type="button"
+                className="timeline-primary-button"
+                onClick={onPlanSummons}
+              >
+                Plan summons
+              </button>
+            </div>
           ) : null}
         </section>
       ) : null}

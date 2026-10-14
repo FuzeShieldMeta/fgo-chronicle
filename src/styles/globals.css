@@ -1889,6 +1889,19 @@ button {
   font-size: 1rem;
 }
 
+.timeline-detail-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.timeline-detail-actions > button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
 .timeline-detail-section p,
 .timeline-details-message p {
   margin: 0;
