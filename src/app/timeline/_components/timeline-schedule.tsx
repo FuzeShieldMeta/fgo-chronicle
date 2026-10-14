@@ -395,7 +395,7 @@ function TimelineScheduleContent({
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
-  const searchNavigationRef = useRef<AbortController | null>(null);
+  const entryNavigationRef = useRef<AbortController | null>(null);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const { open: methodologyPanelOpen, setOpen: setMethodologyPanelOpen } =
     useTimelineMethodology();
@@ -463,12 +463,18 @@ function TimelineScheduleContent({
   const incomeContributions = loadedTimeline.incomeContributions;
   const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
 
-  useEffect(() => {
-    if (searchPanelOpen) return;
-    searchNavigationRef.current?.abort();
-  }, [searchPanelOpen]);
-
-  useEffect(() => () => searchNavigationRef.current?.abort(), []);
+  useEffect(
+    () => () => entryNavigationRef.current?.abort(),
+    [
+      searchPanelOpen,
+      selectedKey,
+      selectedIncomeKey,
+      selectedDay,
+      profilePanelOpen,
+      accountPanelOpen,
+      methodologyPanelOpen,
+    ],
+  );
 
   useEffect(() => {
     if (nextWindowIndex === null || timelineLoadError) return;
@@ -815,10 +821,12 @@ function TimelineScheduleContent({
     });
   }
 
-  async function selectSearchResult(entry: TimelineSearchEntry) {
-    searchNavigationRef.current?.abort();
+  async function navigateToEntry(
+    entry: Pick<TimelineSearchEntry, "key" | "startsAt" | "startsAtPrecision">,
+  ) {
+    entryNavigationRef.current?.abort();
     const controller = new AbortController();
-    searchNavigationRef.current = controller;
+    entryNavigationRef.current = controller;
     const firstDay = calendarDayKey(
       entry.startsAt,
       entry.startsAtPrecision,
@@ -834,7 +842,7 @@ function TimelineScheduleContent({
     const target = windows.find(
       (window) => window.fromDay <= day && window.throughDay >= day,
     );
-    if (!target) throw new Error("The result is outside the timeline.");
+    if (!target) throw new Error("The entry is outside the timeline.");
     const missing = windows.filter(
       (window) =>
         window.index <= target.index && !loadedWindows.has(window.index),
@@ -858,7 +866,7 @@ function TimelineScheduleContent({
         (item) => item.key === entry.key,
       )
     ) {
-      throw new Error("This result is no longer available.");
+      throw new Error("This entry is no longer available.");
     }
     setLoadedWindows((current) => {
       const next = new Map(current);
@@ -870,6 +878,9 @@ function TimelineScheduleContent({
     setSelectedKey(entry.key);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        document
+          .getElementById("timeline-details-heading")
+          ?.focus({ preventScroll: true });
         const index = calendarDays(calendar.today, day).length - 1;
         const scroll = scrollRef.current;
         scroll?.scrollTo({
@@ -1033,8 +1044,8 @@ function TimelineScheduleContent({
             : "timeline-details-heading";
 
   function closeActiveDetails() {
+    entryNavigationRef.current?.abort();
     if (searchPanelOpen) {
-      searchNavigationRef.current?.abort();
       setSearchPanelOpen(false);
       document.getElementById("timeline-search-button")?.focus();
       return;
@@ -1439,7 +1450,7 @@ function TimelineScheduleContent({
             <TimelineSearchDetails
               scheduleStartDay={scheduleStartDay}
               timeZone={calendar.timeZone}
-              onSelect={selectSearchResult}
+              onSelect={navigateToEntry}
               onClose={closeActiveDetails}
             />
           ) : methodologyPanelOpen ? (
@@ -1491,11 +1502,13 @@ function TimelineScheduleContent({
             />
           ) : selectedEntry ? (
             <TimelineEntryDetails
+              key={selectedEntry.key}
               entry={selectedEntry}
               profile={playerProfile}
               timeZone={calendar.timeZone}
               rewardPreferences={rewardPreferences}
               onSetRewardInclusion={saveRewardInclusion}
+              onSelectRelated={navigateToEntry}
               onPlanSummons={
                 selectedEntry.kind === "BANNER"
                   ? () => {
@@ -1529,7 +1542,7 @@ function TimelineScheduleContent({
                     }
                   : undefined
               }
-              onClose={() => setSelectedKey(null)}
+              onClose={closeActiveDetails}
             />
           ) : (
             <TimelineDetailsPlaceholder

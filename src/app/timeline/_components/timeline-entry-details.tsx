@@ -382,6 +382,7 @@ export function TimelineEntryDetails({
   rewardPreferences,
   onSetRewardInclusion,
   onPlanSummons,
+  onSelectRelated,
   onClose,
 }: {
   entry: TimelineEntry;
@@ -390,6 +391,9 @@ export function TimelineEntryDetails({
   rewardPreferences: RewardPreferences;
   onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
   onPlanSummons?: () => void;
+  onSelectRelated?: (
+    entry: Pick<TimelineEntry, "key" | "startsAt" | "startsAtPrecision">,
+  ) => Promise<void>;
   onClose: () => void;
 }) {
   const catalogue = useStoryCatalogue();
@@ -401,6 +405,23 @@ export function TimelineEntryDetails({
     staleTime: timelineSchedule.detailsStaleTimeMs,
   });
   const [failedArtworkUrl, setFailedArtworkUrl] = useState<string | null>(null);
+  const [openingRelated, setOpeningRelated] = useState(false);
+  const [relatedError, setRelatedError] = useState(false);
+
+  async function selectRelated(
+    related: Pick<TimelineEntry, "key" | "startsAt" | "startsAtPrecision">,
+  ) {
+    if (!onSelectRelated || openingRelated) return;
+    setOpeningRelated(true);
+    setRelatedError(false);
+    try {
+      await onSelectRelated(related);
+    } catch {
+      setRelatedError(true);
+    } finally {
+      setOpeningRelated(false);
+    }
+  }
 
   const family = details.data?.family;
   const candidateArtworkUrl = family?.artworkReviewedAt
@@ -427,7 +448,9 @@ export function TimelineEntryDetails({
                 ? "Event"
                 : "Summoning campaign"}
           </span>
-          <h3 id="timeline-details-heading">{entry.name}</h3>
+          <h3 id="timeline-details-heading" tabIndex={-1}>
+            {entry.name}
+          </h3>
         </div>
 
         <button
@@ -618,18 +641,36 @@ export function TimelineEntryDetails({
       {details.data && details.data.relatedEntries.length > 0 ? (
         <section className="timeline-detail-section">
           <h4>Related schedule</h4>
+          {openingRelated ? <p role="status">Loading the timeline…</p> : null}
+          {relatedError ? (
+            <p role="alert">
+              This entry could not open in the timeline. Try again.
+            </p>
+          ) : null}
           <ul>
             {details.data.relatedEntries.map((related) => (
-              <li key={related.key}>
-                <span>{related.name}</span>
-                <small>
-                  {formatScheduleDate(
-                    related.startsAt,
-                    related.startsAtPrecision,
-                    timeZone,
-                  )}{" "}
-                  · {formatType(related.category)}
-                </small>
+              <li key={related.key} className="timeline-related-entry">
+                <button
+                  type="button"
+                  className="timeline-related-entry-button"
+                  disabled={
+                    !onSelectRelated ||
+                    openingRelated ||
+                    related.key === entry.key
+                  }
+                  aria-current={related.key === entry.key ? "true" : undefined}
+                  onClick={() => void selectRelated(related)}
+                >
+                  <span>{related.name}</span>
+                  <small>
+                    {formatScheduleDate(
+                      related.startsAt,
+                      related.startsAtPrecision,
+                      timeZone,
+                    )}{" "}
+                    · {formatType(related.category)}
+                  </small>
+                </button>
               </li>
             ))}
           </ul>

@@ -1902,6 +1902,46 @@ button {
   justify-content: center;
 }
 
+.timeline-detail-section .timeline-related-entry {
+  display: block;
+  padding: 0;
+}
+
+.timeline-related-entry-button {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--md-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.timeline-related-entry-button:hover:not(:disabled) {
+  background: var(--md-primary-container);
+}
+
+.timeline-related-entry-button:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 2px;
+}
+
+.timeline-related-entry-button:disabled {
+  cursor: default;
+  color: var(--md-on-surface-variant);
+}
+
+.timeline-related-entry-button[aria-current="true"] {
+  color: var(--md-on-surface);
+  font-weight: 650;
+}
+
 .timeline-detail-section p,
 .timeline-details-message p {
   margin: 0;
