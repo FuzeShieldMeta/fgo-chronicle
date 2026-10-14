@@ -1,3 +1,5 @@
+import { storedServantThumbnailUrl } from "./servant-storage-config.mjs";
+
 export function servantThumbnailUrl(
   faceId: number | null | undefined,
 ): string | null {
@@ -9,9 +11,15 @@ export function servantThumbnailUrl(
     : null;
 }
 
-export function withServantThumbnail<T extends { faceId?: number | null }>(
+export function withServantThumbnail<
+  T extends { faceId?: number | null; thumbnailPath?: string | null },
+>(
   servant: T,
-): Omit<T, "faceId"> & { thumbnailUrl: string | null } {
-  const { faceId, ...details } = servant;
-  return { ...details, thumbnailUrl: servantThumbnailUrl(faceId) };
+): Omit<T, "faceId" | "thumbnailPath"> & { thumbnailUrl: string | null } {
+  const { faceId, thumbnailPath, ...details } = servant;
+  const mirrored = storedServantThumbnailUrl(
+    process.env.SUPABASE_URL,
+    thumbnailPath,
+  );
+  return { ...details, thumbnailUrl: mirrored ?? servantThumbnailUrl(faceId) };
 }

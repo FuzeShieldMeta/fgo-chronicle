@@ -518,6 +518,7 @@ model Servant {
   className String
   rarity    Int?
   faceId    Int?
+  thumbnailPath String?
   banners   BannerServant[]
   lineups   SummonLineupServant[]
 }

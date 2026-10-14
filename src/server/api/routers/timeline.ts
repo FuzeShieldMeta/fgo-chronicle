@@ -164,7 +164,15 @@ const eventSelect = {
 const bannerSelect = {
   featured: {
     select: {
-      servant: { select: { id: true, name: true, rarity: true, faceId: true } },
+      servant: {
+        select: {
+          id: true,
+          name: true,
+          rarity: true,
+          faceId: true,
+          thumbnailPath: true,
+        },
+      },
     },
     orderBy: { servantId: "asc" },
   },
@@ -820,6 +828,7 @@ export const timelineRouter = createTRPCRouter({
                     className: true,
                     rarity: true,
                     faceId: true,
+                    thumbnailPath: true,
                   },
                 },
               },

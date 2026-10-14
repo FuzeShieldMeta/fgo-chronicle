@@ -7,6 +7,7 @@ import {
 
 type Stage =
   | "servant_catalogue"
+  | "servant_images"
   | "jp_fandom"
   | "atlas_global"
   | "atlas_global_recent"

@@ -16,6 +16,8 @@ export const env = createEnv({
     CRON_SECRET: z.string().min(16).optional(),
     DATABASE_URL: z.string().url(),
     SITE_URL: z.string().url().optional(),
+    SUPABASE_URL: z.string().url().optional(),
+    SUPABASE_SECRET_KEY: z.string().min(1).optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -41,6 +43,8 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     SITE_URL: process.env.SITE_URL,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
     NODE_ENV: process.env.NODE_ENV,
   },
   /**

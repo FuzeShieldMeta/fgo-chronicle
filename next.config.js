@@ -3,12 +3,28 @@
  * for Docker builds.
  */
 import "./src/env.js";
+import {
+  servantThumbnailPublicPath,
+  servantStorageOrigin,
+} from "./src/server/services/servant-storage-config.mjs";
+const storageOrigin = servantStorageOrigin(process.env.SUPABASE_URL);
 
 /** @type {import("next").NextConfig} */
 const config = {
   outputFileTracingRoot: process.cwd(),
   images: {
     remotePatterns: [
+      ...(storageOrigin
+        ? [
+            {
+              protocol: /** @type {const} */ ("https"),
+              hostname: new URL(storageOrigin).hostname,
+              port: "",
+              pathname: `${servantThumbnailPublicPath}/faces/**`,
+              search: "",
+            },
+          ]
+        : []),
       {
         protocol: "https",
         hostname: "static.atlasacademy.io",

@@ -24,8 +24,11 @@ function parseArguments(values) {
       options.dryRun = true;
     } else if (value.startsWith("--announcement-backfill-days=")) {
       const days = value.slice("--announcement-backfill-days=".length);
-      if (!/^\d+$/.test(days)) throw new Error("Announcement backfill days must be an integer.");
-      options.announcementBackfillDays = validateAnnouncementBackfillDays(Number(days));
+      if (!/^\d+$/.test(days))
+        throw new Error("Announcement backfill days must be an integer.");
+      options.announcementBackfillDays = validateAnnouncementBackfillDays(
+        Number(days),
+      );
     } else if (value.startsWith("--as-of=")) {
       const date = value.slice("--as-of=".length);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -69,6 +72,7 @@ async function main() {
         ...summariseEventSchedule(report),
         globalSources: report.globalSources,
         servants: report.servants,
+        servantImages: report.servantImages,
       },
       null,
       2,

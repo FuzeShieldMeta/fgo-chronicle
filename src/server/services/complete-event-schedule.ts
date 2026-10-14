@@ -9,6 +9,10 @@ import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 import { createImportProgress } from "./import-progress";
 import { validateAnnouncementBackfillDays } from "./global-announcement-source";
 import { syncServantCatalogue } from "./servant-catalogue-sync";
+import {
+  syncServantImages,
+  type ServantImageReport,
+} from "./servant-image-sync";
 
 type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
   announcementBackfillDays?: number;
@@ -17,6 +21,7 @@ type Dependencies = {
   runSync?: typeof runEventSchedulePipeline;
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
   syncServants?: typeof syncServantCatalogue;
+  syncImages?: typeof syncServantImages;
 };
 
 export async function runCompleteEventSchedule(
@@ -58,6 +63,23 @@ export async function runCompleteEventSchedule(
       progress,
     }),
   );
+  let servantImages: ServantImageReport;
+  try {
+    // Run after event/banner work so newly created servant records are included.
+    servantImages = await progress.stage("servant_images", () =>
+      (dependencies.syncImages ?? syncServantImages)(database, options.dryRun),
+    );
+  } catch {
+    servantImages = {
+      status: "failed",
+      examined: 0,
+      pending: 0,
+      uploaded: 0,
+      reused: 0,
+      updated: 0,
+      failed: 1,
+    };
+  }
   let globalSources: Awaited<
     ReturnType<typeof collectGlobalSourcesWithAuthority>
   >;
@@ -98,12 +120,14 @@ export async function runCompleteEventSchedule(
   }
   const failed =
     servants.status === "failed" ||
+    servantImages.status === "failed" ||
     globalSources.atlas.status === "failed" ||
     globalSources.publisher.status === "failed" ||
     globalSources.publisher.publicationFailures > 0;
   return {
     ...report,
     servants,
+    servantImages,
     globalSources,
     runId: progress.runId,
     importStatus: failed
