@@ -3,6 +3,7 @@ import { useStoryCatalogue } from "./story-catalogue-provider";
 
 import Image from "next/image";
 import { FeaturedServantList } from "./featured-servant-list";
+import { EventRewardSummary } from "./event-reward-summary";
 import { englishRewardLabel } from "~/app/timeline/_lib/reward-labels";
 import { useState } from "react";
 
@@ -557,6 +558,12 @@ export function TimelineEntryDetails({
       {details.data?.kind === "EVENT" ? (
         <section className="timeline-detail-section">
           <h4>Rewards</h4>
+          <EventRewardSummary
+            sources={details.data.rewardSources}
+            preferences={rewardPreferences}
+            profile={profile}
+            catalogue={catalogue}
+          />
           {details.data.rewardSources.length > 0 ? (
             <ul>
               {details.data.rewardSources.map((source) => (

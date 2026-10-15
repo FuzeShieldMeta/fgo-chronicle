@@ -1889,6 +1889,48 @@ button {
   font-size: 1rem;
 }
 
+.timeline-event-reward-summary {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.timeline-event-reward-summary table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--md-on-surface);
+  font-size: var(--timeline-type-label);
+  overflow-wrap: anywhere;
+}
+
+.timeline-event-reward-summary caption {
+  padding-bottom: 6px;
+  color: var(--md-on-surface-variant);
+  font-weight: 600;
+  text-align: left;
+}
+
+.timeline-event-reward-summary th,
+.timeline-event-reward-summary td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  text-align: right;
+  vertical-align: top;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-event-reward-summary th:first-child {
+  width: 40%;
+  padding-left: 0;
+  text-align: left;
+}
+
+.timeline-event-reward-summary th:last-child,
+.timeline-event-reward-summary td:last-child {
+  padding-right: 0;
+}
+
 .timeline-detail-actions {
   display: grid;
   gap: 12px;
