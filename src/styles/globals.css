@@ -1500,6 +1500,10 @@ button {
   background: transparent;
 }
 
+.timeline-detail-section .timeline-servant-group:last-child li:last-child {
+  border-bottom: 0;
+}
+
 .timeline-detail-section .timeline-servant-group li > .timeline-servant-link {
   display: grid;
   width: 100%;
@@ -1641,6 +1645,9 @@ button {
 
 .timeline-details {
   --timeline-details-padding: 20px;
+  --timeline-control-height: 44px;
+  --timeline-control-radius: 4px;
+  --timeline-section-gap: 24px;
   height: 100%;
   min-height: calc(
     var(--timeline-date-axis-height) + var(--timeline-min-category-stack-height)
@@ -1729,6 +1736,19 @@ button {
 .timeline-close-button {
   flex: 0 0 auto;
   min-width: 72px;
+  border: 1px solid var(--md-outline-variant);
+  background: transparent;
+  box-shadow: none;
+  color: var(--md-primary);
+}
+
+.timeline-close-button:hover:not(:disabled) {
+  background: var(--md-surface-low);
+  box-shadow: none;
+}
+
+.timeline-close-button:active:not(:disabled) {
+  background: var(--md-primary-container);
 }
 
 .timeline-sync-lead,
@@ -1895,9 +1915,14 @@ button {
 }
 
 .timeline-detail-section {
-  margin-top: 22px;
-  padding-top: 18px;
+  margin-top: var(--timeline-section-gap);
+  padding-top: 16px;
   border-top: 1px solid var(--md-outline-variant);
+}
+
+.timeline-detail-section:has(> .timeline-featured-servants)
+  + :is(.timeline-detail-section, .timeline-sources) {
+  margin-top: 0;
 }
 
 .timeline-detail-section h4 {
@@ -2049,18 +2074,18 @@ button {
 
 .timeline-reward-decision-actions button {
   min-width: var(--timeline-decision-action-min-width);
-  min-height: 44px;
+  min-height: var(--timeline-control-height);
   padding: 0 14px;
   cursor: pointer;
   border: 1px solid var(--md-outline);
-  border-radius: 2px;
+  border-radius: var(--timeline-control-radius);
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
   font-weight: 650;
 }
 
-.timeline-reward-decision-actions button:hover {
+.timeline-reward-decision-actions button:hover:not(:disabled) {
   background: var(--md-surface-high);
 }
 
@@ -2090,9 +2115,9 @@ button {
 .timeline-profile-summary,
 .timeline-profile-form {
   display: grid;
-  gap: 14px;
-  margin-top: 24px;
-  padding-top: 20px;
+  gap: 16px;
+  margin-top: var(--timeline-section-gap);
+  padding-top: 16px;
   border-top: 1px solid var(--md-outline-variant);
 }
 
@@ -2119,7 +2144,7 @@ button {
 
 .timeline-profile-form label {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   color: var(--md-on-surface-variant);
   font-size: var(--timeline-type-label);
   font-weight: 650;
@@ -2129,18 +2154,27 @@ button {
   font-weight: 400;
 }
 
-.timeline-profile-form input[type="number"] {
+.timeline-profile-form input[type="number"],
+.timeline-story-progress select,
+.summon-field input,
+.summon-field select,
+.timeline-search-field input {
   width: 100%;
-  min-height: var(--timeline-min-income-row-height);
+  min-width: 0;
+  min-height: var(--timeline-control-height);
   padding: 8px 10px;
   border: 1px solid var(--md-outline);
-  border-radius: 2px;
+  border-radius: var(--timeline-control-radius);
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
 }
 
-.timeline-profile-form input:focus-visible {
+.timeline-profile-form input:focus-visible,
+.timeline-story-progress select:focus-visible,
+.summon-field input:focus-visible,
+.summon-field select:focus-visible,
+.timeline-search-field input:focus-visible {
   outline: 3px solid var(--md-primary);
   outline-offset: 1px;
 }
@@ -2167,7 +2201,7 @@ button {
 .timeline-balance-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .timeline-form-error {
@@ -2183,11 +2217,11 @@ button {
 
 .timeline-profile-summary button,
 .timeline-form-actions button {
-  min-height: var(--timeline-min-income-row-height);
+  min-height: var(--timeline-control-height);
   padding: 0 16px;
   cursor: pointer;
   border: 1px solid var(--md-primary);
-  border-radius: 2px;
+  border-radius: var(--timeline-control-radius);
   background: var(--md-primary);
   color: var(--md-on-primary);
   font-size: var(--timeline-type-label);
@@ -2267,7 +2301,8 @@ button {
 .summon-mode-switch button:focus-visible,
 .summon-preset-actions button:focus-visible,
 .summon-result-summary button:focus-visible,
-.summon-session-actions button:focus-visible {
+.summon-session-actions button:focus-visible,
+.summon-probability-table button:focus-visible {
   outline: 3px solid var(--md-primary);
   outline-offset: 2px;
 }
@@ -2288,6 +2323,7 @@ button {
 .summon-saved-sessions h4 {
   margin: 0;
   color: var(--md-on-surface);
+  font-size: 1rem;
 }
 
 .summon-section-heading p,
@@ -2332,26 +2368,6 @@ button {
   color: var(--md-on-surface-variant);
   font-size: var(--timeline-type-label);
   font-weight: 650;
-}
-
-.summon-field input,
-.summon-field select,
-.timeline-search-field input {
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--md-outline);
-  border-radius: 2px;
-  background: var(--md-surface);
-  color: var(--md-on-surface);
-  font: inherit;
-}
-
-.summon-field input:focus-visible,
-.summon-field select:focus-visible,
-.timeline-search-field input:focus-visible {
-  outline: 3px solid var(--md-primary);
-  outline-offset: 1px;
 }
 
 .summon-field small {
@@ -2401,16 +2417,44 @@ button {
 .summon-mode-switch button,
 .summon-result-summary button,
 .summon-session-actions button {
-  min-height: 44px;
+  min-height: var(--timeline-control-height);
   padding: 0 12px;
   cursor: pointer;
   border: 1px solid var(--md-outline);
-  border-radius: 2px;
+  border-radius: var(--timeline-control-radius);
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
   font-size: var(--timeline-type-label);
   font-weight: 650;
+}
+
+.timeline-profile-summary button:hover:not(:disabled),
+.timeline-form-actions button:hover:not(:disabled),
+.summon-preset-actions button:hover:not(:disabled),
+.summon-mode-switch button:hover:not(:disabled),
+.summon-result-summary button:hover:not(:disabled),
+.summon-session-actions button:hover:not(:disabled),
+.summon-probability-table button:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px
+    color-mix(in srgb, var(--md-primary) 8%, transparent);
+}
+
+.timeline-details button:active:not(:disabled) {
+  box-shadow: inset 0 0 0 999px
+    color-mix(in srgb, var(--md-primary) 16%, transparent);
+}
+
+.timeline-details button:disabled:not([aria-current="true"]),
+.timeline-details input:disabled,
+.timeline-details select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.timeline-details input[type="number"],
+.summon-result-summary strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .summon-preset-actions button[aria-pressed="true"],
@@ -2458,6 +2502,7 @@ button {
   font-size: var(--timeline-type-label);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+  text-align: right;
 }
 
 .summon-cost-summary [data-shortfall="true"] dd {
@@ -2537,10 +2582,10 @@ button {
 
 .summon-probability-table button {
   min-width: 44px;
-  min-height: 36px;
+  min-height: var(--timeline-control-height);
   cursor: pointer;
   border: 1px solid var(--md-primary);
-  border-radius: 2px;
+  border-radius: var(--timeline-control-radius);
   background: transparent;
   color: var(--md-primary);
   font: inherit;
@@ -2618,7 +2663,7 @@ button {
 }
 
 .timeline-sources {
-  margin-top: 22px;
+  margin-top: var(--timeline-section-gap);
   border-top: 1px solid var(--md-outline-variant);
 }
 
@@ -2925,20 +2970,10 @@ button {
   padding: 12px;
   border: 1px solid var(--md-outline-variant);
 }
-.timeline-story-progress select {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  padding: 8px;
-  background: var(--md-surface);
-  color: var(--md-on-surface);
-  border: 1px solid var(--md-outline);
-}
 .timeline-story-progress summary {
   cursor: pointer;
   padding: 8px 0;
 }
-.timeline-story-progress select:focus-visible,
 .timeline-story-progress summary:focus-visible {
   outline: 2px solid var(--md-primary);
   outline-offset: 2px;
