@@ -432,13 +432,11 @@ export function TimelineEntryDetails({
     candidateArtworkUrl,
     failedArtworkUrl,
   );
+  const hasPlanningAction =
+    details.data?.kind === "BANNER" && Boolean(onPlanSummons);
 
-  return (
-    <aside
-      className="timeline-details"
-      data-empty="false"
-      aria-labelledby="timeline-details-heading"
-    >
+  const content = (
+    <>
       <div className="timeline-details-handle" aria-hidden="true" />
       <div className="timeline-details-header">
         <div>
@@ -541,17 +539,6 @@ export function TimelineEntryDetails({
           ) : (
             <p>No featured Servant data is available.</p>
           )}
-          {onPlanSummons ? (
-            <div className="timeline-detail-actions">
-              <button
-                type="button"
-                className="timeline-primary-button"
-                onClick={onPlanSummons}
-              >
-                Plan summons
-              </button>
-            </div>
-          ) : null}
         </section>
       ) : null}
 
@@ -703,6 +690,32 @@ export function TimelineEntryDetails({
         >
           View source
         </a>
+      ) : null}
+    </>
+  );
+
+  return (
+    <aside
+      className="timeline-details"
+      data-empty="false"
+      data-has-planning-action={hasPlanningAction ? "true" : undefined}
+      aria-labelledby="timeline-details-heading"
+    >
+      {hasPlanningAction ? (
+        <div className="timeline-entry-details-content">{content}</div>
+      ) : (
+        content
+      )}
+      {hasPlanningAction ? (
+        <div className="timeline-detail-actions">
+          <button
+            type="button"
+            className="timeline-primary-button"
+            onClick={onPlanSummons}
+          >
+            Plan summons
+          </button>
+        </div>
       ) : null}
     </aside>
   );
