@@ -16,8 +16,29 @@ const focusableSelector = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
+  "summary",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
+
+export function getDetailsFocusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(focusableSelector),
+  ).filter((element) => {
+    for (
+      let ancestor: HTMLElement | null = element;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      if (ancestor.hidden || ancestor.getAttribute("aria-hidden") === "true")
+        return false;
+      if (ancestor.tagName === "DETAILS" && !ancestor.hasAttribute("open")) {
+        const summary = ancestor.querySelector(":scope > summary");
+        if (!summary?.contains(element)) return false;
+      }
+    }
+    return true;
+  });
+}
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -105,12 +126,7 @@ export function TimelineDetailsLayer({
 
     if (event.key !== "Tab") return;
 
-    const focusable = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>(focusableSelector),
-    ).filter(
-      (element) =>
-        !element.hidden && element.getAttribute("aria-hidden") !== "true",
-    );
+    const focusable = getDetailsFocusableElements(event.currentTarget);
     const first = focusable[0];
     const last = focusable.at(-1);
     if (!first || !last) {

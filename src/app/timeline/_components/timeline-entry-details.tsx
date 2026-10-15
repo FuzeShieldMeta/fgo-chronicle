@@ -510,10 +510,6 @@ export function TimelineEntryDetails({
               : null}
           </dd>
         </div>
-        <div>
-          <dt>Region</dt>
-          <dd>{entry.sourceRegion}</dd>
-        </div>
       </dl>
 
       {details.isLoading ? (
@@ -671,26 +667,37 @@ export function TimelineEntryDetails({
         </section>
       ) : null}
 
-      {details.data?.kind === "EVENT" && details.data.globalSourceUrl ? (
-        <a
-          className="timeline-source-link"
-          href={details.data.globalSourceUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Global game-data source
-        </a>
-      ) : null}
-      {details.data?.sourceUrl ? (
-        <a
-          className="timeline-source-link"
-          href={details.data.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          View source
-        </a>
-      ) : null}
+      <details className="timeline-sources">
+        <summary>Sources</summary>
+        <div className="timeline-sources-content">
+          <dl className="timeline-detail-facts">
+            <div>
+              <dt>Region</dt>
+              <dd>{entry.sourceRegion}</dd>
+            </div>
+          </dl>
+          {details.data?.kind === "EVENT" && details.data.globalSourceUrl ? (
+            <a
+              className="timeline-source-link"
+              href={details.data.globalSourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Global game-data source
+            </a>
+          ) : null}
+          {details.data?.sourceUrl ? (
+            <a
+              className="timeline-source-link"
+              href={details.data.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View source
+            </a>
+          ) : null}
+        </div>
+      </details>
     </>
   );
 

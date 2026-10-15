@@ -2617,6 +2617,38 @@ button {
   font-weight: 650;
 }
 
+.timeline-sources {
+  margin-top: 22px;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.timeline-sources > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--md-primary);
+  cursor: pointer;
+  font-size: var(--timeline-type-body);
+  font-weight: 600;
+}
+
+.timeline-sources > summary:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 3px;
+}
+
+.timeline-sources-content {
+  display: grid;
+  gap: 12px;
+  padding-block: 4px 12px;
+}
+
+.timeline-sources-content .timeline-source-link {
+  justify-self: start;
+  max-width: 100%;
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+
 .timeline-source-link {
   display: inline-flex;
   min-height: 44px;
