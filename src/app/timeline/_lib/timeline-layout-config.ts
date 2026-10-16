@@ -33,4 +33,5 @@ export const timelineSchedule = {
   yearsAhead: 2,
   queryBoundaryPaddingDays: 2,
   detailsStaleTimeMs: 5 * 60 * 1_000,
+  calendarRefreshMs: 60 * 1_000,
 } as const;

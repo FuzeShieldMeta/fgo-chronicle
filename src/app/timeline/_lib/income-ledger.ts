@@ -1,5 +1,8 @@
 import { storyChapters, type StoryChapter } from "./story-progress";
-import { calendarDayKey } from "~/app/timeline/_lib/schedule-layout";
+import {
+  calendarDayKey,
+  calendarDays,
+} from "~/app/timeline/_lib/schedule-layout";
 import {
   createDefaultPlayerForecastProfile,
   forecastResourceTypes,
@@ -337,16 +340,30 @@ export function buildIncomeLedger(
   catalogue: StoryChapter[] = storyChapters,
   summonSessions: SummonSession[] = [],
 ) {
+  if (!days.length) return new Map<string, IncomeLedgerCell>();
   const effectiveProfile =
     profile ?? createDefaultPlayerForecastProfile(days[0] ?? "1970-01-01");
-  const daySet = new Set(days);
+  const visibleDays = new Set(days);
+  // Calculate from the snapshot, not from the left edge of the visible window.
+  // This also keeps login milestones and cycles anchored across day rollover.
+  const calculationDays = calendarDays(
+    effectiveProfile.snapshot.effectiveDate < days[0]!
+      ? effectiveProfile.snapshot.effectiveDate
+      : days[0]!,
+    days.at(-1)!,
+  );
+  const daySet = new Set(calculationDays);
+  const recurringDays =
+    effectiveProfile.snapshot.effectiveDate <= days.at(-1)!
+      ? calendarDays(effectiveProfile.snapshot.effectiveDate, days.at(-1)!)
+      : [];
   const grouped = new Map<string, IncomeLedgerCell>();
   const contributions = [
     ...sourceContributions,
-    ...loginMilestoneContributions(days, effectiveProfile),
-    ...consecutiveLoginContributions(days, effectiveProfile),
-    ...weeklyMasterMissionContributions(days, effectiveProfile),
-    ...monthlyManaPrismTicketContributions(days, effectiveProfile),
+    ...loginMilestoneContributions(recurringDays, effectiveProfile),
+    ...consecutiveLoginContributions(recurringDays, effectiveProfile),
+    ...weeklyMasterMissionContributions(recurringDays, effectiveProfile),
+    ...monthlyManaPrismTicketContributions(recurringDays, effectiveProfile),
   ];
 
   for (const unresolvedContribution of contributions) {
@@ -428,11 +445,10 @@ export function buildIncomeLedger(
   if (effectiveProfile) {
     for (const itemType of forecastResourceTypes) {
       let balance = effectiveProfile.snapshot.balances[itemType];
-
-      for (const day of days) {
+      for (const day of calculationDays) {
         if (day < effectiveProfile.snapshot.effectiveDate) continue;
 
-        const cell = grouped.get(cellKey(day, itemType));
+        let cell = grouped.get(cellKey(day, itemType));
         if (cell) {
           if (day > effectiveProfile.snapshot.effectiveDate) {
             balance += cell.delta;
@@ -440,12 +456,32 @@ export function buildIncomeLedger(
             balance += cell.sessionDelta;
           }
         }
+        if (
+          day === days[0] &&
+          !cell &&
+          balance !== effectiveProfile.snapshot.balances[itemType]
+        ) {
+          // Expose the carried opening balance without moving old deltas to today.
+          cell = {
+            key: cellKey(day, itemType),
+            day,
+            itemType,
+            delta: 0,
+            incomeDelta: 0,
+            sessionDelta: 0,
+            closingBalance: null,
+            hasUnresolvedConditional: false,
+            contributions: [],
+            sessionChanges: [],
+          };
+          grouped.set(cell.key, cell);
+        }
         if (cell) cell.closingBalance = balance;
       }
     }
   }
 
-  return grouped;
+  return new Map([...grouped].filter(([, cell]) => visibleDays.has(cell.day)));
 }
 
 export function forecastBalancesOnDay(

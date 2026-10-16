@@ -52,12 +52,14 @@ import {
 } from "./timeline-methodology";
 import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
 import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
+import { useForecastHistory } from "./use-forecast-history";
 import {
   buildIncomeLedger,
   findEarliestAffordableSummonDay,
   forecastBalancesOnDay,
   incomeResourceIcons,
   incomeResourceLabels,
+  type IncomeLedgerCell,
 } from "~/app/timeline/_lib/income-ledger";
 import {
   forecastResourceTypes,
@@ -93,7 +95,10 @@ import {
   type ScheduleCategoryLayout,
   type ScheduleInterval,
 } from "~/app/timeline/_lib/schedule-layout";
-import { timelineLayout } from "~/app/timeline/_lib/timeline-layout-config";
+import {
+  timelineLayout,
+  timelineSchedule,
+} from "~/app/timeline/_lib/timeline-layout-config";
 import {
   mergeContiguousTimelineWindows,
   prioritiseTimelineWindowIndexes,
@@ -483,11 +488,37 @@ function TimelineScheduleContent({
     ? (pendingWindowIndexes[0] ?? null)
     : null;
   const entries = loadedTimeline.entries;
-  const incomeContributions = loadedTimeline.incomeContributions;
+  const forecastHistory = useForecastHistory(
+    playerProfile?.snapshot.effectiveDate,
+    calendar.today,
+    loadedTimeline.incomeContributions,
+  );
+  const incomeContributions = forecastHistory.income;
+  const forecastReady = forecastHistory.ready;
   const rewardChoices = useRewardChoiceDetails(
     Object.keys(rewardPreferences.includedByRewardId),
   );
   const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
+
+  useEffect(() => {
+    function refreshCalendar() {
+      const next = readLocalCalendar();
+      setCalendar((current) =>
+        current.today === next.today && current.timeZone === next.timeZone
+          ? current
+          : next,
+      );
+    }
+    const timer = window.setInterval(
+      refreshCalendar,
+      timelineSchedule.calendarRefreshMs,
+    );
+    window.addEventListener("focus", refreshCalendar);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshCalendar);
+    };
+  }, []);
 
   useEffect(
     () => () => entryNavigationRef.current?.abort(),
@@ -693,15 +724,17 @@ function TimelineScheduleContent({
       endDay,
       timeZone: calendar.timeZone,
     });
-    const incomeCells = buildIncomeLedger(
-      days,
-      incomeContributions,
-      playerProfile,
-      calendar.timeZone,
-      rewardPreferences,
-      catalogue,
-      summonSessions,
-    );
+    const incomeCells = forecastReady
+      ? buildIncomeLedger(
+          days,
+          incomeContributions,
+          playerProfile,
+          calendar.timeZone,
+          rewardPreferences,
+          catalogue,
+          summonSessions,
+        )
+      : new Map<string, IncomeLedgerCell>();
 
     return { days, layouts, incomeCells };
   }, [
@@ -713,6 +746,7 @@ function TimelineScheduleContent({
     rewardPreferences,
     summonSessions,
     loadedTimeline.throughDay,
+    forecastReady,
   ]);
 
   const changeMarkers = useMemo(
@@ -1074,28 +1108,32 @@ function TimelineScheduleContent({
   const selectedDaySessions = selectedDay
     ? (summonSessionsByDay.get(selectedDay) ?? [])
     : [];
-  const selectedDayBalances = selectedDay
-    ? forecastBalancesOnDay(
-        view.incomeCells,
-        playerProfile,
-        view.days[0] ?? calendar.today,
-        selectedDay,
-      )
-    : null;
-  const findAffordableDay = selectedDay
-    ? (spending: SummonPlanSpending, excludedSessionId?: string) =>
-        findEarliestAffordableSummonDay(
+  const selectedDayBalances =
+    selectedDay && forecastReady
+      ? forecastBalancesOnDay(
           view.incomeCells,
           playerProfile,
           view.days[0] ?? calendar.today,
-          view.days,
           selectedDay,
-          spending,
-          excludedSessionId
-            ? summonSessions.find((session) => session.id === excludedSessionId)
-            : undefined,
         )
-    : undefined;
+      : null;
+  const findAffordableDay =
+    selectedDay && forecastReady
+      ? (spending: SummonPlanSpending, excludedSessionId?: string) =>
+          findEarliestAffordableSummonDay(
+            view.incomeCells,
+            playerProfile,
+            view.days[0] ?? calendar.today,
+            view.days,
+            selectedDay,
+            spending,
+            excludedSessionId
+              ? summonSessions.find(
+                  (session) => session.id === excludedSessionId,
+                )
+              : undefined,
+          )
+      : undefined;
   const hasDetailsSelection = Boolean(
     selectedEntry !== null ||
     selectedIncomeCell !== null ||
@@ -1136,6 +1174,24 @@ function TimelineScheduleContent({
             : accountPanelOpen
               ? "timeline-account-heading"
               : "timeline-details-heading";
+
+  const forecastHistoryMessage = (
+    <div
+      className="timeline-preference-notice"
+      role={forecastHistory.failed ? "alert" : "status"}
+    >
+      <span>
+        {forecastHistory.failed
+          ? "Earlier income could not load. Forecast balances are unavailable. Retry or update your balances."
+          : "Loading income since your saved balance date…"}
+      </span>
+      {forecastHistory.failed ? (
+        <button type="button" onClick={forecastHistory.retry}>
+          Retry income
+        </button>
+      ) : null}
+    </div>
+  );
 
   function closeActiveDetails() {
     entryNavigationRef.current?.abort();
@@ -1320,6 +1376,7 @@ function TimelineScheduleContent({
         </div>
       </div>
 
+      {!forecastReady && !selectedDay ? forecastHistoryMessage : null}
       {rewardStorageError ? (
         <p className="timeline-preference-notice" role="status">
           Your browser could not save forecast settings. Changes apply until you
@@ -1619,6 +1676,36 @@ function TimelineScheduleContent({
             />
           ) : methodologyPanelOpen ? (
             <TimelineMethodologyDetails onClose={closeActiveDetails} />
+          ) : selectedDay && !forecastReady ? (
+            <aside
+              className="timeline-details timeline-day-details"
+              data-empty="false"
+              aria-labelledby="timeline-day-heading"
+            >
+              <div className="timeline-details-header">
+                <h3 id="timeline-day-heading">{selectedDay}</h3>
+                <button
+                  type="button"
+                  className="timeline-close-button"
+                  onClick={closeSelectedDay}
+                >
+                  Close
+                </button>
+              </div>
+              {forecastHistoryMessage}
+              {forecastHistory.failed ? (
+                <button
+                  type="button"
+                  className="timeline-tonal-button"
+                  onClick={() => {
+                    setSelectedDay(null);
+                    setProfilePanelOpen(true);
+                  }}
+                >
+                  Update balances
+                </button>
+              ) : null}
+            </aside>
           ) : selectedDay && selectedDayBalances ? (
             <TimelineDayDetails
               key={selectedDay}
