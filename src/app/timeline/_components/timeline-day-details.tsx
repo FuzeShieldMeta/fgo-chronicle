@@ -15,10 +15,7 @@ import {
   resolveAutomaticSummonRate,
   standardSummonRateEvidenceUrl,
 } from "~/app/timeline/_lib/summon-rate";
-import type {
-  SummonSession,
-  SummonSessionStatus,
-} from "~/app/timeline/_lib/summon-session";
+import type { SummonSession } from "~/app/timeline/_lib/summon-session";
 import { calendarDayKey } from "~/app/timeline/_lib/schedule-layout";
 import { timelineSchedule } from "~/app/timeline/_lib/timeline-layout-config";
 import { api } from "~/trpc/react";
@@ -51,7 +48,6 @@ export function TimelineDayDetails({
   onDuplicate,
   onMove,
   onDelete,
-  onStatusChange,
   findAffordableDay,
   scheduleStartDay,
   scheduleEndDay,
@@ -68,7 +64,6 @@ export function TimelineDayDetails({
   onDuplicate: (sessionId: string) => void;
   onMove: (sessionId: string, day: string) => void;
   onDelete: (sessionId: string) => void;
-  onStatusChange: (sessionId: string, status: SummonSessionStatus) => void;
   findAffordableDay?: (
     spending: SummonPlanSpending,
     excludedSessionId?: string,
@@ -97,7 +92,6 @@ export function TimelineDayDetails({
   const [customGuaranteedEligible, setCustomGuaranteedEligible] =
     useState(true);
   const [currentGuaranteedCount, setCurrentGuaranteedCount] = useState(0);
-  const [status, setStatus] = useState<SummonSessionStatus>("PLANNED");
   const [spending, setSpending] = useState<SummonPlanSpending>(initialSpending);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -235,7 +229,6 @@ export function TimelineDayDetails({
     setCustomRatePercent(session.target.rate * 100);
     setCustomGuaranteedEligible(session.target.guaranteedEligible);
     setCurrentGuaranteedCount(session.startingGuaranteedCount);
-    setStatus(session.status);
     setSpending({
       ...session.spending,
       fragmentsConverted: 0,
@@ -522,16 +515,14 @@ export function TimelineDayDetails({
             }
             target={planTarget}
             balances={balances}
-            status={status}
             spending={spending}
-            onStatusChange={setStatus}
             onSpendingChange={setSpending}
             onSave={(session) => {
               if (editingSession) onUpdate(session);
               else onSave(session);
               setEditingSessionId(session.id);
               setSavedMessage(
-                `${editingSession ? "Session updated" : session.status === "PLANNED" ? "Plan saved" : "Spent session saved"} for ${session.day}.`,
+                `${editingSession ? "Plan updated" : "Plan saved"} for ${session.day}.`,
               );
             }}
             earliestAffordableDay={earliestAffordableDay}
@@ -578,8 +569,7 @@ export function TimelineDayDetails({
                   <strong>{session.target.name}</strong>
                   <small>
                     {session.spending.multis} multis ·{" "}
-                    {session.spending.tickets} tickets ·{" "}
-                    {session.status === "PLANNED" ? "Planned" : "Spent"}
+                    {session.spending.tickets} tickets
                   </small>
                 </div>
                 <div className="summon-session-actions">
@@ -588,17 +578,6 @@ export function TimelineDayDetails({
                   </button>
                   <button type="button" onClick={() => onDuplicate(session.id)}>
                     Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onStatusChange(
-                        session.id,
-                        session.status === "PLANNED" ? "SPENT" : "PLANNED",
-                      )
-                    }
-                  >
-                    Mark {session.status === "PLANNED" ? "spent" : "planned"}
                   </button>
                   {pendingDeleteId === session.id ? (
                     <>

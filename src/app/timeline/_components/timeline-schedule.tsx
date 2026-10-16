@@ -82,9 +82,7 @@ import {
   loadSummonSessions,
   moveSummonSession,
   saveSummonSessions,
-  setSummonSessionStatus,
   type SummonSession,
-  type SummonSessionStatus,
 } from "~/app/timeline/_lib/summon-session";
 import type { SummonPlanSpending } from "~/app/timeline/_components/summon-plan-panel";
 import {
@@ -866,15 +864,6 @@ function TimelineScheduleContent({
     persistSummonSessions(deleteSummonSession(summonSessions, sessionId));
   }
 
-  function changeSummonSessionStatus(
-    sessionId: string,
-    status: SummonSessionStatus,
-  ) {
-    persistSummonSessions(
-      setSummonSessionStatus(summonSessions, sessionId, status),
-    );
-  }
-
   function closeSelectedDay() {
     const day = selectedDay;
     setSelectedDay(null);
@@ -1496,18 +1485,8 @@ function TimelineScheduleContent({
                     const isMonthStart = day.endsWith("-01");
                     const daySessions = summonSessionsByDay.get(day) ?? [];
                     const hasSessions = daySessions.length > 0;
-                    const hasPlanned = daySessions.some(
-                      (session) => session.status === "PLANNED",
-                    );
-                    const hasSpent = daySessions.some(
-                      (session) => session.status === "SPENT",
-                    );
                     const sessionLabel = hasSessions
-                      ? hasPlanned && hasSpent
-                        ? " Has planned and spent summon sessions."
-                        : hasSpent
-                          ? " Has a spent summon session."
-                          : " Has a planned summon session."
+                      ? " Has a summon plan."
                       : "";
                     const marker = changeMarkers.days.get(day);
                     return (
@@ -1719,7 +1698,6 @@ function TimelineScheduleContent({
               onDuplicate={copySummonSession}
               onMove={changeSummonSessionDay}
               onDelete={removeSummonSession}
-              onStatusChange={changeSummonSessionStatus}
               findAffordableDay={findAffordableDay}
               scheduleStartDay={view.days[0]}
               scheduleEndDay={view.days.at(-1)}

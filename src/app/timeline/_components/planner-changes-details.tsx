@@ -153,7 +153,7 @@ export function PlannerChangesDetails({
                       <span>{session.banner.name}</span>
                       <small>
                         {session.day} ·{" "}
-                        {session.status === "SPENT" ? "Spent" : "Planned"}
+                        {session.day < fromDay ? "Past plan" : "Planned"}
                       </small>
                       {outsideTimeline ? (
                         <small>Outside the current timeline</small>

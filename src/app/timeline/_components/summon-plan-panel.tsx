@@ -11,7 +11,6 @@ import {
   createSummonSession,
   updateSummonSession,
   type SummonSession,
-  type SummonSessionStatus,
 } from "~/app/timeline/_lib/summon-session";
 
 export type SummonPlanSpending = {
@@ -47,9 +46,7 @@ export function SummonPlanPanel({
   banner,
   target,
   balances,
-  status,
   spending,
-  onStatusChange,
   onSpendingChange,
   onSave,
   earliestAffordableDay,
@@ -59,9 +56,7 @@ export function SummonPlanPanel({
   banner: SummonPlanBanner | null;
   target: SummonPlanTarget | null;
   balances: ForecastBalances;
-  status: SummonSessionStatus;
   spending: SummonPlanSpending;
-  onStatusChange: (status: SummonSessionStatus) => void;
   onSpendingChange: (spending: SummonPlanSpending) => void;
   onSave: (session: SummonSession) => void;
   earliestAffordableDay?: string | null;
@@ -133,7 +128,7 @@ export function SummonPlanPanel({
     try {
       const draft = {
         day,
-        status,
+        status: editingSession?.status ?? "PLANNED",
         banner,
         target: {
           servantId: target.servantId,
@@ -152,7 +147,7 @@ export function SummonPlanPanel({
           tickets: spending.tickets,
           fragmentsConverted: cost?.fragmentsConverted ?? 0,
         },
-        result: null,
+        result: editingSession?.result ?? null,
       } satisfies Parameters<typeof createSummonSession>[0];
       const session = editingSession
         ? updateSummonSession([editingSession], editingSession.id, draft)[0]!
@@ -170,24 +165,8 @@ export function SummonPlanPanel({
     <form className="summon-plan-panel" onSubmit={submit}>
       <div className="summon-section-heading">
         <h4>Resource plan</h4>
-        <p>Save a future plan or record summons that you already completed.</p>
+        <p>Set the resources to use on this date.</p>
       </div>
-
-      <fieldset className="summon-preset-fieldset">
-        <legend>Session status</legend>
-        <div className="summon-preset-actions">
-          {(["PLANNED", "SPENT"] as const).map((choice) => (
-            <button
-              key={choice}
-              type="button"
-              aria-pressed={status === choice}
-              onClick={() => onStatusChange(choice)}
-            >
-              {choice === "PLANNED" ? "Planned" : "Spent"}
-            </button>
-          ))}
-        </div>
-      </fieldset>
 
       <fieldset className="summon-preset-fieldset">
         <legend>Quick add</legend>
@@ -378,11 +357,7 @@ export function SummonPlanPanel({
 
       <div className="timeline-form-actions">
         <button type="submit">
-          {editingSession
-            ? "Update session"
-            : status === "PLANNED"
-              ? "Save plan"
-              : "Save spent session"}
+          {editingSession ? "Update plan" : "Save plan"}
         </button>
       </div>
     </form>

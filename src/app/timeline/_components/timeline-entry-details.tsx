@@ -356,7 +356,7 @@ export function TimelineIncomeDetails({
             );
           })}
           {cell.sessionChanges.map((change) => (
-            <li key={change.id} data-session-status={change.status}>
+            <li key={change.id}>
               <span className="timeline-resource-breakdown-head">
                 <span>{change.targetName}</span>
                 <strong>{signedAmount(change.amount)}</strong>
@@ -365,7 +365,7 @@ export function TimelineIncomeDetails({
                 {change.kind === "FRAGMENT_CONVERSION"
                   ? "Fragment conversion"
                   : "Summon spending"}
-                {` · ${change.bannerName} · ${change.status === "PLANNED" ? "Planned" : "Spent"}`}
+                {` · ${change.bannerName} · Summon plan`}
               </small>
             </li>
           ))}
