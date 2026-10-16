@@ -18,6 +18,7 @@ import {
 } from "~/shared/timeline-search";
 import { ServantThumbnail } from "./servant-thumbnail";
 import { timelineLayout } from "../_lib/timeline-layout-config";
+import { formatSearchAvailability } from "../_lib/schedule-date";
 
 const statuses = {
   OFFICIAL: "Official",
@@ -65,6 +66,9 @@ export function TimelineSearchResult({
   query,
   timeZone,
   disabled,
+  opening = false,
+  failed = false,
+  now,
   expanded,
   onExpandedChange,
   onSelect,
@@ -73,6 +77,9 @@ export function TimelineSearchResult({
   query: string;
   timeZone: string;
   disabled: boolean;
+  opening?: boolean;
+  failed?: boolean;
+  now: Date;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onSelect: () => void;
@@ -94,9 +101,14 @@ export function TimelineSearchResult({
         type="button"
         className="timeline-search-result"
         disabled={disabled}
+        data-opening={opening ? "true" : undefined}
+        aria-busy={opening || undefined}
         onClick={onSelect}
       >
         <strong className="timeline-search-result-title">{entry.name}</strong>
+        <span className="timeline-search-availability">
+          {formatSearchAvailability(entry, now, timeZone)}
+        </span>
         <span className="timeline-search-result-meta">
           {calendarDayKey(entry.startsAt, entry.startsAtPrecision, timeZone)}
           {entry.endsAt
@@ -113,6 +125,16 @@ export function TimelineSearchResult({
           <SearchServants servants={preview} matching={matching.length > 0} />
         ) : null}
       </button>
+      {opening ? (
+        <p className="timeline-search-row-message" role="status">
+          Opening {entry.kind === "BANNER" ? "campaign" : "event"}…
+        </p>
+      ) : null}
+      {failed ? (
+        <p className="timeline-search-row-message" role="alert">
+          Could not open this result. Select it again to retry.
+        </p>
+      ) : null}
       {remaining.length ? (
         <details
           className="timeline-search-other-servants"
@@ -153,9 +175,17 @@ export function TimelineSearchDetails({
   const query = state.query;
   const [debounced, setDebounced] = useState(query.trim());
   const [selecting, setSelecting] = useState<string | null>(null);
-  const [selectionError, setSelectionError] = useState(false);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setNow(new Date()),
+      timelineSearchLimits.availabilityRefreshMs,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
   const inputRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const restoredScroll = useRef(false);
   useEffect(() => {
     // Run after the shared details layer focuses its close button.
@@ -190,120 +220,137 @@ export function TimelineSearchDetails({
     restoredScroll.current = true;
   }, [current, enabled, search.data, scrollPosition]);
   async function select(entry: TimelineSearchEntry) {
+    if (selecting) return;
     setSelecting(entry.key);
-    setSelectionError(false);
+    setSelectionError(null);
     try {
       await onSelect(entry);
     } catch {
-      setSelectionError(true);
+      setSelectionError(entry.key);
     } finally {
       setSelecting(null);
     }
   }
   return (
     <aside
-      ref={panelRef}
       className="timeline-details timeline-search-details"
+      data-empty="false"
       aria-label="Search timeline"
-      onScroll={(event) => {
-        if (restoredScroll.current)
-          scrollPosition.current = event.currentTarget.scrollTop;
-      }}
     >
-      <div className="timeline-details-header">
-        <h3 id="timeline-search-heading">Search</h3>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
+      <div className="timeline-search-controls">
+        <div className="timeline-details-header">
+          <h3 id="timeline-search-heading">Search</h3>
+          <button
+            type="button"
+            className="timeline-close-button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <label
+          className="timeline-search-field"
+          htmlFor="timeline-search-input"
         >
-          Close
-        </button>
-      </div>
-      <label className="timeline-search-field" htmlFor="timeline-search-input">
-        <span>Servant, banner or event name</span>
-        <input
-          ref={inputRef}
-          id="timeline-search-input"
-          type="search"
-          value={query}
-          maxLength={timelineSearchLimits.maximumQueryCharacters}
-          autoComplete="off"
-          onChange={(event) => {
-            scrollPosition.current = 0;
-            onStateChange({ query: event.target.value, expanded: [] });
-          }}
-          aria-describedby="timeline-search-status"
-        />
-      </label>
-      <p id="timeline-search-status" role="status">
-        {!enabled ||
-        query.trim().length < timelineSearchLimits.minimumQueryCharacters
-          ? "Enter at least two characters."
-          : !current || search.isFetching
-            ? "Searching…"
-            : search.isError
-              ? "Search could not load. Try again."
-              : search.data?.results.length
-                ? `${search.data.results.length} results${search.data.hasMore ? ". Refine your search to see more." : "."}`
-                : "No matching banners or events. Try a servant name or a shorter title."}
-      </p>
-      {search.isError ? (
-        <button
-          type="button"
-          className="timeline-tonal-button"
-          onClick={() => void search.refetch()}
+          <span>Servant, banner or event name</span>
+          <input
+            ref={inputRef}
+            id="timeline-search-input"
+            type="search"
+            value={query}
+            maxLength={timelineSearchLimits.maximumQueryCharacters}
+            autoComplete="off"
+            onChange={(event) => {
+              scrollPosition.current = 0;
+              setSelectionError(null);
+              onStateChange({ query: event.target.value, expanded: [] });
+            }}
+            aria-describedby="timeline-search-status"
+          />
+        </label>
+        <p
+          id="timeline-search-status"
+          className="timeline-search-status"
+          role="status"
         >
-          Retry search
-        </button>
-      ) : null}
-      {selectionError ? (
-        <p role="alert">
-          The timeline could not load this result. Try selecting it again.
+          {!enabled ||
+          query.trim().length < timelineSearchLimits.minimumQueryCharacters
+            ? "Enter at least two characters."
+            : !current
+              ? "Searching…"
+              : search.isError
+                ? search.data
+                  ? "Results could not refresh. Showing the last results."
+                  : "Search could not load. Try again."
+                : search.isFetching
+                  ? search.data
+                    ? "Updating results…"
+                    : "Searching…"
+                  : search.data?.results.length
+                    ? `${search.data.results.length} results${search.data.hasMore ? ". Refine your search to see more." : "."}`
+                    : "No matching banners or events. Try a servant name or a shorter title."}
         </p>
-      ) : null}
-      {selecting ? (
-        <p role="status">Loading the timeline up to this date…</p>
-      ) : null}
-      {enabled && current && search.data && !search.isError
-        ? (["BANNER", "EVENT"] as const).map((kind) => {
-            const entries = search.data.results.filter(
-              (entry) => entry.kind === kind,
-            );
-            return entries.length ? (
-              <section
-                key={kind}
-                className="timeline-search-group"
-                aria-label={kind === "BANNER" ? "Banners" : "Events"}
-              >
-                <h4>{kind === "BANNER" ? "Banners" : "Events"}</h4>
-                <ul>
-                  {entries.map((entry) => (
-                    <TimelineSearchResult
-                      key={entry.key}
-                      entry={entry}
-                      query={debounced}
-                      timeZone={timeZone}
-                      disabled={selecting !== null}
-                      expanded={state.expanded.includes(entry.key)}
-                      onExpandedChange={(expanded) =>
-                        onStateChange((current) => ({
-                          ...current,
-                          expanded: expanded
-                            ? [...new Set([...current.expanded, entry.key])]
-                            : current.expanded.filter(
-                                (key) => key !== entry.key,
-                              ),
-                        }))
-                      }
-                      onSelect={() => void select(entry)}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null;
-          })
-        : null}
+        {enabled && current && search.isError ? (
+          <button
+            type="button"
+            className="timeline-tonal-button"
+            onClick={() => void search.refetch()}
+          >
+            Retry search
+          </button>
+        ) : null}
+      </div>
+      <div
+        className="timeline-search-results"
+        ref={panelRef}
+        onScroll={(event) => {
+          if (restoredScroll.current)
+            scrollPosition.current = event.currentTarget.scrollTop;
+        }}
+      >
+        {enabled && current && search.data
+          ? (["BANNER", "EVENT"] as const).map((kind) => {
+              const entries = search.data.results.filter(
+                (entry) => entry.kind === kind,
+              );
+              return entries.length ? (
+                <section
+                  key={kind}
+                  className="timeline-search-group"
+                  aria-label={kind === "BANNER" ? "Banners" : "Events"}
+                >
+                  <h4>{kind === "BANNER" ? "Banners" : "Events"}</h4>
+                  <ul>
+                    {entries.map((entry) => (
+                      <TimelineSearchResult
+                        key={entry.key}
+                        entry={entry}
+                        query={debounced}
+                        timeZone={timeZone}
+                        disabled={selecting !== null}
+                        opening={selecting === entry.key}
+                        failed={selectionError === entry.key}
+                        now={now}
+                        expanded={state.expanded.includes(entry.key)}
+                        onExpandedChange={(expanded) =>
+                          onStateChange((current) => ({
+                            ...current,
+                            expanded: expanded
+                              ? [...new Set([...current.expanded, entry.key])]
+                              : current.expanded.filter(
+                                  (key) => key !== entry.key,
+                                ),
+                          }))
+                        }
+                        onSelect={() => void select(entry)}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ) : null;
+            })
+          : null}
+      </div>
     </aside>
   );
 }

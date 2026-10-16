@@ -5,6 +5,7 @@ export const timelineSearchLimits = {
   maximumQueryCharacters: 100,
   maximumResults: 40,
   debounceMs: 250,
+  availabilityRefreshMs: 60_000,
 } as const;
 
 export type TimelineSearchEntry = {

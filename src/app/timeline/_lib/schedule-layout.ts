@@ -101,6 +101,10 @@ export function calendarDays(startDay: string, endDay: string) {
   );
 }
 
+export function calendarDayDistance(fromDay: string, toDay: string) {
+  return dayNumber(toDay) - dayNumber(fromDay);
+}
+
 export function visibleDayIndex({
   scrollLeft,
   viewportWidth,
