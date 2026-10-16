@@ -8,6 +8,11 @@ import {
 } from "~/app/timeline/_lib/income-ledger";
 import { forecastResourceTypes } from "~/app/timeline/_lib/player-forecast";
 import { timelineLayout } from "~/app/timeline/_lib/timeline-layout-config";
+import {
+  PersonalChangeMarkers,
+  personalChangeDescription,
+} from "./personal-change-markers";
+import type { PersonalChangeMarker } from "../_lib/planner-change-markers";
 
 const compactAmount = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -33,11 +38,13 @@ export function TimelineIncomeLedger({
   days,
   cells,
   selectedKey,
+  markers,
   onSelect,
 }: {
   days: string[];
   cells: Map<string, IncomeLedgerCell>;
   selectedKey: string | null;
+  markers?: Map<string, PersonalChangeMarker>;
   onSelect: (cell: IncomeLedgerCell) => void;
 }) {
   const dayIndexes = useMemo(
@@ -83,6 +90,10 @@ export function TimelineIncomeLedger({
               const decisionDescription = cell.hasUnresolvedConditional
                 ? ` ${unresolvedAmount} ${incomeResourceLabels[itemType]} needs your choice and is not included in the balance.`
                 : "";
+              const marker = markers?.get(cell.key);
+              const changeDescription = marker
+                ? ` ${personalChangeDescription(marker)}. See Changes for saved choices.`
+                : "";
 
               const style = {
                 left: dayIndex * timelineLayout.dayWidth,
@@ -106,11 +117,14 @@ export function TimelineIncomeLedger({
                     cell.hasUnresolvedConditional ? "true" : undefined
                   }
                   style={style}
-                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${decisionDescription}`}
-                  title={`Resource change: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.${decisionDescription}`}
+                  aria-label={`${incomeResourceLabels[itemType]} ${signedAmount(cell.delta)} on ${cell.day}${cell.closingBalance === null ? ". Add starting balances to calculate a closing balance." : `. Closing balance ${cell.closingBalance}.`}${decisionDescription}${changeDescription}`}
+                  title={`Resource change: ${signedAmount(cell.delta)}. Closing balance: ${cell.closingBalance ?? "unknown"}. Excluded rewards are not counted.${decisionDescription}${changeDescription}`}
                   aria-pressed={selectedKey === cell.key}
                   onClick={() => onSelect(cell)}
                 >
+                  <span className="timeline-income-personal-marker">
+                    <PersonalChangeMarkers marker={marker} />
+                  </span>
                   {cell.hasUnresolvedConditional ? (
                     <span
                       className="timeline-income-decision-marker"

@@ -28,6 +28,13 @@ import {
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
 import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
 import { TimelineSearchDetails } from "./timeline-search-details";
+import { PlannerChangesDetails } from "./planner-changes-details";
+import { useRewardChoiceDetails } from "./use-reward-choice-details";
+import { personalChangeDescription } from "./personal-change-markers";
+import {
+  buildPlannerChangeMarkers,
+  type PersonalChangeMarker,
+} from "../_lib/planner-change-markers";
 import type { TimelineSearchEntry } from "~/shared/timeline-search";
 import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
 import {
@@ -176,6 +183,7 @@ function intervalLabel(entry: TimelineEntry, timeZone: string) {
 function Rail({
   entry,
   selected,
+  marker,
   timeZone,
   onSelect,
   onShowTooltip,
@@ -183,6 +191,7 @@ function Rail({
 }: {
   entry: ScheduleCategoryLayout<LedgerEntry>["items"][number];
   selected: boolean;
+  marker?: PersonalChangeMarker;
   timeZone: string;
   onSelect: (entry: TimelineEntry) => void;
   onShowTooltip: (
@@ -238,7 +247,7 @@ function Rail({
       <button
         type="button"
         className="timeline-rail-action"
-        aria-label={intervalLabel(entry, timeZone)}
+        aria-label={`${intervalLabel(entry, timeZone)}${marker ? `. ${personalChangeDescription(marker)}. See Changes for saved choices.` : ""}`}
         aria-pressed={selected}
         onClick={() => {
           onHideTooltip(entry.key);
@@ -302,6 +311,7 @@ function Rail({
 function CategoryRow({
   layout,
   selectedKey,
+  markers,
   timeZone,
   onSelect,
   onShowTooltip,
@@ -309,6 +319,7 @@ function CategoryRow({
 }: {
   layout: ScheduleCategoryLayout<LedgerEntry>;
   selectedKey: string | null;
+  markers: Map<string, PersonalChangeMarker>;
   timeZone: string;
   onSelect: (entry: TimelineEntry) => void;
   onShowTooltip: (
@@ -331,6 +342,7 @@ function CategoryRow({
             key={entry.key}
             entry={entry}
             selected={entry.key === selectedKey}
+            marker={markers.get(entry.key)}
             timeZone={timeZone}
             onSelect={onSelect}
             onShowTooltip={onShowTooltip}
@@ -395,6 +407,7 @@ function TimelineScheduleContent({
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [changesPanelOpen, setChangesPanelOpen] = useState(false);
   const entryNavigationRef = useRef<AbortController | null>(null);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
   const { open: methodologyPanelOpen, setOpen: setMethodologyPanelOpen } =
@@ -461,12 +474,16 @@ function TimelineScheduleContent({
     : null;
   const entries = loadedTimeline.entries;
   const incomeContributions = loadedTimeline.incomeContributions;
+  const rewardChoices = useRewardChoiceDetails(
+    Object.keys(rewardPreferences.includedByRewardId),
+  );
   const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
 
   useEffect(
     () => () => entryNavigationRef.current?.abort(),
     [
       searchPanelOpen,
+      changesPanelOpen,
       selectedKey,
       selectedIncomeKey,
       selectedDay,
@@ -556,6 +573,7 @@ function TimelineScheduleContent({
 
   useEffect(() => {
     if (!methodologyPanelOpen) return;
+    setChangesPanelOpen(false);
     setSearchPanelOpen(false);
     setIsChoosingSummonDate(false);
     setSelectedKey(null);
@@ -575,6 +593,7 @@ function TimelineScheduleContent({
     ) {
       setMethodologyPanelOpen(false);
       setSearchPanelOpen(false);
+      setChangesPanelOpen(false);
     }
   }, [
     selectedKey,
@@ -584,6 +603,10 @@ function TimelineScheduleContent({
     accountPanelOpen,
     setMethodologyPanelOpen,
   ]);
+
+  useEffect(() => {
+    if (searchPanelOpen) setChangesPanelOpen(false);
+  }, [searchPanelOpen]);
 
   useLayoutEffect(() => {
     const scrollFrame = scrollFrameRef.current;
@@ -681,6 +704,24 @@ function TimelineScheduleContent({
     summonSessions,
     loadedTimeline.throughDay,
   ]);
+
+  const changeMarkers = useMemo(
+    () =>
+      buildPlannerChangeMarkers({
+        ledgerCells: view.incomeCells,
+        preferences: rewardPreferences,
+        sessions: summonSessions,
+        timeZone: calendar.timeZone,
+        rewardDetails: rewardChoices.items,
+      }),
+    [
+      view.incomeCells,
+      rewardPreferences,
+      summonSessions,
+      calendar.timeZone,
+      rewardChoices.items,
+    ],
+  );
 
   const formatter = useMemo(
     () =>
@@ -821,6 +862,63 @@ function TimelineScheduleContent({
     });
   }
 
+  async function loadThroughDay(day: string, controller: AbortController) {
+    const windows = timelineWindows(scheduleStartDay);
+    const target = windows.find(
+      (window) => window.fromDay <= day && window.throughDay >= day,
+    );
+    if (!target) throw new Error("The date is outside the timeline.");
+    const missing = windows.filter(
+      (window) =>
+        window.index <= target.index && !loadedWindows.has(window.index),
+    );
+    const fetched = await Promise.all(
+      missing.map((window) =>
+        fetchTimelineWindow(
+          { scheduleStartDay, index: window.index },
+          { signal: controller.signal },
+        ),
+      ),
+    ).catch((error: unknown) => {
+      controller.abort();
+      throw error;
+    });
+    const combined = new Map(loadedWindows);
+    for (const window of fetched) combined.set(window.index, window);
+    return { combined, fetched };
+  }
+
+  async function navigateToSession(session: SummonSession) {
+    if (session.day < calendar.today || session.day > scheduleEndDay) {
+      throw new Error("This session is outside the current timeline.");
+    }
+    entryNavigationRef.current?.abort();
+    const controller = new AbortController();
+    entryNavigationRef.current = controller;
+    const { fetched } = await loadThroughDay(session.day, controller);
+    if (controller.signal.aborted) return;
+    setLoadedWindows((current) => {
+      const next = new Map(current);
+      for (const window of fetched) next.set(window.index, window);
+      return next;
+    });
+    setChangesPanelOpen(false);
+    setSelectedDayBannerId(session.banner.id);
+    setSelectedDay(session.day);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .getElementById("timeline-day-heading")
+          ?.focus({ preventScroll: true });
+        document.getElementById(`timeline-day-${session.day}`)?.scrollIntoView({
+          block: "nearest",
+          inline: "center",
+          behavior: "auto",
+        });
+      }),
+    );
+  }
+
   async function navigateToEntry(
     entry: Pick<TimelineSearchEntry, "key" | "startsAt" | "startsAtPrecision">,
   ) {
@@ -838,29 +936,8 @@ function TimelineScheduleContent({
         : firstDay > scheduleEndDay
           ? scheduleEndDay
           : firstDay;
-    const windows = timelineWindows(scheduleStartDay);
-    const target = windows.find(
-      (window) => window.fromDay <= day && window.throughDay >= day,
-    );
-    if (!target) throw new Error("The entry is outside the timeline.");
-    const missing = windows.filter(
-      (window) =>
-        window.index <= target.index && !loadedWindows.has(window.index),
-    );
-    const fetched = await Promise.all(
-      missing.map((window) =>
-        fetchTimelineWindow(
-          { scheduleStartDay, index: window.index },
-          { signal: controller.signal },
-        ),
-      ),
-    ).catch((error: unknown) => {
-      controller.abort();
-      throw error;
-    });
+    const { combined, fetched } = await loadThroughDay(day, controller);
     if (controller.signal.aborted) return;
-    const combined = new Map(loadedWindows);
-    for (const window of fetched) combined.set(window.index, window);
     if (
       !mergeContiguousTimelineWindows(combined).entries.some(
         (item) => item.key === entry.key,
@@ -875,6 +952,7 @@ function TimelineScheduleContent({
     });
     setTimelineLoadError(false);
     setSearchPanelOpen(false);
+    setChangesPanelOpen(false);
     setSelectedKey(entry.key);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -911,6 +989,7 @@ function TimelineScheduleContent({
     setSelectedDay(null);
     setAccountPanelOpen(false);
     setSearchPanelOpen(false);
+    setChangesPanelOpen(false);
     setIsChoosingSummonDate(true);
   }
 
@@ -1014,37 +1093,47 @@ function TimelineScheduleContent({
     profilePanelOpen ||
     accountPanelOpen ||
     searchPanelOpen ||
+    changesPanelOpen ||
     methodologyPanelOpen,
   );
-  const detailsSelectionKey = searchPanelOpen
-    ? "search"
-    : methodologyPanelOpen
-      ? "methodology"
-      : selectedDay
-        ? `day:${selectedDay}`
-        : profilePanelOpen
-          ? "profile"
-          : accountPanelOpen
-            ? "account"
-            : selectedIncomeCell
-              ? `income:${selectedIncomeCell.key}`
-              : selectedEntry
-                ? `entry:${selectedEntry.key}`
-                : "placeholder";
-  const detailsHeadingId = searchPanelOpen
-    ? "timeline-search-heading"
-    : methodologyPanelOpen
-      ? "timeline-methodology-heading"
-      : selectedDay
-        ? "timeline-day-heading"
-        : profilePanelOpen
-          ? "timeline-profile-heading"
-          : accountPanelOpen
-            ? "timeline-account-heading"
-            : "timeline-details-heading";
+  const detailsSelectionKey = changesPanelOpen
+    ? "changes"
+    : searchPanelOpen
+      ? "search"
+      : methodologyPanelOpen
+        ? "methodology"
+        : selectedDay
+          ? `day:${selectedDay}`
+          : profilePanelOpen
+            ? "profile"
+            : accountPanelOpen
+              ? "account"
+              : selectedIncomeCell
+                ? `income:${selectedIncomeCell.key}`
+                : selectedEntry
+                  ? `entry:${selectedEntry.key}`
+                  : "placeholder";
+  const detailsHeadingId = changesPanelOpen
+    ? "timeline-changes-heading"
+    : searchPanelOpen
+      ? "timeline-search-heading"
+      : methodologyPanelOpen
+        ? "timeline-methodology-heading"
+        : selectedDay
+          ? "timeline-day-heading"
+          : profilePanelOpen
+            ? "timeline-profile-heading"
+            : accountPanelOpen
+              ? "timeline-account-heading"
+              : "timeline-details-heading";
 
   function closeActiveDetails() {
     entryNavigationRef.current?.abort();
+    if (changesPanelOpen) {
+      setChangesPanelOpen(false);
+      document.getElementById("timeline-changes-button")?.focus();
+      return;
+    }
     if (searchPanelOpen) {
       setSearchPanelOpen(false);
       document.getElementById("timeline-search-button")?.focus();
@@ -1134,6 +1223,33 @@ function TimelineScheduleContent({
               aria-hidden="true"
             >
               <span>Search</span>
+            </span>
+          </button>
+
+          <button
+            id="timeline-changes-button"
+            type="button"
+            className="timeline-tonal-button timeline-toolbar-action"
+            aria-label="View saved planner changes"
+            aria-expanded={changesPanelOpen}
+            onClick={() => {
+              setIsChoosingSummonDate(false);
+              setSelectedKey(null);
+              setSelectedIncomeKey(null);
+              setSelectedDay(null);
+              setProfilePanelOpen(false);
+              setAccountPanelOpen(false);
+              setMethodologyPanelOpen(false);
+              setSearchPanelOpen(false);
+              setChangesPanelOpen(true);
+            }}
+          >
+            <span
+              className="timeline-toolbar-action-label"
+              data-short-label="Changes"
+              aria-hidden="true"
+            >
+              <span>Changes</span>
             </span>
           </button>
 
@@ -1250,16 +1366,7 @@ function TimelineScheduleContent({
       ) : null}
       <div
         className="timeline-workspace"
-        data-has-selection={
-          selectedEntry ||
-          selectedIncomeCell ||
-          selectedDay ||
-          profilePanelOpen ||
-          accountPanelOpen ||
-          methodologyPanelOpen
-            ? "true"
-            : "false"
-        }
+        data-has-selection={hasDetailsSelection ? "true" : "false"}
       >
         <div ref={scrollFrameRef} className="timeline-scroll-frame">
           <div
@@ -1274,6 +1381,27 @@ function TimelineScheduleContent({
             }}
           >
             <div ref={ledgerRef} className="timeline-ledger" style={gridStyle}>
+              {view.days.map((day, index) => {
+                const marker = changeMarkers.days.get(day);
+                return marker ? (
+                  <span
+                    key={`change:${day}`}
+                    className="timeline-personal-day-column"
+                    data-personal-change={
+                      marker.reward
+                        ? marker.summon
+                          ? "mixed"
+                          : "reward"
+                        : "summon"
+                    }
+                    style={{
+                      left: index * timelineLayout.dayWidth,
+                      width: timelineLayout.dayWidth,
+                    }}
+                    aria-hidden="true"
+                  />
+                ) : null;
+              })}
               {!timelineLoadingComplete && loadingWindowIndex !== null ? (
                 <span className="timeline-loading-edge" aria-hidden="true" />
               ) : null}
@@ -1305,12 +1433,6 @@ function TimelineScheduleContent({
                     const hasSpent = daySessions.some(
                       (session) => session.status === "SPENT",
                     );
-                    const sessionStatus =
-                      hasPlanned && hasSpent
-                        ? "MIXED"
-                        : hasSpent
-                          ? "SPENT"
-                          : "PLANNED";
                     const sessionLabel = hasSessions
                       ? hasPlanned && hasSpent
                         ? " Has planned and spent summon sessions."
@@ -1318,6 +1440,7 @@ function TimelineScheduleContent({
                           ? " Has a spent summon session."
                           : " Has a planned summon session."
                       : "";
+                    const marker = changeMarkers.days.get(day);
                     return (
                       <button
                         key={day}
@@ -1327,8 +1450,17 @@ function TimelineScheduleContent({
                         data-month-start={isMonthStart ? "true" : "false"}
                         data-selected={selectedDay === day ? "true" : undefined}
                         data-has-sessions={hasSessions ? "true" : undefined}
+                        data-personal-change={
+                          marker?.reward
+                            ? hasSessions
+                              ? "mixed"
+                              : "reward"
+                            : hasSessions
+                              ? "summon"
+                              : undefined
+                        }
                         title={`Plan summons for ${label.weekday}, ${label.month} ${label.day}`}
-                        aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel} Select this date to plan summons.`}
+                        aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel}${marker?.reward ? " Has saved reward choices. See Changes for details." : ""} Select this date to plan summons.`}
                         aria-pressed={selectedDay === day}
                         onClick={() => {
                           setIsChoosingSummonDate(false);
@@ -1344,13 +1476,6 @@ function TimelineScheduleContent({
                           <strong>{label.day}</strong>
                           <small>{label.weekday}</small>
                         </time>
-                        {hasSessions ? (
-                          <i
-                            className="timeline-day-session-marker"
-                            data-status={sessionStatus}
-                            aria-hidden="true"
-                          />
-                        ) : null}
                       </button>
                     );
                   })}
@@ -1364,6 +1489,7 @@ function TimelineScheduleContent({
                     days={view.days}
                     cells={view.incomeCells}
                     selectedKey={selectedIncomeKey}
+                    markers={changeMarkers.cells}
                     onSelect={(cell) => {
                       setIsChoosingSummonDate(false);
                       setProfilePanelOpen(false);
@@ -1377,6 +1503,7 @@ function TimelineScheduleContent({
                     key={layout.category}
                     layout={layout}
                     selectedKey={selectedKey}
+                    markers={changeMarkers.entries}
                     timeZone={calendar.timeZone}
                     onSelect={(entry) => {
                       setIsChoosingSummonDate(false);
@@ -1434,19 +1561,38 @@ function TimelineScheduleContent({
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
           returnFocusId={
-            searchPanelOpen
-              ? "timeline-search-button"
-              : methodologyPanelOpen
-                ? "timeline-methodology-button"
-                : selectedDay
-                  ? `timeline-day-${selectedDay}`
-                  : accountPanelOpen
-                    ? "timeline-account-button"
-                    : undefined
+            changesPanelOpen
+              ? "timeline-changes-button"
+              : searchPanelOpen
+                ? "timeline-search-button"
+                : methodologyPanelOpen
+                  ? "timeline-methodology-button"
+                  : selectedDay
+                    ? `timeline-day-${selectedDay}`
+                    : accountPanelOpen
+                      ? "timeline-account-button"
+                      : undefined
           }
           onClose={closeActiveDetails}
         >
-          {searchPanelOpen ? (
+          {changesPanelOpen ? (
+            <PlannerChangesDetails
+              sessions={summonSessions}
+              preferences={rewardPreferences}
+              rewards={rewardChoices.items}
+              ledgerCells={view.incomeCells}
+              entries={entries}
+              status={rewardChoices.status}
+              timeZone={calendar.timeZone}
+              fromDay={calendar.today}
+              throughDay={scheduleEndDay}
+              onRetry={rewardChoices.retry}
+              onOpenSession={navigateToSession}
+              onOpenReward={navigateToEntry}
+              onResetReward={(id) => saveRewardInclusion(id, null)}
+              onClose={closeActiveDetails}
+            />
+          ) : searchPanelOpen ? (
             <TimelineSearchDetails
               scheduleStartDay={scheduleStartDay}
               timeZone={calendar.timeZone}

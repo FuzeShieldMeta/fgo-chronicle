@@ -1,4 +1,5 @@
 import storyChapters from "~/data/story-chapters.json";
+import { plannerChangesLimits } from "~/shared/planner-changes";
 import { TRPCError } from "@trpc/server";
 import { unstable_cache } from "next/cache";
 import { withServantThumbnail } from "~/server/services/servant-thumbnails";
@@ -769,6 +770,50 @@ const cachedSearchIndex = unstable_cache(
 );
 
 export const timelineRouter = createTRPCRouter({
+  rewardChoices: publicProcedure
+    .input(
+      z
+        .object({
+          ids: z
+            .array(
+              z.string().min(1).max(plannerChangesLimits.maximumRewardIdLength),
+            )
+            .min(1)
+            .max(plannerChangesLimits.rewardLookupBatchSize),
+        })
+        .strict(),
+    )
+    .query(async ({ ctx, input }) => {
+      const rewards = await ctx.db.rewardDefinition.findMany({
+        relationLoadStrategy: "join",
+        where: { id: { in: [...new Set(input.ids)] } },
+        select: incomeContributionSelect,
+      });
+      return rewards.flatMap((reward) => {
+        const event = reward.rewardSource.event;
+        if (event && eventIsHidden(event)) return [];
+        const effective = publicReward(reward, reward.rewardSource, event);
+        const schedule = event ? effectiveEvent(event) : null;
+        return [
+          {
+            id: effective.id,
+            name: reward.rewardSource.name,
+            amount: effective.amount,
+            itemType: effective.itemType,
+            expectedAt: effective.expectedAt,
+            expectedAtPrecision: effective.expectedAtPrecision,
+            event: schedule
+              ? {
+                  key: `event:${schedule.id}`,
+                  name: schedule.name,
+                  startsAt: schedule.startsAt,
+                  startsAtPrecision: schedule.startsAtPrecision,
+                }
+              : null,
+          },
+        ];
+      });
+    }),
   search: publicProcedure
     .input(
       z

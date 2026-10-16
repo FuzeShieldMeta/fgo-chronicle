@@ -43,9 +43,13 @@
   --md-income-lore-container: #e9e2ff;
   --md-income-spend: #9d353b;
   --md-income-spend-container: #f8dadd;
+  --md-income-neutral-container: color-mix(in srgb, var(--md-on-surface-variant) 20%, var(--md-surface));
   --md-conditional: #9d353b;
   --md-conditional-container: #fff0f0;
   --md-attention: #d6ad4a;
+  --md-personal-reward: var(--md-primary);
+  --md-personal-summon: var(--md-income-ticket);
+  --timeline-income-change-marker-size: 10px;
   --md-shadow: rgb(24 28 35 / 20%);
   --app-bar-height: 72px;
   --timeline-date-axis-height: 56px;
@@ -767,6 +771,7 @@ button {
 
 .timeline-ledger {
   position: relative;
+  isolation: isolate;
   display: grid;
   min-width: 100%;
   height: calc(100% - var(--timeline-horizontal-scrollbar-height));
@@ -865,6 +870,32 @@ button {
   box-shadow: inset 0 -3px var(--md-primary);
 }
 
+[data-personal-change="reward"] {
+  --day-change-colour: var(--md-personal-reward);
+}
+
+[data-personal-change="summon"] {
+  --day-change-colour: var(--md-personal-summon);
+}
+
+[data-personal-change="mixed"] {
+  --day-change-colour: var(--md-on-surface-variant);
+}
+
+.timeline-day[data-personal-change] {
+  background: color-mix(in srgb, var(--day-change-colour) 12%, var(--md-surface));
+}
+
+.timeline-day[data-personal-change]:hover {
+  background: color-mix(in srgb, var(--day-change-colour) 20%, var(--md-surface));
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --timeline-income-change-marker-size: 12px;
+  }
+}
+
 .timeline-day:focus-visible,
 .timeline-day[data-selected="true"] {
   z-index: 2;
@@ -872,27 +903,13 @@ button {
   outline-offset: -3px;
 }
 
-.timeline-day-session-marker {
+.timeline-personal-day-column {
   position: absolute;
-  right: 4px;
-  bottom: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 2px solid var(--md-income-spend);
-  background: transparent;
-}
-
-.timeline-day-session-marker[data-status="SPENT"] {
-  background: var(--md-income-spend);
-}
-
-.timeline-day-session-marker[data-status="MIXED"] {
-  background: linear-gradient(
-    90deg,
-    var(--md-income-spend) 50%,
-    transparent 50%
-  );
+  z-index: -1;
+  top: var(--timeline-date-axis-height);
+  bottom: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--day-change-colour) 12%, transparent);
 }
 
 .timeline-selected-day-column {
@@ -1074,7 +1091,7 @@ button {
   background-color: color-mix(
     in srgb,
     var(--md-income-container) 12%,
-    var(--md-surface)
+    transparent
   );
   background-image: repeating-linear-gradient(
     to right,
@@ -1135,11 +1152,7 @@ button {
 }
 
 .timeline-income-cell[data-direction="GAIN"] {
-  border-color: color-mix(
-    in srgb,
-    var(--income-resource-colour) 58%,
-    transparent
-  );
+  border-color: var(--income-resource-colour);
   background: var(--income-resource-container);
 }
 
@@ -1164,8 +1177,14 @@ button {
   );
 }
 
+.timeline-income-cell[data-direction="NEUTRAL"] {
+  border-color: var(--md-outline);
+  background: var(--md-income-neutral-container);
+}
+
 .timeline-income-cell[data-direction="NEUTRAL"]:hover {
-  background: var(--md-surface-highest);
+  border-color: var(--md-on-surface-variant);
+  background: color-mix(in srgb, var(--md-on-surface-variant) 28%, var(--md-surface));
 }
 
 .timeline-income-cell[data-needs-decision="true"] {
@@ -1430,6 +1449,88 @@ button {
 
 .timeline-rail-name-text {
   flex: 0 0 auto;
+}
+
+.timeline-personal-markers {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  align-items: center;
+  padding-inline: 3px;
+}
+
+.timeline-personal-markers i,
+.timeline-change-key [data-change]::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--md-personal-reward);
+}
+
+.timeline-personal-markers [data-change="summon"],
+.timeline-change-key [data-change="summon"]::before {
+  border-radius: 50%;
+  background: var(--md-personal-summon);
+}
+
+.timeline-income-personal-marker {
+  position: absolute;
+  z-index: 0;
+  bottom: 2px;
+  left: 2px;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.timeline-income-personal-marker .timeline-personal-markers {
+  flex-direction: column;
+  gap: 2px;
+  padding-inline: 0;
+}
+
+.timeline-income-personal-marker i {
+  width: var(--timeline-income-change-marker-size);
+  height: var(--timeline-income-change-marker-size);
+  border-radius: 50%;
+  border: 1px solid var(--md-surface);
+}
+
+.timeline-income-cell > strong,
+.timeline-income-cell > small,
+.timeline-income-cell > .timeline-income-decision-marker {
+  position: relative;
+  z-index: 1;
+}
+
+.timeline-change-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: var(--timeline-type-label);
+  color: var(--md-on-surface-variant);
+}
+
+.timeline-change-key [data-change] {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.timeline-change-key [data-change]::before {
+  content: "";
+}
+
+.timeline-detail-section .timeline-change-row {
+  border-inline-start: 3px solid var(--md-personal-reward);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-detail-section .timeline-change-row[data-change="summon"] {
+  padding: 0;
+  border-inline-start-color: var(--md-personal-summon);
 }
 
 .servant-thumbnail {
@@ -2786,6 +2887,28 @@ button {
   }
 }
 
+@media (min-width: 701px) and (max-width: 1100px) {
+  .timeline-toolbar,
+  .timeline-toolbar-actions {
+    width: 100%;
+  }
+
+  .timeline-toolbar-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .timeline-toolbar-action {
+    min-width: 0;
+    flex: 1 1 0;
+    padding-inline: 8px;
+  }
+
+  .timeline-legend {
+    flex-basis: 100%;
+  }
+}
+
 @media (max-width: 700px) {
   :root {
     --app-bar-height: 64px;
@@ -2910,7 +3033,7 @@ button {
 
 @media (max-width: 420px) {
   .timeline-toolbar-actions {
-    gap: 8px;
+    gap: 6px;
   }
 
   .timeline-toolbar-action {

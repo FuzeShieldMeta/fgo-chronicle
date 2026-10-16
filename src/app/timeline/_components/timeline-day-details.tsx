@@ -282,7 +282,9 @@ export function TimelineDayDetails({
       <div className="timeline-details-header">
         <div>
           <span className="timeline-type-label">Summon planning</span>
-          <h3 id="timeline-day-heading">{day}</h3>
+          <h3 id="timeline-day-heading" tabIndex={-1}>
+            {day}
+          </h3>
         </div>
         <button
           type="button"
