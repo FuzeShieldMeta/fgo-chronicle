@@ -316,35 +316,37 @@ export function SummonPlanPanel({
             <div>
               <dt>Cost</dt>
               <dd>
-                {cost.quartzSpent} SQ · {cost.ticketsSpent} tickets
+                {cost.quartzSpent.toLocaleString("en")} SQ ·{" "}
+                {cost.ticketsSpent.toLocaleString("en")} tickets
               </dd>
             </div>
             <div>
               <dt>Results</dt>
               <dd>
-                {cost.totalResults} total · {cost.bonusSummons} bonus
+                {cost.totalResults.toLocaleString("en")} total ·{" "}
+                {cost.bonusSummons.toLocaleString("en")} bonus
               </dd>
             </div>
             {cost.fragmentsConverted > 0 ? (
               <div>
                 <dt>Converted</dt>
                 <dd>
-                  {cost.fragmentsConverted} fragments →{" "}
-                  {cost.quartzFromFragments} SQ
+                  {cost.fragmentsConverted.toLocaleString("en")} fragments →{" "}
+                  {cost.quartzFromFragments.toLocaleString("en")} SQ
                 </dd>
               </div>
             ) : null}
             <div data-shortfall={remaining.quartz < 0 ? "true" : undefined}>
               <dt>Quartz after</dt>
-              <dd>{remaining.quartz}</dd>
+              <dd>{remaining.quartz.toLocaleString("en")}</dd>
             </div>
             <div data-shortfall={remaining.tickets < 0 ? "true" : undefined}>
               <dt>Tickets after</dt>
-              <dd>{remaining.tickets}</dd>
+              <dd>{remaining.tickets.toLocaleString("en")}</dd>
             </div>
             <div data-shortfall={remaining.fragments < 0 ? "true" : undefined}>
               <dt>Fragments after</dt>
-              <dd>{remaining.fragments}</dd>
+              <dd>{remaining.fragments.toLocaleString("en")}</dd>
             </div>
           </dl>
           {remaining.quartz < 0 ||

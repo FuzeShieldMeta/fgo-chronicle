@@ -145,8 +145,8 @@ export function TimelineProfileDetails({
 }
 
 function signedAmount(value: number) {
-  if (value > 0) return `+${value}`;
-  if (value < 0) return `−${Math.abs(value)}`;
+  if (value > 0) return `+${value.toLocaleString("en")}`;
+  if (value < 0) return `−${Math.abs(value).toLocaleString("en")}`;
   return "0";
 }
 
@@ -198,7 +198,10 @@ export function TimelineIncomeDetails({
   onClose: () => void;
 }) {
   const excludedCount = cell.contributions.filter(
-    (reward) => !reward.included,
+    (reward) => !reward.included && reward.inclusionResolved,
+  ).length;
+  const pendingCount = cell.contributions.filter(
+    (reward) => !reward.included && !reward.inclusionResolved,
   ).length;
   const summonSpending = cell.sessionChanges
     .filter((change) => change.kind === "SUMMON_SPEND")
@@ -230,7 +233,7 @@ export function TimelineIncomeDetails({
         </button>
       </div>
 
-      <dl className="timeline-detail-facts">
+      <dl className="timeline-detail-facts timeline-resource-facts">
         <div>
           <dt>Date</dt>
           <dd>{cell.day}</dd>
@@ -249,25 +252,31 @@ export function TimelineIncomeDetails({
             <dd>{signedAmount(fragmentConversion)}</dd>
           </div>
         ) : null}
-        <div>
+        <div data-summary-total="true">
           <dt>Net change</dt>
           <dd>{signedAmount(cell.delta)}</dd>
         </div>
-        <div>
+        <div data-summary-total="true">
           <dt>Forecast closing balance</dt>
-          <dd>{cell.closingBalance ?? "Not available"}</dd>
+          <dd>
+            {cell.closingBalance?.toLocaleString("en") ?? "Not available"}
+          </dd>
         </div>
       </dl>
 
       <section className="timeline-detail-section">
         <h4>Change breakdown</h4>
         <p>
-          Net resource change: {signedAmount(cell.delta)}.{" "}
           {excludedCount === 0
-            ? "No rewards are excluded."
+            ? pendingCount === 0
+              ? "No rewards are excluded."
+              : ""
             : excludedCount === 1
               ? "1 excluded reward is not counted."
               : `${excludedCount} excluded rewards are not counted.`}
+          {pendingCount > 0
+            ? ` ${pendingCount === 1 ? "1 reward needs" : `${pendingCount} rewards need`} your choice and ${pendingCount === 1 ? "is" : "are"} not counted.`
+            : ""}
         </p>
         <ul>
           {cell.contributions.map((contribution) => {
@@ -280,9 +289,11 @@ export function TimelineIncomeDetails({
                 key={contribution.id}
                 data-needs-decision={needsDecision ? "true" : undefined}
               >
-                <span>
-                  {signedAmount(contribution.amount)} ·{" "}
-                  {englishRewardLabel(contribution.rewardSource.name)}
+                <span className="timeline-resource-breakdown-head">
+                  <span>
+                    {englishRewardLabel(contribution.rewardSource.name)}
+                  </span>
+                  <strong>{signedAmount(contribution.amount)}</strong>
                 </span>
                 <small>
                   {formatType(contribution.rewardSource.type)}
@@ -290,7 +301,11 @@ export function TimelineIncomeDetails({
                   {contribution.rewardSource.event
                     ? ` · ${contribution.rewardSource.event.name}`
                     : ""}
-                  {contribution.included ? " · Included" : " · Excluded"}
+                  {contribution.included
+                    ? " · Included"
+                    : !contribution.inclusionResolved
+                      ? " · Needs choice"
+                      : " · Excluded"}
                   {contribution.reviewStatus === "NEEDS_REVIEW"
                     ? " · Needs re-review"
                     : contribution.reviewedAt
@@ -342,8 +357,9 @@ export function TimelineIncomeDetails({
           })}
           {cell.sessionChanges.map((change) => (
             <li key={change.id} data-session-status={change.status}>
-              <span>
-                {signedAmount(change.amount)} · {change.targetName}
+              <span className="timeline-resource-breakdown-head">
+                <span>{change.targetName}</span>
+                <strong>{signedAmount(change.amount)}</strong>
               </span>
               <small>
                 {change.kind === "FRAGMENT_CONVERSION"
@@ -598,10 +614,17 @@ export function TimelineEntryDetails({
                             }
                           >
                             <span>
-                              {reward.amount} {itemTypeNames[reward.itemType]}
+                              <span className="timeline-resource-amount">
+                                {reward.amount.toLocaleString("en")}
+                              </span>{" "}
+                              {itemTypeNames[reward.itemType]}
                             </span>
                             <small>
-                              {inclusion.included ? "Included" : "Excluded"}
+                              {inclusion.included
+                                ? "Included"
+                                : !inclusion.inclusionResolved
+                                  ? "Needs choice"
+                                  : "Excluded"}
                               {reward.reviewStatus === "NEEDS_REVIEW"
                                 ? " · Needs re-review"
                                 : reward.reviewedAt

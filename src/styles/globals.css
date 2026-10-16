@@ -2146,6 +2146,44 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.timeline-resource-facts > div {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.timeline-resource-facts dd {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.timeline-resource-facts [data-summary-total="true"] {
+  padding-top: 8px;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.timeline-resource-facts [data-summary-total="true"] dd {
+  font-weight: 700;
+}
+
+.timeline-resource-breakdown-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.timeline-resource-breakdown-head > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.timeline-resource-breakdown-head > strong,
+.timeline-resource-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .timeline-entry-facts + .timeline-artwork-card {
   margin-block: 20px 0;
 }
@@ -2191,13 +2229,25 @@ button {
 
 .timeline-event-reward-summary {
   display: grid;
+  min-width: 0;
   gap: 12px;
   margin-bottom: 16px;
 }
 
+.timeline-resource-table {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.timeline-resource-table:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 2px;
+}
+
 .timeline-event-reward-summary table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   border-collapse: collapse;
   color: var(--md-on-surface);
   font-size: var(--timeline-type-label);
@@ -2224,6 +2274,10 @@ button {
   width: 40%;
   padding-left: 0;
   text-align: left;
+}
+
+.timeline-event-reward-summary td {
+  white-space: nowrap;
 }
 
 .timeline-event-reward-summary th:last-child,
@@ -2744,9 +2798,10 @@ button {
 }
 
 .summon-cost-summary dl > div {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
-  justify-content: space-between;
+  align-items: baseline;
 }
 
 .summon-cost-summary dt {
@@ -2755,12 +2810,14 @@ button {
 }
 
 .summon-cost-summary dd {
+  min-width: 0;
   margin: 0;
   color: var(--md-on-surface);
   font-size: var(--timeline-type-label);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .summon-cost-summary [data-shortfall="true"] dd {

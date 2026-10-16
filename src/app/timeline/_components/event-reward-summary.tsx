@@ -30,6 +30,7 @@ export function EventRewardSummary({
 }) {
   const dated = new Map<ForecastResourceType, ResourceTotal>();
   const undated = new Map<ForecastResourceType, ResourceTotal>();
+  let hasPendingChoices = false;
   for (const source of sources) {
     for (const reward of source.rewards) {
       const group = reward.expectedAt ? dated : undated;
@@ -38,12 +39,13 @@ export function EventRewardSummary({
         total = { included: 0, notIncluded: 0 };
         group.set(reward.itemType, total);
       }
-      const { included } = resolveRewardInclusion(
+      const { included, inclusionResolved } = resolveRewardInclusion(
         reward,
         preferences,
         profile,
         catalogue,
       );
+      if (!included && !inclusionResolved) hasPendingChoices = true;
       total[included ? "included" : "notIncluded"] += reward.amount;
     }
   }
@@ -52,6 +54,15 @@ export function EventRewardSummary({
   return (
     <div className="timeline-event-reward-summary">
       <p>Totals cover the whole event, not just unclaimed rewards.</p>
+      {hasPendingChoices ? (
+        <p>Not included also covers rewards awaiting your choice.</p>
+      ) : null}
+      {undated.size ? (
+        <p>
+          Rewards without a forecast date are not added to daily balances, even
+          when included.
+        </p>
+      ) : null}
       {[
         {
           caption: undated.size ? "Dated rewards" : "Event totals",
@@ -60,28 +71,36 @@ export function EventRewardSummary({
         { caption: "No forecast date", totals: undated },
       ].map(({ caption, totals }) =>
         totals.size ? (
-          <table key={caption}>
-            <caption>{caption}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Resource</th>
-                <th scope="col">Included</th>
-                <th scope="col">Not included</th>
-              </tr>
-            </thead>
-            <tbody>
-              {forecastResourceTypes.map((type) => {
-                const total = totals.get(type);
-                return total ? (
-                  <tr key={type}>
-                    <th scope="row">{incomeResourceLabels[type]}</th>
-                    <td>{total.included.toLocaleString("en")}</td>
-                    <td>{total.notIncluded.toLocaleString("en")}</td>
-                  </tr>
-                ) : null;
-              })}
-            </tbody>
-          </table>
+          <div
+            className="timeline-resource-table"
+            key={caption}
+            role="region"
+            aria-label={caption}
+            tabIndex={0}
+          >
+            <table>
+              <caption>{caption}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Included</th>
+                  <th scope="col">Not included</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecastResourceTypes.map((type) => {
+                  const total = totals.get(type);
+                  return total ? (
+                    <tr key={type}>
+                      <th scope="row">{incomeResourceLabels[type]}</th>
+                      <td>{total.included.toLocaleString("en")}</td>
+                      <td>{total.notIncluded.toLocaleString("en")}</td>
+                    </tr>
+                  ) : null;
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : null,
       )}
     </div>
