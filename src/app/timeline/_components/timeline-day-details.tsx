@@ -43,6 +43,7 @@ export function TimelineDayDetails({
   balances,
   sessions,
   initialBannerId,
+  initialServantId,
   onSave,
   onUpdate,
   onDuplicate,
@@ -59,6 +60,7 @@ export function TimelineDayDetails({
   balances: ForecastBalances;
   sessions: SummonSession[];
   initialBannerId?: string | null;
+  initialServantId?: number | null;
   onSave: (session: SummonSession) => void;
   onUpdate: (session: SummonSession) => void;
   onDuplicate: (sessionId: string) => void;
@@ -81,7 +83,9 @@ export function TimelineDayDetails({
   const [selectedBannerId, setSelectedBannerId] = useState(
     initialBannerId ?? banners[0]?.id ?? "",
   );
-  const [selectedServantId, setSelectedServantId] = useState("");
+  const [selectedServantId, setSelectedServantId] = useState(
+    String(initialServantId ?? ""),
+  );
   const [selectedLineupId, setSelectedLineupId] = useState("");
   const [customTargetName, setCustomTargetName] = useState("");
   const [startingNp, setStartingNp] = useState(0);
@@ -122,6 +126,11 @@ export function TimelineDayDetails({
     activeLineups.find((lineup) => lineup.id === selectedLineupId) ??
     activeLineups.find(
       (lineup) => lineup.sourceKey === editingSession?.banner.lineupKey,
+    ) ??
+    activeLineups.find((lineup) =>
+      lineup.featured.some(
+        ({ servant }) => String(servant.id) === selectedServantId,
+      ),
     ) ??
     activeLineups[0];
   const featured = selectedLineup?.featured.length
@@ -360,6 +369,13 @@ export function TimelineDayDetails({
           >
             {savedTargetIsOutsideLineup ? (
               <option value={selectedServantId}>{customTargetName}</option>
+            ) : null}
+            {selectedServantId &&
+            !matchedFeatured &&
+            !savedTargetIsOutsideLineup ? (
+              <option value={selectedServantId} disabled>
+                Selected servant unavailable in this lineup
+              </option>
             ) : null}
             {featured.map(({ servant, soloRateUp }) => (
               <option key={servant.id} value={servant.id}>

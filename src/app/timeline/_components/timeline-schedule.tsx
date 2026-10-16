@@ -402,6 +402,9 @@ function TimelineScheduleContent({
   const [selectedDayBannerId, setSelectedDayBannerId] = useState<string | null>(
     null,
   );
+  const [selectedDayServantId, setSelectedDayServantId] = useState<
+    number | null
+  >(null);
   const [playerProfile, setPlayerProfile] =
     useState<PlayerForecastProfile | null>(null);
   const [rewardPreferences, setRewardPreferences] = useState<RewardPreferences>(
@@ -868,6 +871,7 @@ function TimelineScheduleContent({
     const day = selectedDay;
     setSelectedDay(null);
     setSelectedDayBannerId(null);
+    setSelectedDayServantId(null);
     if (day) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -937,6 +941,7 @@ function TimelineScheduleContent({
     });
     setChangesPanelOpen(false);
     setSelectedDayBannerId(session.banner.id);
+    setSelectedDayServantId(null);
     setSelectedDay(session.day);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -1019,6 +1024,7 @@ function TimelineScheduleContent({
     setSelectedKey(null);
     setSelectedIncomeKey(null);
     setSelectedDayBannerId(null);
+    setSelectedDayServantId(null);
     setSelectedDay(null);
     setAccountPanelOpen(false);
     setSearchPanelOpen(false);
@@ -1516,6 +1522,7 @@ function TimelineScheduleContent({
                           setSelectedKey(null);
                           setSelectedIncomeKey(null);
                           setSelectedDayBannerId(null);
+                          setSelectedDayServantId(null);
                           setSelectedDay(day);
                         }}
                       >
@@ -1687,12 +1694,13 @@ function TimelineScheduleContent({
             </aside>
           ) : selectedDay && selectedDayBalances ? (
             <TimelineDayDetails
-              key={selectedDay}
+              key={`${selectedDay}:${selectedDayBannerId ?? ""}:${selectedDayServantId ?? ""}`}
               day={selectedDay}
               banners={selectedDayBanners}
               balances={selectedDayBalances}
               sessions={selectedDaySessions}
               initialBannerId={selectedDayBannerId}
+              initialServantId={selectedDayServantId}
               onSave={addSummonSession}
               onUpdate={replaceSummonSession}
               onDuplicate={copySummonSession}
@@ -1753,7 +1761,7 @@ function TimelineScheduleContent({
               }
               onPlanSummons={
                 selectedEntry.kind === "BANNER"
-                  ? () => {
+                  ? (servantId) => {
                       const starts = calendarDayKey(
                         selectedEntry.startsAt,
                         selectedEntry.startsAtPrecision,
@@ -1779,6 +1787,7 @@ function TimelineScheduleContent({
                             ? lastDay
                             : preferredDay;
                       setSelectedDayBannerId(selectedEntry.id);
+                      setSelectedDayServantId(servantId ?? null);
                       setSelectedKey(null);
                       setSelectedDay(day);
                     }

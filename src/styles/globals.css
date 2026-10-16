@@ -1790,6 +1790,31 @@ button {
   border-bottom: 0;
 }
 
+.timeline-detail-section .timeline-servant-group li[data-plannable="true"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.timeline-detail-section .timeline-servant-group li[data-plannable="true"] > .timeline-servant-link {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.timeline-servant-actions {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  padding-block: 6px;
+}
+
+.timeline-servant-actions .timeline-servant-plan-button {
+  padding-inline: 8px;
+  font-size: var(--timeline-type-dense);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .timeline-detail-section .timeline-servant-group li > .timeline-servant-link {
   display: grid;
   width: 100%;

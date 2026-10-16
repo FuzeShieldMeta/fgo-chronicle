@@ -17,9 +17,11 @@ type Featured = {
 export function FeaturedServantList({
   featured,
   searchQuery,
+  onPlanSummons,
 }: {
   featured: readonly Featured[];
   searchQuery?: string;
+  onPlanSummons?: (servantId: number) => void;
 }) {
   const servants = sortFeaturedServants(
     featured.map((item) => ({ ...item.servant, soloRateUp: item.soloRateUp })),
@@ -34,7 +36,10 @@ export function FeaturedServantList({
             {servants
               .filter((servant) => servant.rarity === rarity)
               .map((servant) => (
-                <li key={servant.id}>
+                <li
+                  key={servant.id}
+                  data-plannable={onPlanSummons ? "true" : undefined}
+                >
                   <a
                     className="timeline-servant-link"
                     data-search-match={
@@ -55,10 +60,27 @@ export function FeaturedServantList({
                       <span>{servant.name}</span>
                       <small>{servant.className}</small>
                     </div>
-                    <small className="timeline-servant-rate-up">
-                      {servant.soloRateUp ? "Solo rate-up" : "Shared rate-up"}
-                    </small>
+                    {!onPlanSummons ? (
+                      <small className="timeline-servant-rate-up">
+                        {servant.soloRateUp ? "Solo rate-up" : "Shared rate-up"}
+                      </small>
+                    ) : null}
                   </a>
+                  {onPlanSummons ? (
+                    <div className="timeline-servant-actions">
+                      <small className="timeline-servant-rate-up">
+                        {servant.soloRateUp ? "Solo rate-up" : "Shared rate-up"}
+                      </small>
+                      <button
+                        type="button"
+                        className="timeline-tonal-button timeline-servant-plan-button"
+                        aria-label={`Plan summons for ${servant.name} (${servant.className})`}
+                        onClick={() => onPlanSummons(servant.id)}
+                      >
+                        Plan summons
+                      </button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
           </ul>

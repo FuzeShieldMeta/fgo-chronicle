@@ -409,7 +409,7 @@ export function TimelineEntryDetails({
   timeZone: string;
   rewardPreferences: RewardPreferences;
   onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
-  onPlanSummons?: () => void;
+  onPlanSummons?: (servantId?: number) => void;
   searchQuery?: string;
   onBackToSearch?: () => void;
   onSelectRelated?: (
@@ -569,6 +569,7 @@ export function TimelineEntryDetails({
             <FeaturedServantList
               featured={details.data.featured}
               searchQuery={searchQuery}
+              onPlanSummons={onPlanSummons}
             />
           ) : (
             <p>No featured Servant data is available.</p>
@@ -763,7 +764,7 @@ export function TimelineEntryDetails({
           <button
             type="button"
             className="timeline-primary-button"
-            onClick={onPlanSummons}
+            onClick={() => onPlanSummons?.()}
           >
             Plan summons
           </button>
