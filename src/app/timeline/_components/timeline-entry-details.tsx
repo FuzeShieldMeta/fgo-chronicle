@@ -438,7 +438,7 @@ export function TimelineEntryDetails({
   const content = (
     <>
       <div className="timeline-details-handle" aria-hidden="true" />
-      <div className="timeline-details-header">
+      <div className="timeline-details-header timeline-entry-header">
         <div>
           <span className="timeline-type-label">
             {entry.category === "INCOME_SOURCE"
@@ -462,24 +462,7 @@ export function TimelineEntryDetails({
         </button>
       </div>
 
-      {reviewedArtworkUrl && family ? (
-        <figure className="timeline-artwork-card">
-          <div className="timeline-artwork">
-            <Image
-              className="timeline-artwork-image"
-              src={reviewedArtworkUrl}
-              alt={family.artworkAlt ?? `${family.name} event artwork`}
-              fill
-              sizes={timelineLayout.eventDetailsArtworkSizes}
-              loading="lazy"
-              onError={() => setFailedArtworkUrl(reviewedArtworkUrl)}
-            />
-          </div>
-          <figcaption>{family.name}</figcaption>
-        </figure>
-      ) : null}
-
-      <dl className="timeline-detail-facts">
+      <dl className="timeline-detail-facts timeline-entry-facts">
         <div>
           <dt>Status</dt>
           <dd>
@@ -511,6 +494,23 @@ export function TimelineEntryDetails({
           </dd>
         </div>
       </dl>
+
+      {reviewedArtworkUrl && family ? (
+        <figure className="timeline-artwork-card">
+          <div className="timeline-artwork">
+            <Image
+              className="timeline-artwork-image"
+              src={reviewedArtworkUrl}
+              alt={family.artworkAlt ?? `${family.name} event artwork`}
+              fill
+              sizes={timelineLayout.eventDetailsArtworkSizes}
+              loading="lazy"
+              onError={() => setFailedArtworkUrl(reviewedArtworkUrl)}
+            />
+          </div>
+          <figcaption>{family.name}</figcaption>
+        </figure>
+      ) : null}
 
       {details.isLoading ? (
         <p className="timeline-details-message" role="status">

@@ -1716,6 +1716,16 @@ button {
   margin-bottom: 18px;
 }
 
+.timeline-details-header > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.timeline-entry-header > :first-child {
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--md-primary);
+}
+
 .timeline-type-label {
   display: inline-block;
   margin-bottom: 6px;
@@ -1730,7 +1740,8 @@ button {
   margin: 0;
   color: var(--md-on-surface);
   font-size: 1.35rem;
-  line-height: 1.2;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .timeline-close-button {
@@ -1890,6 +1901,20 @@ button {
   margin: 0;
   color: var(--md-on-surface);
   font-size: var(--timeline-type-body);
+}
+
+.timeline-entry-facts > div {
+  align-items: start;
+}
+
+.timeline-entry-facts dd {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-entry-facts + .timeline-artwork-card {
+  margin-block: 20px 0;
 }
 
 .timeline-status-chip {
