@@ -384,6 +384,8 @@ export function TimelineEntryDetails({
   onSetRewardInclusion,
   onPlanSummons,
   onSelectRelated,
+  searchQuery,
+  onBackToSearch,
   onClose,
 }: {
   entry: TimelineEntry;
@@ -392,6 +394,8 @@ export function TimelineEntryDetails({
   rewardPreferences: RewardPreferences;
   onSetRewardInclusion: (rewardId: string, included: boolean | null) => void;
   onPlanSummons?: () => void;
+  searchQuery?: string;
+  onBackToSearch?: () => void;
   onSelectRelated?: (
     entry: Pick<TimelineEntry, "key" | "startsAt" | "startsAtPrecision">,
   ) => Promise<void>;
@@ -434,10 +438,32 @@ export function TimelineEntryDetails({
   );
   const hasPlanningAction =
     details.data?.kind === "BANNER" && Boolean(onPlanSummons);
+  const closeButton = (
+    <button
+      type="button"
+      className="timeline-close-button"
+      onClick={onClose}
+      aria-label="Close schedule details"
+    >
+      Close
+    </button>
+  );
 
   const content = (
     <>
       <div className="timeline-details-handle" aria-hidden="true" />
+      {onBackToSearch ? (
+        <div className="timeline-entry-actions">
+          <button
+            type="button"
+            className="timeline-search-back"
+            onClick={onBackToSearch}
+          >
+            Back to results
+          </button>
+          {closeButton}
+        </div>
+      ) : null}
       <div className="timeline-details-header timeline-entry-header">
         <div>
           <span className="timeline-type-label">
@@ -452,14 +478,7 @@ export function TimelineEntryDetails({
           </h3>
         </div>
 
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-          aria-label="Close schedule details"
-        >
-          Close
-        </button>
+        {onBackToSearch ? null : closeButton}
       </div>
 
       <dl className="timeline-detail-facts timeline-entry-facts">
@@ -531,7 +550,10 @@ export function TimelineEntryDetails({
         <section className="timeline-detail-section">
           <h4>Featured Servants</h4>
           {details.data.featured.length > 0 ? (
-            <FeaturedServantList featured={details.data.featured} />
+            <FeaturedServantList
+              featured={details.data.featured}
+              searchQuery={searchQuery}
+            />
           ) : (
             <p>No featured Servant data is available.</p>
           )}

@@ -25,6 +25,8 @@ export const timelineLayout = {
   servantThumbnailOverflowWidth: 28,
   servantThumbnailLabelPadding: 20,
   servantDetailsThumbnailSize: 48,
+  servantSearchThumbnailSize: 36,
+  servantSearchPreviewCount: 3,
 } as const;
 
 export const timelineSchedule = {

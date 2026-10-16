@@ -7,6 +7,7 @@ import {
 } from "~/shared/featured-servants";
 import { timelineLayout } from "../_lib/timeline-layout-config";
 import { ServantThumbnail } from "./servant-thumbnail";
+import { servantMatchesSearch } from "~/shared/timeline-search";
 
 type Featured = {
   servant: FeaturedServant & { className: string };
@@ -15,8 +16,10 @@ type Featured = {
 
 export function FeaturedServantList({
   featured,
+  searchQuery,
 }: {
   featured: readonly Featured[];
+  searchQuery?: string;
 }) {
   const servants = sortFeaturedServants(
     featured.map((item) => ({ ...item.servant, soloRateUp: item.soloRateUp })),
@@ -34,6 +37,11 @@ export function FeaturedServantList({
                 <li key={servant.id}>
                   <a
                     className="timeline-servant-link"
+                    data-search-match={
+                      searchQuery && servantMatchesSearch(servant, searchQuery)
+                        ? "true"
+                        : undefined
+                    }
                     href={servantAtlasUrl(servant)}
                     target="_blank"
                     rel="noopener noreferrer"

@@ -27,7 +27,10 @@ import {
 } from "~/app/timeline/_components/timeline-entry-details";
 import { TimelineIncomeLedger } from "~/app/timeline/_components/timeline-income-ledger";
 import { TimelineDayDetails } from "~/app/timeline/_components/timeline-day-details";
-import { TimelineSearchDetails } from "./timeline-search-details";
+import {
+  TimelineSearchDetails,
+  type TimelineSearchState,
+} from "./timeline-search-details";
 import { PlannerChangesDetails } from "./planner-changes-details";
 import { useRewardChoiceDetails } from "./use-reward-choice-details";
 import { personalChangeDescription } from "./personal-change-markers";
@@ -407,6 +410,12 @@ function TimelineScheduleContent({
   >(null);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [searchState, setSearchState] = useState<TimelineSearchState>({
+    query: "",
+    expanded: [],
+  });
+  const searchScrollPosition = useRef(0);
+  const [searchResultKey, setSearchResultKey] = useState<string | null>(null);
   const [changesPanelOpen, setChangesPanelOpen] = useState(false);
   const entryNavigationRef = useRef<AbortController | null>(null);
   const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
@@ -1594,9 +1603,15 @@ function TimelineScheduleContent({
             />
           ) : searchPanelOpen ? (
             <TimelineSearchDetails
+              state={searchState}
+              onStateChange={setSearchState}
+              scrollPosition={searchScrollPosition}
               scheduleStartDay={scheduleStartDay}
               timeZone={calendar.timeZone}
-              onSelect={navigateToEntry}
+              onSelect={async (entry) => {
+                await navigateToEntry(entry);
+                setSearchResultKey(entry.key);
+              }}
               onClose={closeActiveDetails}
             />
           ) : methodologyPanelOpen ? (
@@ -1655,6 +1670,19 @@ function TimelineScheduleContent({
               rewardPreferences={rewardPreferences}
               onSetRewardInclusion={saveRewardInclusion}
               onSelectRelated={navigateToEntry}
+              searchQuery={
+                searchResultKey === selectedEntry.key
+                  ? searchState.query
+                  : undefined
+              }
+              onBackToSearch={
+                searchResultKey === selectedEntry.key
+                  ? () => {
+                      setSelectedKey(null);
+                      setSearchPanelOpen(true);
+                    }
+                  : undefined
+              }
               onPlanSummons={
                 selectedEntry.kind === "BANNER"
                   ? () => {

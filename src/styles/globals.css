@@ -393,6 +393,7 @@ button {
 .timeline-retry,
 .timeline-tonal-button,
 .timeline-close-button,
+.timeline-search-back,
 .timeline-primary-button,
 .timeline-details-message button {
   min-height: 44px;
@@ -452,6 +453,7 @@ button {
 .timeline-retry:hover,
 .timeline-tonal-button:hover,
 .timeline-close-button:hover,
+.timeline-search-back:hover,
 .timeline-primary-button:hover,
 .timeline-details-message button:hover {
   box-shadow:
@@ -464,6 +466,7 @@ button {
 .timeline-retry:focus-visible,
 .timeline-tonal-button:focus-visible,
 .timeline-close-button:focus-visible,
+.timeline-search-back:focus-visible,
 .timeline-primary-button:focus-visible,
 .timeline-details-message button:focus-visible,
 .timeline-source-link:focus-visible {
@@ -524,13 +527,82 @@ button {
   text-align: left;
   overflow-wrap: anywhere;
   border: 0;
-  border-bottom: 1px solid var(--md-outline-variant);
   background: transparent;
   color: var(--md-on-surface);
   cursor: pointer;
   font: inherit;
   font-size: var(--timeline-type-body);
   line-height: 1.5;
+}
+.timeline-search-result-row {
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.timeline-search-result-title {
+  font-weight: 650;
+  line-height: 1.4;
+}
+.timeline-search-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-search-result-status {
+  white-space: nowrap;
+}
+.timeline-search-result-status[data-status="PROJECTED"] {
+  color: var(--md-summon);
+}
+.timeline-search-servants {
+  display: grid;
+  gap: 8px;
+}
+.timeline-search-servant {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  color: var(--md-on-surface);
+  text-align: left;
+}
+.timeline-search-servant > span:last-child {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.timeline-search-servant small {
+  color: var(--md-on-surface-variant);
+  font-size: var(--timeline-type-label);
+}
+.timeline-search-servant[data-matching="true"] strong {
+  color: var(--md-primary);
+  font-weight: 750;
+}
+.timeline-search-other-servants {
+  padding: 0 10px 8px;
+  font-size: var(--timeline-type-label);
+}
+.timeline-search-other-servants summary {
+  min-height: 44px;
+  align-content: center;
+  color: var(--md-primary);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.timeline-search-other-servants summary:hover {
+  background: var(--md-surface-low);
+}
+.timeline-search-other-servants summary:focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 1px;
+}
+.timeline-search-other-servants .timeline-search-servants {
+  padding-block: 4px 8px;
+}
+.timeline-servant-link[data-search-match="true"] .timeline-servant-description > span {
+  color: var(--md-primary);
+  font-weight: 800;
 }
 .timeline-search-result:hover:not(:disabled) {
   background: var(--md-surface-low);
@@ -1827,6 +1899,25 @@ button {
   border-inline-start: 3px solid var(--md-primary);
 }
 
+.timeline-entry-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  justify-items: start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.timeline-entry-actions > .timeline-close-button {
+  justify-self: end;
+}
+
+.timeline-entry-actions > .timeline-search-back {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .timeline-type-label {
   display: inline-block;
   margin-bottom: 6px;
@@ -1845,7 +1936,8 @@ button {
   overflow-wrap: anywhere;
 }
 
-.timeline-close-button {
+.timeline-close-button,
+.timeline-search-back {
   flex: 0 0 auto;
   min-width: 72px;
   border: 1px solid var(--md-outline-variant);
@@ -1854,12 +1946,14 @@ button {
   color: var(--md-primary);
 }
 
-.timeline-close-button:hover:not(:disabled) {
+.timeline-close-button:hover:not(:disabled),
+.timeline-search-back:hover:not(:disabled) {
   background: var(--md-surface-low);
   box-shadow: none;
 }
 
-.timeline-close-button:active:not(:disabled) {
+.timeline-close-button:active:not(:disabled),
+.timeline-search-back:active:not(:disabled) {
   background: var(--md-primary-container);
 }
 

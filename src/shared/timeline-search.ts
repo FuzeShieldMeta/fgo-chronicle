@@ -16,7 +16,12 @@ export type TimelineSearchEntry = {
   startsAtPrecision: "EXACT" | "DATE_ONLY";
   endsAtPrecision: "EXACT" | "DATE_ONLY" | null;
   status: "OFFICIAL" | "CURATED" | "PROJECTED";
-  servants: { id: number; name: string; className: string }[];
+  servants: {
+    id: number;
+    name: string;
+    className: string;
+    thumbnailUrl?: string | null;
+  }[];
 };
 
 export function normaliseSearchText(value: string) {

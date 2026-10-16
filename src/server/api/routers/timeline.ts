@@ -722,7 +722,15 @@ const cachedSearchIndex = unstable_cache(
           id: true,
           featured: {
             select: {
-              servant: { select: { id: true, name: true, className: true } },
+              servant: {
+                select: {
+                  id: true,
+                  name: true,
+                  className: true,
+                  faceId: true,
+                  thumbnailPath: true,
+                },
+              },
             },
           },
           summonLineups: {
@@ -730,7 +738,13 @@ const cachedSearchIndex = unstable_cache(
               featured: {
                 select: {
                   servant: {
-                    select: { id: true, name: true, className: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      className: true,
+                      faceId: true,
+                      thumbnailPath: true,
+                    },
                   },
                 },
               },
@@ -747,7 +761,7 @@ const cachedSearchIndex = unstable_cache(
             [
               ...banner.featured,
               ...banner.summonLineups.flatMap((lineup) => lineup.featured),
-            ].map(({ servant }) => [servant.id, servant]),
+            ].map(({ servant }) => [servant.id, withServantThumbnail(servant)]),
           ).values(),
         ],
       ]),
@@ -765,7 +779,7 @@ const cachedSearchIndex = unstable_cache(
     }));
     return superjson.stringify(index);
   },
-  ["timeline-search-v1"],
+  ["timeline-search-v2"],
   publicTimelineCacheOptions,
 );
 
