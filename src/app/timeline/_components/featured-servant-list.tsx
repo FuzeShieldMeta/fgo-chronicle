@@ -77,7 +77,12 @@ export function FeaturedServantList({
                         aria-label={`Plan summons for ${servant.name} (${servant.className})`}
                         onClick={() => onPlanSummons(servant.id)}
                       >
-                        Plan summons
+                        <span className="timeline-servant-plan-label-full">
+                          Plan summons
+                        </span>
+                        <span className="timeline-servant-plan-label-short">
+                          Plan
+                        </span>
                       </button>
                     </div>
                   ) : null}

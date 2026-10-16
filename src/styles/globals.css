@@ -1803,16 +1803,34 @@ button {
 
 .timeline-servant-actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: end;
+  min-width: 0;
   gap: 4px;
   padding-block: 6px;
 }
 
 .timeline-servant-actions .timeline-servant-plan-button {
+  min-width: var(--timeline-control-height);
   padding-inline: 8px;
   font-size: var(--timeline-type-dense);
   letter-spacing: normal;
   text-transform: none;
+  white-space: nowrap;
+}
+
+.timeline-servant-plan-label-short {
+  display: none;
+}
+
+@container (max-width: 320px) {
+  .timeline-servant-plan-label-full {
+    display: none;
+  }
+
+  .timeline-servant-plan-label-short {
+    display: inline;
+  }
 }
 
 .timeline-detail-section .timeline-servant-group li > .timeline-servant-link {
@@ -1865,11 +1883,11 @@ button {
     row-gap: 4px;
   }
 
-  .timeline-servant-link > .servant-thumbnail {
+  .timeline-servant-group li:not([data-plannable="true"]) > .timeline-servant-link > .servant-thumbnail {
     grid-row: span 2;
   }
 
-  .timeline-detail-section .timeline-servant-rate-up {
+  .timeline-detail-section .timeline-servant-link > .timeline-servant-rate-up {
     grid-column: 2;
     text-align: left;
   }
