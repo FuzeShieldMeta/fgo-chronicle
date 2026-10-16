@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 
 import { siteUrl } from "~/app/_lib/site";
+import { appearanceBootstrap } from "~/app/_lib/appearance";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
@@ -54,7 +55,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable}`}>
+    <html lang="en" className={`${geist.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
+      </head>
       <body>
         <TRPCReactProvider>{children}</TRPCReactProvider>
         <Analytics />

@@ -188,7 +188,7 @@
   border-color: var(--md-primary);
 }
 .curator-page .curator-primary:hover:not(:disabled) {
-  background: var(--md-on-primary-container);
+  background: var(--md-primary-hover);
   color: var(--md-on-primary);
 }
 .curator-confirm {

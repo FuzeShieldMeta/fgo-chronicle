@@ -6,6 +6,7 @@ import {
 import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
+import { AppearanceControl } from "~/app/_components/appearance-control";
 import { RailServantThumbnails } from "./rail-servant-thumbnails";
 import { sortFeaturedServants } from "~/shared/featured-servants";
 import {
@@ -1302,6 +1303,8 @@ function TimelineScheduleContent({
               <span>Today</span>
             </span>
           </button>
+
+          <AppearanceControl />
 
           <TimelineAccountMenu
             user={user ?? null}

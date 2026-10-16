@@ -7,6 +7,11 @@
 }
 
 :root {
+  color-scheme: light;
+  --md-brand-bar: #24466f;
+  --md-on-brand-bar: #ffffff;
+  --md-primary-hover: #0a3058;
+  --md-resource-hover-base: 78%;
   --md-background: #f4f5f7;
   --md-on-background: #191c20;
   --md-surface: #ffffff;
@@ -72,6 +77,52 @@
   --timeline-type-app-title: clamp(1.25rem, 1.16rem + 0.18vw, 1.375rem);
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --md-background: #0b1422;
+  --md-on-background: #e3e7ed;
+  --md-surface: #192a40;
+  --md-surface-low: #1d3048;
+  --md-surface-high: #243850;
+  --md-surface-highest: #30465f;
+  --md-on-surface: #e3e7ed;
+  --md-on-surface-variant: #bac4d0;
+  --md-outline: #8c99aa;
+  --md-outline-variant: #465363;
+  --md-primary: #a8c9f4;
+  --md-on-primary: #102c49;
+  --md-primary-hover: #c5dcfa;
+  --md-primary-container: #294361;
+  --md-on-primary-container: #d5e6ff;
+  --md-secondary: #dfc580;
+  --md-secondary-container: #463c25;
+  --md-on-secondary-container: #f2e1ad;
+  --md-error: #ffb4ba;
+  --md-event: #8ad1d3;
+  --md-event-container: #24484c;
+  --md-summon: #edc477;
+  --md-summon-container: #4d3d21;
+  --md-income: #bdc9fb;
+  --md-income-container: #303d64;
+  --md-income-sq: #9ed1f2;
+  --md-income-sq-container: #203f53;
+  --md-income-ticket: #e9c978;
+  --md-income-ticket-container: #463b22;
+  --md-income-fragment: #b6cee1;
+  --md-income-fragment-container: #2d4050;
+  --md-income-grail: #e7b2c9;
+  --md-income-grail-container: #4d3040;
+  --md-income-lore: #cdbdf4;
+  --md-income-lore-container: #3d3354;
+  --md-income-spend: #ffb4ba;
+  --md-income-spend-container: #532e37;
+  --md-conditional: #ffb4ba;
+  --md-conditional-container: #422c35;
+  --md-attention: #e4bf68;
+  --md-shadow: rgb(0 0 0 / 40%);
+  --md-resource-hover-base: 90%;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -120,7 +171,7 @@ button {
   min-height: var(--app-bar-height);
   align-items: center;
   padding: 8px clamp(16px, 3vw, 48px);
-  background: var(--md-primary);
+  background: var(--md-brand-bar);
   box-shadow:
     0 2px 4px -1px rgb(0 0 0 / 20%),
     0 4px 5px rgb(0 0 0 / 14%),
@@ -137,7 +188,7 @@ button {
 
 .timeline-app-title h1 {
   margin: 0;
-  color: #ffffff;
+  color: var(--md-on-brand-bar);
   font-size: var(--timeline-type-app-title);
   font-weight: 500;
   line-height: 1.1;
@@ -145,7 +196,7 @@ button {
 
 .timeline-app-title p {
   margin: 3px 0 0;
-  color: rgb(255 255 255 / 72%);
+  color: color-mix(in srgb, var(--md-on-brand-bar) 80%, transparent);
   font-size: var(--timeline-type-label);
 }
 
@@ -156,7 +207,7 @@ button {
   justify-self: end;
   max-width: 60ch;
   margin: 0;
-  color: rgb(255 255 255 / 78%);
+  color: color-mix(in srgb, var(--md-on-brand-bar) 85%, transparent);
   font-size: var(--timeline-type-body);
   line-height: 1.45;
   text-align: right;
@@ -165,7 +216,7 @@ button {
 .timeline-intro a,
 .timeline-intro button {
   flex: 0 0 auto;
-  color: #ffffff;
+  color: var(--md-on-brand-bar);
   font-weight: 600;
   text-underline-offset: 3px;
 }
@@ -185,6 +236,30 @@ button {
 .timeline-intro button:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 4px;
+}
+
+.appearance-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appearance-control select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.appearance-control:has(select:focus-visible) {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 3px;
 }
 
 .timeline-methodology-content {
@@ -225,7 +300,7 @@ button {
   justify-content: space-between;
   gap: 24px;
   padding: 8px clamp(16px, 3vw, 48px);
-  background: var(--md-primary);
+  background: var(--md-brand-bar);
   box-shadow:
     0 2px 4px -1px rgb(0 0 0 / 20%),
     0 4px 5px rgb(0 0 0 / 14%),
@@ -234,7 +309,7 @@ button {
 
 .content-brand,
 .content-back-link {
-  color: var(--md-on-primary);
+  color: var(--md-on-brand-bar);
   font-weight: 600;
   text-decoration: none;
 }
@@ -790,7 +865,7 @@ button {
 }
 
 .planner-conflict-actions [data-primary-action]:hover {
-  background: var(--md-on-primary-container);
+  background: var(--md-primary-hover);
 }
 
 .timeline-legend {
@@ -1269,7 +1344,7 @@ button {
 .timeline-income-cell[data-direction="GAIN"]:hover {
   background: color-mix(
     in srgb,
-    var(--income-resource-container) 78%,
+    var(--income-resource-container) var(--md-resource-hover-base),
     var(--income-resource-colour)
   );
 }
@@ -1282,7 +1357,7 @@ button {
 .timeline-income-cell[data-direction="SPEND"]:hover {
   background: color-mix(
     in srgb,
-    var(--md-income-spend-container) 78%,
+    var(--md-income-spend-container) var(--md-resource-hover-base),
     var(--md-income-spend)
   );
 }
@@ -1547,7 +1622,7 @@ button {
   margin: 0;
   padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--rail-colour) 28%, transparent);
-  background: rgb(255 255 255 / 82%);
+  background: color-mix(in srgb, var(--md-surface) 82%, transparent);
   color: var(--md-on-surface);
   font-size: var(--timeline-type-label);
   font-weight: 650;
@@ -1796,7 +1871,7 @@ button {
   align-items: center;
   padding: 0 6px;
   border-color: color-mix(in srgb, var(--rail-colour) 70%, transparent);
-  background-color: rgb(255 255 255 / 92%);
+  background-color: color-mix(in srgb, var(--md-surface) 92%, transparent);
 }
 
 .timeline-rail-artwork {
