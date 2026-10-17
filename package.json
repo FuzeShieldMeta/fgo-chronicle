@@ -8,6 +8,7 @@
     "check": "eslint . && tsc --noEmit",
     "curator:access": "node --env-file=.env scripts/curator-access.mjs",
     "data:import-banners": "node --import tsx --env-file=.env scripts/import-banner-estimates.mjs",
+    "data:sync": "node --import tsx --env-file=.env scripts/sync-event-schedule.mjs --with-banners",
     "data:import-events": "node --env-file=.env scripts/import-events.mjs",
     "data:prepare-event-review": "node --env-file=.env scripts/prepare-event-review.mjs",
     "data:audit-event-coverage": "node --env-file=.env scripts/audit-event-coverage.mjs",

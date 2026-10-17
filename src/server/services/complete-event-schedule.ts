@@ -6,7 +6,7 @@ import {
   type GlobalSourceAuthority,
 } from "./global-source-authority";
 import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
-import { createImportProgress } from "./import-progress";
+import { createImportProgress, type ImportProgress } from "./import-progress";
 import { validateAnnouncementBackfillDays } from "./global-announcement-source";
 import { syncServantCatalogue } from "./servant-catalogue-sync";
 import {
@@ -18,6 +18,7 @@ type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
   announcementBackfillDays?: number;
 };
 type Dependencies = {
+  progress?: ImportProgress;
   runSync?: typeof runEventSchedulePipeline;
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
   syncServants?: typeof syncServantCatalogue;
@@ -33,7 +34,7 @@ export async function runCompleteEventSchedule(
   // Check collection authority before the JP importer can write.
   validateAnnouncementBackfillDays(options.announcementBackfillDays);
   await requireSourceAuthority(database, authority);
-  const progress = createImportProgress();
+  const progress = dependencies.progress ?? createImportProgress();
   let servants: {
     examined: number;
     updated: number;

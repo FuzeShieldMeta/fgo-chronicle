@@ -1,5 +1,6 @@
 import { PrismaClient } from "../generated/prisma/index.js";
 import { runCompleteEventSchedule } from "../src/server/services/complete-event-schedule.js";
+import { runGeneralSync } from "../src/server/services/general-sync.js";
 import { cliSourceAuthority } from "../src/server/services/global-source-authority.js";
 import { validateAnnouncementBackfillDays } from "../src/server/services/global-announcement-source.js";
 import {
@@ -12,6 +13,7 @@ const db = new PrismaClient();
 function parseArguments(values) {
   const options = {
     dryRun: false,
+    withBanners: false,
     asOf: new Date(),
     sourceFile: null,
     warSourceFile: null,
@@ -20,7 +22,9 @@ function parseArguments(values) {
     announcementBackfillDays: /** @type {number | undefined} */ (undefined),
   };
   for (const value of values) {
-    if (value === "--dry-run") {
+    if (value === "--with-banners") {
+      options.withBanners = true;
+    } else if (value === "--dry-run") {
       options.dryRun = true;
     } else if (value.startsWith("--announcement-backfill-days=")) {
       const days = value.slice("--announcement-backfill-days=".length);
@@ -57,11 +61,16 @@ function parseArguments(values) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const report = await runCompleteEventSchedule(
-    db,
-    options,
-    cliSourceAuthority(),
-  );
+  if (options.withBanners && options.dryRun) {
+    console.error(
+      "data:sync does not support --dry-run. Use data:sync-event-schedule -- --dry-run for schedule-only checks.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const report = await (
+    options.withBanners ? runGeneralSync : runCompleteEventSchedule
+  )(db, options, cliSourceAuthority());
   console.log(
     JSON.stringify(
       {
@@ -73,6 +82,7 @@ async function main() {
         globalSources: report.globalSources,
         servants: report.servants,
         servantImages: report.servantImages,
+        ...("banners" in report ? { banners: report.banners } : {}),
       },
       null,
       2,

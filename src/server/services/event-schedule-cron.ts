@@ -6,7 +6,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import type { GlobalSourceAuthority } from "./global-source-authority";
 import { cronSourceAuthority } from "./global-source-authority";
-import { runCompleteEventSchedule } from "./complete-event-schedule";
+import { runGeneralSync } from "./general-sync";
 import type { PrismaClient } from "../../../generated/prisma";
 
 import {
@@ -18,6 +18,13 @@ const stageCount = z.number().int().nonnegative().safe();
 const syncReportSchema = z.object({
   runId: z.string().uuid(),
   importStatus: z.enum(["succeeded", "partial_failure"]),
+  banners: z.object({
+    status: z.literal("success"),
+    examined: stageCount,
+    imported: stageCount,
+    changedBanners: stageCount,
+    servants: stageCount,
+  }),
   servants: z.object({
     status: z.enum(["success", "failed"]),
     examined: stageCount,
@@ -49,8 +56,13 @@ const syncReportSchema = z.object({
 });
 
 type CronDependencies = Pick<
-  NonNullable<Parameters<typeof runCompleteEventSchedule>[3]>,
-  "runSync" | "collectGlobalSources" | "syncServants" | "syncImages"
+  NonNullable<Parameters<typeof runGeneralSync>[3]>,
+  | "runSync"
+  | "collectGlobalSources"
+  | "syncServants"
+  | "syncImages"
+  | "downloadBanners"
+  | "importBanners"
 > & {
   database?: PrismaClient;
   now?: () => Date;
@@ -101,7 +113,7 @@ export async function handleEventScheduleCron(
   let stage = "pipeline";
   try {
     const asOf = new Date(startedAt);
-    const rawReport = await runCompleteEventSchedule(
+    const rawReport = await runGeneralSync(
       dependencies.database ?? db,
       {
         dryRun: false,
@@ -117,12 +129,14 @@ export async function handleEventScheduleCron(
         collectGlobalSources: dependencies.collectGlobalSources,
         syncServants: dependencies.syncServants,
         syncImages: dependencies.syncImages,
+        downloadBanners: dependencies.downloadBanners,
+        importBanners: dependencies.importBanners,
       },
     );
     stage = "summary";
     const parsed = syncReportSchema.parse(rawReport);
     const report = summariseEventSchedule(parsed);
-    const { runId, importStatus, servants, servantImages } = parsed;
+    const { runId, importStatus, servants, servantImages, banners } = parsed;
     const { globalSources } = rawReport;
     stage = "cache";
     let cacheWarmed = true;
@@ -160,6 +174,7 @@ export async function handleEventScheduleCron(
       globalSources,
       servants,
       servantImages,
+      banners,
     };
     const log =
       status === "failed"
@@ -175,6 +190,18 @@ export async function handleEventScheduleCron(
       status === "failed" ? 500 : 200,
     );
   } catch (error) {
+    // Banner publication can have committed before a later schedule stage fails.
+    // Invalidate without warming so those successful writes are not hidden by stale cache.
+    try {
+      await (dependencies.invalidateCache ?? invalidateTimelineCache)();
+    } catch {
+      console.warn(
+        JSON.stringify({
+          event: "event_schedule_cache_invalidation_failed",
+          startedAt,
+        }),
+      );
+    }
     console.error(
       JSON.stringify({
         event: "event_schedule_sync_failed",

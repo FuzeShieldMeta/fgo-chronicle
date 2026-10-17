@@ -6,6 +6,8 @@ import {
 } from "../../../scripts/lib/reward-reconciliation.mjs";
 
 type Stage =
+  | "spreadsheet_download"
+  | "banner_publication"
   | "servant_catalogue"
   | "servant_images"
   | "jp_fandom"
