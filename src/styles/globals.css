@@ -1917,6 +1917,11 @@ button {
   background-color: color-mix(in srgb, var(--md-surface) 92%, transparent);
 }
 
+:root[data-theme="dark"] .timeline-rail-name {
+  border-color: color-mix(in srgb, var(--rail-colour) 75%, var(--md-surface-highest));
+  background: var(--md-surface-highest);
+}
+
 .timeline-rail-artwork {
   display: block;
   width: auto;
