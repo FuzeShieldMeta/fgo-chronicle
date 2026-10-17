@@ -5,7 +5,12 @@ import {
   GLOBAL_ANNOUNCEMENT_MATCHING,
   MILLISECONDS_PER_DAY,
 } from "~/shared/global-reconciliation-config";
-import { bannerFamilyStem } from "./banner-family-association";
+import {
+  bannerFamilyStem,
+  containsBannerTitle,
+  normaliseBannerTitle,
+} from "./banner-family-association";
+import { BANNER_EVENT_IDENTITIES } from "~/shared/banner-event-identities";
 import { normaliseAnnouncementName } from "./global-announcement-match";
 import { publisherArticleUrl } from "./global-announcement-parser";
 import { effectiveBanner } from "./effective-schedule";
@@ -31,6 +36,7 @@ export function matchesSummonBanner(
     startsAt: Date;
     projectedStartsAt: Date;
     featuredNames: string[];
+    familyNames?: readonly string[];
   },
 ) {
   const stem = bannerFamilyStem(banner.name);
@@ -53,9 +59,20 @@ export function matchesSummonBanner(
     (campaignTitle === stem || campaignTitle.endsWith(` ${stem}`)) &&
     /\b(?:rerun|revival)\b/.test(campaignTitle) ===
       /\b(?:rerun|revival)\b/.test(stem);
+  const familyMatch =
+    /^revival\b/u.test(normaliseBannerTitle(banner.name)) ===
+      /^revival\b/u.test(normaliseBannerTitle(period.articleName)) &&
+    banner.familyNames?.some(
+      (name) =>
+        bannerFamilyStem(name) !== null &&
+        containsBannerTitle(name, period.articleName),
+    );
   if (
     !stem ||
-    (!friendPoint && !campaignMatch && !` ${text} `.includes(` ${stem} `))
+    (!friendPoint &&
+      !campaignMatch &&
+      !familyMatch &&
+      !containsBannerTitle(stem, text))
   )
     return false;
   const start = new Date(period.startsAt).getTime();
@@ -118,11 +135,21 @@ export async function publishOfficialBannerDates(
         include: {
           events: {
             where: {
-              type: { in: ["MAIN_EVENT", "CAMPAIGN", "PRE_RELEASE_CAMPAIGN"] },
+              type: {
+                in: [
+                  "MAIN_EVENT",
+                  "CAMPAIGN",
+                  "PRE_RELEASE_CAMPAIGN",
+                  "QUEST_RELEASE",
+                ],
+              },
             },
             select: {
               id: true,
-              curation: { select: { active: true, hidden: true } },
+              sourceKey: true,
+              name: true,
+              globalBaseline: { select: { name: true } },
+              curation: { select: { active: true, hidden: true, name: true } },
             },
           },
         },
@@ -160,6 +187,12 @@ export async function publishOfficialBannerDates(
         name: banner.name,
         startsAt: effectiveBanner(banner).startsAt,
         projectedStartsAt: banner.startsAt,
+        familyNames: banner.family!.events.flatMap((event) => [
+          event.name,
+          ...(event.globalBaseline ? [event.globalBaseline.name] : []),
+          ...(event.curation?.active ? [event.curation.name] : []),
+          ...(BANNER_EVENT_IDENTITIES[event.sourceKey] ?? []),
+        ]),
         featuredNames: banner.featured
           .filter((featured) =>
             /\bfp\s+banner$/i.test(banner.name)
