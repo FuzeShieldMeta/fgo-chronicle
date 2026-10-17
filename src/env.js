@@ -1,5 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
+import { BANNER_SYNC_LIMITS } from "./shared/banner-sync-config.mjs";
 
 export const env = createEnv({
   /**
@@ -14,6 +15,11 @@ export const env = createEnv({
     AUTH_GOOGLE_ID: z.string(),
     AUTH_GOOGLE_SECRET: z.string(),
     CRON_SECRET: z.string().min(16).optional(),
+    BANNER_SPREADSHEET_ID: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .max(BANNER_SYNC_LIMITS.maxTextCharacters)
+      .optional(),
     DATABASE_URL: z.string().url(),
     SITE_URL: z.string().url().optional(),
     SUPABASE_URL: z.string().url().optional(),
@@ -41,6 +47,7 @@ export const env = createEnv({
     AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
     CRON_SECRET: process.env.CRON_SECRET,
+    BANNER_SPREADSHEET_ID: process.env.BANNER_SPREADSHEET_ID,
     DATABASE_URL: process.env.DATABASE_URL,
     SITE_URL: process.env.SITE_URL,
     SUPABASE_URL: process.env.SUPABASE_URL,
