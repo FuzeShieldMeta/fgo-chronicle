@@ -27,6 +27,8 @@ export interface AnnouncementMatchEvent {
   names: readonly string[];
   startsAt: Date;
   projectedStartsAt: Date;
+  // Set only after verifying the shared Atlas event identity, not a title-only alias.
+  verifiedAtlasName?: string;
   campaignComponentId?: string;
 }
 
@@ -94,6 +96,36 @@ export function matchAnnouncementEvent(
       reason: "UNSUPPORTED_EVENT_PERIOD" as const,
     };
 
+  const matchesName = (name: string) =>
+    period.subjectName
+      ? nameInContext(name, period.subjectName)
+      : nameInContext(name, period.context) ||
+        (period.articleNameAllowed !== false &&
+          nameInContext(name, articleName));
+  const verifiedIds = [
+    ...new Set(
+      events
+        .filter(
+          (event) =>
+            announcementEventTypes[period.kind]!.includes(event.type) &&
+            event.verifiedAtlasName !== undefined &&
+            matchesName(event.verifiedAtlasName),
+        )
+        .map((event) => event.id),
+    ),
+  ].sort();
+  if (verifiedIds.length)
+    return {
+      ...base,
+      targetEventId: verifiedIds.length === 1 ? verifiedIds[0]! : null,
+      windowDays: null,
+      candidateIds: verifiedIds,
+      reason:
+        verifiedIds.length === 1
+          ? ("UNIQUE_EVENT_MATCH" as const)
+          : ("AMBIGUOUS_EVENT_MATCH" as const),
+    };
+
   for (const windowDays of RULES.windowDays) {
     const matches = events.filter(
       (event) =>
@@ -103,13 +135,7 @@ export function matchAnnouncementEvent(
             Math.abs(date.getTime() - start) <=
             windowDays * MILLISECONDS_PER_DAY,
         ) &&
-        event.names.some((name) =>
-          period.subjectName
-            ? nameInContext(name, period.subjectName)
-            : nameInContext(name, period.context) ||
-              (period.articleNameAllowed !== false &&
-                nameInContext(name, articleName)),
-        ),
+        event.names.some(matchesName),
     );
     // A verified overall campaign owns its introductory period, not its exchange component.
     const overallMatches =

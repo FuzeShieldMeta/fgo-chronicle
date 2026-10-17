@@ -33,7 +33,7 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
 
 export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   windowDays: [30, 60, 90],
-  revision: 5,
+  revision: 6,
   minNameTokens: 2,
   minNameCharacters: 12,
   minServantNameCharacters: 3,

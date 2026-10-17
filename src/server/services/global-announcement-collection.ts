@@ -357,6 +357,11 @@ export async function collectAnnouncementsWithAuthority(
                   { globalBaseline: { is: { startsAt: range } } },
                   { dateOverlay: { is: { startsAt: range } } },
                   { curation: { is: { active: true, startsAt: range } } },
+                  {
+                    globalCandidates: {
+                      some: { sourceKind: "GLOBAL_GAME_DATA", startsAt: range },
+                    },
+                  },
                 ],
               },
               select: {
@@ -452,6 +457,9 @@ export async function collectAnnouncementsWithAuthority(
                 ],
                 startsAt: effective.startsAt,
                 projectedStartsAt: event.startsAt,
+                ...(alias && assessment?.targetEventId === event.id
+                  ? { verifiedAtlasName: alias }
+                  : {}),
                 ...(regional && component?.targetEventId
                   ? { campaignComponentId: component.targetEventId }
                   : {}),

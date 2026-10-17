@@ -190,6 +190,9 @@ export async function publishAnnouncementFamily(
         ],
         startsAt: current.startsAt,
         projectedStartsAt: anchor.startsAt,
+        ...(alias && atlas?.targetEventId === eventId
+          ? { verifiedAtlasName: alias }
+          : {}),
       },
     ]).targetEventId !== eventId
   )
