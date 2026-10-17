@@ -4,19 +4,34 @@ import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
 import { db } from "~/server/db";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import type { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 import type { GlobalSourceAuthority } from "./global-source-authority";
 import { cronSourceAuthority } from "./global-source-authority";
 import { runCompleteEventSchedule } from "./complete-event-schedule";
 import type { PrismaClient } from "../../../generated/prisma";
 
-import type { runEventSchedulePipeline } from "../../../scripts/lib/event-schedule-pipeline.mjs";
 import {
   safeSyncFailure,
   summariseEventSchedule,
 } from "../../../scripts/lib/event-schedule-monitoring.mjs";
 
+const stageCount = z.number().int().nonnegative().safe();
 const syncReportSchema = z.object({
+  runId: z.string().uuid(),
+  importStatus: z.enum(["succeeded", "partial_failure"]),
+  servants: z.object({
+    status: z.enum(["success", "failed"]),
+    examined: stageCount,
+    updated: stageCount,
+  }),
+  servantImages: z.object({
+    status: z.enum(["success", "failed", "unavailable"]),
+    examined: stageCount,
+    pending: stageCount,
+    uploaded: stageCount,
+    reused: stageCount,
+    updated: stageCount,
+    failed: stageCount,
+  }),
   atlas: z.unknown(),
   masterMissions: z.unknown(),
   fandom: z.object({
@@ -33,14 +48,15 @@ const syncReportSchema = z.object({
   }),
 });
 
-type CronDependencies = {
+type CronDependencies = Pick<
+  NonNullable<Parameters<typeof runCompleteEventSchedule>[3]>,
+  "runSync" | "collectGlobalSources" | "syncServants" | "syncImages"
+> & {
   database?: PrismaClient;
   now?: () => Date;
-  runSync?: typeof runEventSchedulePipeline;
   invalidateCache?: () => void | Promise<void>;
   warmCache?: (asOf: Date) => Promise<void>;
   secret?: string;
-  collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
 };
 
 function invalidateTimelineCache() {
@@ -99,10 +115,14 @@ export async function handleEventScheduleCron(
       {
         runSync: dependencies.runSync,
         collectGlobalSources: dependencies.collectGlobalSources,
+        syncServants: dependencies.syncServants,
+        syncImages: dependencies.syncImages,
       },
     );
     stage = "summary";
-    const report = summariseEventSchedule(syncReportSchema.parse(rawReport));
+    const parsed = syncReportSchema.parse(rawReport);
+    const report = summariseEventSchedule(parsed);
+    const { runId, importStatus, servants, servantImages } = parsed;
     const { globalSources } = rawReport;
     stage = "cache";
     let cacheWarmed = true;
@@ -121,27 +141,39 @@ export async function handleEventScheduleCron(
       );
     }
     const status =
-      report.totals.warningCount > 0 ||
-      !cacheWarmed ||
-      globalSources.atlas.status === "failed" ||
-      globalSources.publisher.status === "failed" ||
-      globalSources.publisher.coverageLimited ||
-      globalSources.publisher.publicationFailures > 0
-        ? "warning"
-        : "success";
+      importStatus === "partial_failure"
+        ? "failed"
+        : report.totals.warningCount > 0 ||
+            !cacheWarmed ||
+            globalSources.publisher.coverageLimited ||
+            servantImages.status === "unavailable"
+          ? "warning"
+          : "success";
     const completion = {
+      runId,
+      importStatus,
       startedAt,
       durationMs: durationMs(),
       status,
       cacheWarmed,
       ...report,
       globalSources,
+      servants,
+      servantImages,
     };
-    const log = status === "warning" ? console.warn : console.info;
+    const log =
+      status === "failed"
+        ? console.error
+        : status === "warning"
+          ? console.warn
+          : console.info;
     log(
       JSON.stringify({ event: `event_schedule_sync_${status}`, ...completion }),
     );
-    return json({ ok: true, ...completion });
+    return json(
+      { ok: status !== "failed", ...completion },
+      status === "failed" ? 500 : 200,
+    );
   } catch (error) {
     console.error(
       JSON.stringify({
