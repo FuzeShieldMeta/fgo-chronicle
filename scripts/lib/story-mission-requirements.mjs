@@ -1,5 +1,35 @@
 import { buildStoryCatalogue } from "./story-catalogue.mjs";
 
+const CHAPTER_START_CONDITION = 32;
+const CHAPTER_START_LOGIC = 1;
+
+/** @param {Record<string, any>} condition @param {number} warId */
+function isChapterStart(condition, warId) {
+  if (
+    condition.condType !== "missionConditionDetail" ||
+    condition.targetNum !== 1 ||
+    condition.targetIds?.length !== 1 ||
+    condition.details?.length !== 1
+  )
+    return false;
+  const detail = condition.details[0];
+  return Boolean(
+    detail &&
+    detail.id === condition.targetIds[0] &&
+    detail.missionCondType === CHAPTER_START_CONDITION &&
+    detail.logicType === CHAPTER_START_LOGIC &&
+    detail.conditionLinkType === "masterMissionStart" &&
+    detail.targetIds?.length === 1 &&
+    detail.targetIds[0] === warId &&
+    Array.isArray(detail.addTargetIds) &&
+    !detail.addTargetIds.length &&
+    Array.isArray(detail.targetQuestIndividualities) &&
+    !detail.targetQuestIndividualities.length &&
+    Array.isArray(detail.targetEventIds) &&
+    !detail.targetEventIds.length,
+  );
+}
+
 /** @param {number} questId @param {Array<Record<string, any>>} wars @param {ReturnType<typeof buildStoryCatalogue>["chapters"]} chapters */
 function chapterForQuest(questId, wars, chapters) {
   return (
@@ -60,7 +90,7 @@ export function storyMissionRequirement(
     return null;
   const clearConditions = (mission.conds ?? []).filter(
     (/** @type {Record<string, any>} */ cond) =>
-      cond.missionProgressType === "clear",
+      cond.missionProgressType === "clear" && cond.condType === "questClear",
   );
   if (clearConditions.length !== 1) return null;
   const condition = clearConditions[0];
@@ -72,6 +102,17 @@ export function storyMissionRequirement(
     return null;
   const chapter = chapterForQuest(condition.targetIds[0], wars, chapters);
   if (!chapter) return null;
+  // Completing a chapter also proves that it has been started. Keep every
+  // other unrecognised clear condition unresolved rather than ignoring it.
+  if (
+    mission.conds.some(
+      (/** @type {Record<string, any>} */ cond) =>
+        cond.missionProgressType === "clear" &&
+        cond !== condition &&
+        !isChapterStart(cond, chapter.warId),
+    )
+  )
+    return null;
   // Unknown additional prerequisites must not be treated as satisfied by story progress.
   const starts = (mission.conds ?? []).filter(
     (/** @type {Record<string, any>} */ cond) =>
@@ -82,21 +123,19 @@ export function storyMissionRequirement(
       (/** @type {Record<string, any>} */ cond) =>
         !["start", "openCondition"].includes(cond.missionProgressType) ||
         cond.condType !== "questClear" ||
-        cond.targetNum !== 1 ||
-        cond.targetIds?.length !== 1 ||
-        !(() => {
-          const prerequisite = chapterForQuest(
-            cond.targetIds[0],
-            wars,
-            chapters,
-          );
+        !Array.isArray(cond.targetIds) ||
+        !cond.targetIds.length ||
+        new Set(cond.targetIds).size !== cond.targetIds.length ||
+        cond.targetNum !== cond.targetIds.length ||
+        !cond.targetIds.every((/** @type {number} */ questId) => {
+          const prerequisite = chapterForQuest(questId, wars, chapters);
           return (
             prerequisite &&
             (prerequisite.warId === chapter.warId ||
               (!prerequisite.optional &&
                 chapters.indexOf(prerequisite) <= chapters.indexOf(chapter)))
           );
-        })(),
+        }),
     )
   )
     return null;
