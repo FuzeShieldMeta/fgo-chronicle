@@ -425,6 +425,11 @@ export function TimelineEntryDetails({
   const details = api.timeline.details.useQuery(input, {
     staleTime: timelineSchedule.detailsStaleTimeMs,
   });
+  const data =
+    details.data?.id === input.id && details.data.kind === input.kind
+      ? details.data
+      : undefined;
+  const waitingForDetails = !data && !details.isError;
   const [failedArtworkUrl, setFailedArtworkUrl] = useState<string | null>(null);
   const [openingRelated, setOpeningRelated] = useState(false);
   const [relatedError, setRelatedError] = useState(false);
@@ -444,7 +449,7 @@ export function TimelineEntryDetails({
     }
   }
 
-  const family = details.data?.family;
+  const family = data?.family;
   const candidateArtworkUrl = family?.artworkReviewedAt
     ? eventArtworkUrl(family)
     : null;
@@ -452,8 +457,7 @@ export function TimelineEntryDetails({
     candidateArtworkUrl,
     failedArtworkUrl,
   );
-  const hasPlanningAction =
-    details.data?.kind === "BANNER" && Boolean(onPlanSummons);
+  const hasPlanningAction = data?.kind === "BANNER" && Boolean(onPlanSummons);
   const closeButton = (
     <button
       type="button"
@@ -547,27 +551,47 @@ export function TimelineEntryDetails({
         </figure>
       ) : null}
 
-      {details.isLoading ? (
-        <p className="timeline-details-message" role="status">
+      {waitingForDetails ? (
+        <p
+          className="timeline-details-message"
+          data-state="loading"
+          role="status"
+        >
           Loading details…
         </p>
       ) : null}
 
       {details.isError ? (
-        <div className="timeline-details-message" role="alert">
-          <p>The details could not load.</p>
+        <div
+          className="timeline-details-message"
+          data-state="error"
+          role="alert"
+        >
+          <p>
+            {data
+              ? "Showing the last loaded details. The update failed."
+              : "The details could not load."}
+          </p>
           <button type="button" onClick={() => details.refetch()}>
-            Try again
+            Retry details
           </button>
         </div>
+      ) : data && details.isFetching ? (
+        <p
+          className="timeline-details-message"
+          data-state="refreshing"
+          role="status"
+        >
+          Updating details…
+        </p>
       ) : null}
 
-      {details.data?.kind === "BANNER" ? (
+      {data?.kind === "BANNER" ? (
         <section className="timeline-detail-section">
           <h4>Featured Servants</h4>
-          {details.data.featured.length > 0 ? (
+          {data.featured.length > 0 ? (
             <FeaturedServantList
-              featured={details.data.featured}
+              featured={data.featured}
               searchQuery={searchQuery}
               onPlanSummons={onPlanSummons}
             />
@@ -577,18 +601,18 @@ export function TimelineEntryDetails({
         </section>
       ) : null}
 
-      {details.data?.kind === "EVENT" ? (
+      {data?.kind === "EVENT" ? (
         <section className="timeline-detail-section">
           <h4>Rewards</h4>
           <EventRewardSummary
-            sources={details.data.rewardSources}
+            sources={data.rewardSources}
             preferences={rewardPreferences}
             profile={profile}
             catalogue={catalogue}
           />
-          {details.data.rewardSources.length > 0 ? (
+          {data.rewardSources.length > 0 ? (
             <ul>
-              {details.data.rewardSources.map((source) => (
+              {data.rewardSources.map((source) => (
                 <li key={source.id}>
                   <span>{englishRewardLabel(source.name)}</span>
                   <small>{formatType(source.type)}</small>
@@ -674,7 +698,7 @@ export function TimelineEntryDetails({
         </section>
       ) : null}
 
-      {details.data && details.data.relatedEntries.length > 0 ? (
+      {data && data.relatedEntries.length > 0 ? (
         <section className="timeline-detail-section">
           <h4>Related schedule</h4>
           {openingRelated ? <p role="status">Loading the timeline…</p> : null}
@@ -684,7 +708,7 @@ export function TimelineEntryDetails({
             </p>
           ) : null}
           <ul>
-            {details.data.relatedEntries.map((related) => (
+            {data.relatedEntries.map((related) => (
               <li key={related.key} className="timeline-related-entry">
                 <button
                   type="button"
@@ -722,20 +746,20 @@ export function TimelineEntryDetails({
               <dd>{entry.sourceRegion}</dd>
             </div>
           </dl>
-          {details.data?.kind === "EVENT" && details.data.globalSourceUrl ? (
+          {data?.kind === "EVENT" && data.globalSourceUrl ? (
             <a
               className="timeline-source-link"
-              href={details.data.globalSourceUrl}
+              href={data.globalSourceUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
               Global game-data source
             </a>
           ) : null}
-          {details.data?.sourceUrl ? (
+          {data?.sourceUrl ? (
             <a
               className="timeline-source-link"
-              href={details.data.sourceUrl}
+              href={data.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
             >

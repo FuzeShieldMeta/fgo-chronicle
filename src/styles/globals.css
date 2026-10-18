@@ -2698,6 +2698,18 @@ button {
   justify-self: start;
 }
 
+.timeline-details-message[data-state] {
+  box-shadow: none;
+}
+
+.timeline-details-message[data-state="loading"] {
+  min-height: calc(var(--timeline-control-height) + 28px);
+}
+
+.timeline-details-message[data-state="error"] {
+  border-inline-start: 3px solid var(--md-error);
+}
+
 .timeline-day-details {
   display: grid;
   align-content: start;

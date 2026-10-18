@@ -111,10 +111,14 @@ export function TimelineDayDetails({
       staleTime: timelineSchedule.detailsStaleTimeMs,
     },
   );
-  const bannerFeatured =
-    details.data?.kind === "BANNER" ? details.data.featured : [];
-  const lineups =
-    details.data?.kind === "BANNER" ? (details.data.summonLineups ?? []) : [];
+  const data =
+    details.data?.kind === "BANNER" && details.data.id === selectedBannerId
+      ? details.data
+      : undefined;
+  const waitingForBanner =
+    Boolean(selectedBannerId) && !data && !details.isError;
+  const bannerFeatured = data?.featured ?? [];
+  const lineups = data?.summonLineups ?? [];
   const activeLineups = lineups.filter((lineup) => {
     const starts = calendarDayKey(lineup.startsAt, "EXACT", timeZone);
     const ends = lineup.endsAt
@@ -351,10 +355,41 @@ export function TimelineDayDetails({
           </select>
         </label>
       ) : null}
-      {details.isLoading && selectedBannerId ? (
-        <p className="summon-helper-text" role="status">
-          Loading featured Servants…
+      {waitingForBanner ? (
+        <p
+          className="timeline-details-message"
+          data-state="loading"
+          role="status"
+        >
+          Loading featured servants…
         </p>
+      ) : null}
+      {selectedBannerId && details.isError ? (
+        <div
+          className="timeline-details-message"
+          data-state="error"
+          role="alert"
+        >
+          <p>
+            {data
+              ? "Showing the last loaded lineup. The update failed."
+              : "Featured servants could not load. You can enter a target manually."}
+          </p>
+          <button type="button" onClick={() => details.refetch()}>
+            Retry campaign details
+          </button>
+        </div>
+      ) : data && details.isFetching ? (
+        <p
+          className="timeline-details-message"
+          data-state="refreshing"
+          role="status"
+        >
+          Updating campaign details…
+        </p>
+      ) : null}
+      {data && featured.length === 0 ? (
+        <p>No featured servants are listed for this campaign.</p>
       ) : null}
 
       {featured.length > 0 ? (
@@ -388,7 +423,7 @@ export function TimelineDayDetails({
             <small>This saved target is not in the current lineup data.</small>
           ) : null}
         </label>
-      ) : selectedBannerId && !details.isLoading ? (
+      ) : selectedBannerId && !waitingForBanner ? (
         <label className="summon-field">
           Target Servant
           <input
@@ -572,6 +607,9 @@ export function TimelineDayDetails({
         </p>
       ) : null}
 
+      {sortedSessions.length === 0 ? (
+        <p>No summons planned for this date.</p>
+      ) : null}
       {sortedSessions.length > 0 ? (
         <section
           className="summon-saved-sessions"
