@@ -1242,6 +1242,7 @@ function TimelineScheduleContent({
             ref={planButtonRef}
             type="button"
             className="timeline-tonal-button timeline-toolbar-action"
+            data-primary-action
             aria-label={
               isChoosingSummonDate
                 ? "Cancel choosing a summon planning date"

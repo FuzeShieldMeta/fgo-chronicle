@@ -79,46 +79,47 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --md-background: #0b1422;
-  --md-on-background: #e3e7ed;
-  --md-surface: #192a40;
-  --md-surface-low: #1d3048;
-  --md-surface-high: #243850;
-  --md-surface-highest: #30465f;
-  --md-on-surface: #e3e7ed;
-  --md-on-surface-variant: #bac4d0;
+  --md-background: #141e2b;
+  --md-on-background: #ccd4df;
+  --md-surface: #1c2a3c;
+  --md-surface-low: #202e40;
+  --md-surface-high: #243449;
+  --md-surface-highest: #293a50;
+  --timeline-rail-label-surface: #394e66;
+  --md-on-surface: #ccd4df;
+  --md-on-surface-variant: #b4bfcd;
   --md-outline: #8c99aa;
-  --md-outline-variant: #465363;
-  --md-primary: #a8c9f4;
+  --md-outline-variant: #354357;
+  --md-primary: #97b5d6;
   --md-on-primary: #102c49;
-  --md-primary-hover: #c5dcfa;
-  --md-primary-container: #294361;
-  --md-on-primary-container: #d5e6ff;
-  --md-secondary: #dfc580;
-  --md-secondary-container: #463c25;
-  --md-on-secondary-container: #f2e1ad;
-  --md-error: #ffb4ba;
-  --md-event: #8ad1d3;
-  --md-event-container: #24484c;
-  --md-summon: #edc477;
-  --md-summon-container: #4d3d21;
-  --md-income: #bdc9fb;
-  --md-income-container: #303d64;
-  --md-income-sq: #9ed1f2;
-  --md-income-sq-container: #203f53;
-  --md-income-ticket: #e9c978;
-  --md-income-ticket-container: #463b22;
-  --md-income-fragment: #b6cee1;
-  --md-income-fragment-container: #2d4050;
-  --md-income-grail: #e7b2c9;
-  --md-income-grail-container: #4d3040;
-  --md-income-lore: #cdbdf4;
-  --md-income-lore-container: #3d3354;
-  --md-income-spend: #ffb4ba;
-  --md-income-spend-container: #532e37;
-  --md-conditional: #ffb4ba;
-  --md-conditional-container: #422c35;
-  --md-attention: #e4bf68;
+  --md-primary-hover: #adc5e0;
+  --md-primary-container: #29415b;
+  --md-on-primary-container: #cbdcf1;
+  --md-secondary: #d6bc7e;
+  --md-secondary-container: #3f3625;
+  --md-on-secondary-container: #dfd0a5;
+  --md-error: #e0a2aa;
+  --md-event: #79b5ba;
+  --md-event-container: #253f43;
+  --md-summon: #d6b66c;
+  --md-summon-container: #433823;
+  --md-income: #abb8de;
+  --md-income-container: #303b56;
+  --md-income-sq: #8fbad7;
+  --md-income-sq-container: #233a4a;
+  --md-income-ticket: #d6b66c;
+  --md-income-ticket-container: #3f3625;
+  --md-income-fragment: #a6bccd;
+  --md-income-fragment-container: #2b3a48;
+  --md-income-grail: #d0a1b7;
+  --md-income-grail-container: #44313d;
+  --md-income-lore: #b6aad6;
+  --md-income-lore-container: #37334c;
+  --md-income-spend: #e0a2aa;
+  --md-income-spend-container: #482e36;
+  --md-conditional: #e0a2aa;
+  --md-conditional-container: #3c2c34;
+  --md-attention: #d6b66c;
   --md-shadow: rgb(0 0 0 / 40%);
   --md-resource-hover-base: 90%;
 }
@@ -503,6 +504,13 @@ button {
     inset 0 0 0 2px var(--md-primary),
     0 2px 2px rgb(0 0 0 / 14%),
     0 3px 1px -2px rgb(0 0 0 / 20%);
+  color: var(--md-on-primary-container);
+}
+
+:root[data-theme="dark"] .timeline-toolbar-action:not([data-primary-action]),
+:root[data-theme="dark"] .timeline-close-button,
+:root[data-theme="dark"] .timeline-search-back {
+  background: var(--md-primary-container);
   color: var(--md-on-primary-container);
 }
 
@@ -1138,6 +1146,25 @@ button {
   background: var(--md-primary-container);
 }
 
+:root[data-theme="dark"] .timeline-date-track[data-choosing-date="true"] .timeline-day {
+  background: var(--md-primary);
+  box-shadow: inset 0 -3px var(--md-on-primary);
+  color: var(--md-on-primary);
+}
+
+:root[data-theme="dark"] .timeline-date-track[data-choosing-date="true"] .timeline-day strong {
+  color: inherit;
+}
+
+:root[data-theme="dark"] .timeline-date-track[data-choosing-date="true"] .timeline-day:hover {
+  background: var(--md-primary-hover);
+}
+
+:root[data-theme="dark"] .timeline-date-track[data-choosing-date="true"] .timeline-day:focus-visible,
+:root[data-theme="dark"] .timeline-date-track[data-choosing-date="true"] .timeline-day[data-selected="true"] {
+  outline-color: var(--md-on-primary);
+}
+
 .timeline-category {
   position: relative;
   border-bottom: 1px solid var(--md-outline-variant);
@@ -1360,6 +1387,14 @@ button {
     var(--md-income-spend-container) var(--md-resource-hover-base),
     var(--md-income-spend)
   );
+}
+
+:root[data-theme="dark"] .timeline-income-cell[data-direction="GAIN"]:not([data-needs-decision="true"]) {
+  border-color: color-mix(in srgb, var(--income-resource-colour) 75%, var(--income-resource-container));
+}
+
+:root[data-theme="dark"] .timeline-income-cell[data-direction="SPEND"]:not([data-needs-decision="true"]) {
+  border-color: color-mix(in srgb, var(--md-income-spend) 75%, var(--md-income-spend-container));
 }
 
 .timeline-income-cell[data-direction="NEUTRAL"] {
@@ -1918,8 +1953,16 @@ button {
 }
 
 :root[data-theme="dark"] .timeline-rail-name {
-  border-color: color-mix(in srgb, var(--rail-colour) 75%, var(--md-surface-highest));
-  background: var(--md-surface-highest);
+  border-color: color-mix(in srgb, var(--rail-colour) 55%, var(--timeline-rail-label-surface));
+  background: var(--timeline-rail-label-surface);
+}
+
+:root[data-theme="dark"] .timeline-rail {
+  border-color: color-mix(in srgb, var(--rail-colour) 28%, transparent);
+}
+
+:root[data-theme="dark"] .timeline-rail::before {
+  border-top-color: color-mix(in srgb, var(--rail-colour) 78%, var(--md-surface));
 }
 
 .timeline-rail-artwork {
