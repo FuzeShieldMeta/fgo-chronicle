@@ -240,6 +240,8 @@ export async function getGlobalCandidateQueue(
         ? { targetEventId: null, bannerDates: { none: {} } }
         : {};
   if (input.source !== "ALL") where.sourceKind = input.source;
+  // Compensation evidence is consumed by reward baselines, not event-date review.
+  where.NOT = { sourceRecordId: { endsWith: ":maintenance" } };
   const [entries, total] = await Promise.all([
     database.globalEventCandidate.findMany({
       where,

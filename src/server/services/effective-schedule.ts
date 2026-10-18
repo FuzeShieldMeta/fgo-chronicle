@@ -235,8 +235,11 @@ export function rewardDateShift(
     curation?: CompatibleOwnership<EventCuration> | null;
     dateOverlay?: ScheduleDateOverlay | null;
   } | null,
-  reward?: Pick<RewardRecord, "expectedAt" | "globalBaseline">,
+  reward?: Pick<RewardRecord, "expectedAt" | "globalBaseline" | "dateBasis">,
 ) {
+  // A confirmed distribution or independently dated reward stays in its family,
+  // but its payment date is not relative to that family's opening.
+  if (reward?.dateBasis === "ABSOLUTE") return 0;
   if (event?.dateOverlay) {
     if (
       event.dateOverlay.startStatus === "OFFICIAL" ||
@@ -264,6 +267,7 @@ export function rewardDateShift(
 }
 
 type RewardRecord = {
+  dateBasis?: "UNKNOWN" | "EVENT_END" | "START_RELATIVE" | "ABSOLUTE";
   itemType: string;
   amount: number;
   expectedAt: Date | null;

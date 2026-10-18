@@ -328,6 +328,9 @@ export async function publishAnnouncementFamily(
     confirmedEndsAt: candidate.endsAt,
     members,
     rewards: rewards.map(({ event, source, reward }) => {
+      const relativeDate =
+        reward.dateBasis === "START_RELATIVE" ||
+        relativeSources.has(source.type);
       const independentDate =
         !!reward.globalBaseline ||
         reward.storyWarId !== null ||
@@ -342,7 +345,7 @@ export async function publishAnnouncementFamily(
             : rewardDateShift(event, reward) +
                 (!reward.dateOverlay &&
                 reward.dateBasis !== "EVENT_END" &&
-                relativeSources.has(source.type) &&
+                relativeDate &&
                 reward.storyWarId === null &&
                 !(
                   reward.curation?.active &&
@@ -359,7 +362,7 @@ export async function publishAnnouncementFamily(
         ).expectedAt,
         dateBasis: independentDate ? "ABSOLUTE" : reward.dateBasis,
         behaviour:
-          relativeSources.has(source.type) && reward.storyWarId === null
+          relativeDate && reward.storyWarId === null
             ? ("EVENT_RELATIVE" as const)
             : ("UNKNOWN" as const),
         ownedDate:

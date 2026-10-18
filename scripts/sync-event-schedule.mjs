@@ -82,6 +82,7 @@ async function main() {
         globalSources: report.globalSources,
         servants: report.servants,
         servantImages: report.servantImages,
+        maintenance: report.maintenance,
         ...("banners" in report ? { banners: report.banners } : {}),
       },
       null,

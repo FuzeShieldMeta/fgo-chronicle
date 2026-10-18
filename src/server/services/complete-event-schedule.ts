@@ -10,6 +10,10 @@ import { createImportProgress, type ImportProgress } from "./import-progress";
 import { validateAnnouncementBackfillDays } from "./global-announcement-source";
 import { syncServantCatalogue } from "./servant-catalogue-sync";
 import {
+  syncMaintenanceCompensation,
+  type MaintenanceReport,
+} from "./maintenance-compensation";
+import {
   syncServantImages,
   type ServantImageReport,
 } from "./servant-image-sync";
@@ -23,6 +27,7 @@ type Dependencies = {
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
   syncServants?: typeof syncServantCatalogue;
   syncImages?: typeof syncServantImages;
+  syncMaintenance?: typeof syncMaintenanceCompensation;
 };
 
 export async function runCompleteEventSchedule(
@@ -119,7 +124,35 @@ export async function runCompleteEventSchedule(
       }),
     );
   }
+  let maintenance: MaintenanceReport;
+  try {
+    maintenance = await progress.stage("maintenance_compensation", () =>
+      (dependencies.syncMaintenance ?? syncMaintenanceCompensation)(
+        database,
+        authority,
+        options,
+      ),
+    );
+  } catch (error) {
+    maintenance = {
+      status: "failed",
+      examined: 0,
+      matched: 0,
+      changed: 0,
+      confirmed: 0,
+      unresolved: 0,
+      failed: 1,
+      coverageLimited: true,
+    };
+    console.warn(
+      JSON.stringify({
+        event: "maintenance_compensation_failed",
+        error: safeSyncFailure(error),
+      }),
+    );
+  }
   const failed =
+    maintenance.status === "failed" ||
     servants.status === "failed" ||
     servantImages.status === "failed" ||
     globalSources.atlas.status === "failed" ||
@@ -130,6 +163,7 @@ export async function runCompleteEventSchedule(
     servants,
     servantImages,
     globalSources,
+    maintenance,
     runId: progress.runId,
     importStatus: failed
       ? ("partial_failure" as const)

@@ -61,6 +61,7 @@ type CronDependencies = Pick<
   | "collectGlobalSources"
   | "syncServants"
   | "syncImages"
+  | "syncMaintenance"
   | "downloadBanners"
   | "importBanners"
 > & {
@@ -129,6 +130,7 @@ export async function handleEventScheduleCron(
         collectGlobalSources: dependencies.collectGlobalSources,
         syncServants: dependencies.syncServants,
         syncImages: dependencies.syncImages,
+        syncMaintenance: dependencies.syncMaintenance,
         downloadBanners: dependencies.downloadBanners,
         importBanners: dependencies.importBanners,
       },
@@ -137,7 +139,7 @@ export async function handleEventScheduleCron(
     const parsed = syncReportSchema.parse(rawReport);
     const report = summariseEventSchedule(parsed);
     const { runId, importStatus, servants, servantImages, banners } = parsed;
-    const { globalSources } = rawReport;
+    const { globalSources, maintenance } = rawReport;
     stage = "cache";
     let cacheWarmed = true;
     try {
@@ -160,6 +162,8 @@ export async function handleEventScheduleCron(
         : report.totals.warningCount > 0 ||
             !cacheWarmed ||
             globalSources.publisher.coverageLimited ||
+            maintenance.coverageLimited ||
+            maintenance.unresolved > 0 ||
             servantImages.status === "unavailable"
           ? "warning"
           : "success";
@@ -172,6 +176,7 @@ export async function handleEventScheduleCron(
       cacheWarmed,
       ...report,
       globalSources,
+      maintenance,
       servants,
       servantImages,
       banners,

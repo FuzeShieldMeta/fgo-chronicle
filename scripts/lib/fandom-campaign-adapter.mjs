@@ -632,7 +632,7 @@ function rewardLabel(itemType, amount) {
 
 /**
  * @param {string} wikitext
- * @param {{pageId: number, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string}} options
+ * @param {{pageId: number, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventSourceStartsAt: string, eventEndsAt: string}} options
  */
 function extractMaintenanceProse(wikitext, options) {
   const results = [];
@@ -653,6 +653,11 @@ function extractMaintenanceProse(wikitext, options) {
     const targeted = /eligible|affected|players? who|masters? who|only/i.test(
       context,
     );
+    const routine =
+      !targeted &&
+      !/emergency|unscheduled|extended|extension|additional|extra compensation/i.test(
+        `${heading}\n${context}`,
+      );
     const range = firstRange(section);
     const identity = rowIdentity(`${heading}\n${context}`);
     const sourceKey = `fandom:JP:page:${options.pageId}:maintenance:${identity}:projection:NA`;
@@ -669,10 +674,21 @@ function extractMaintenanceProse(wikitext, options) {
         sourceKey: `${sourceKey}:${reward.itemType.toLowerCase()}`,
         itemType: reward.itemType,
         amount: reward.amount,
-        expectedAt: range
-          ? addCalendarYears(range.end, 2).toISOString()
-          : options.eventEndsAt,
-        dateBasis: range ? "ABSOLUTE" : "UNKNOWN",
+        expectedAt:
+          routine && reward.itemType === "SAINT_QUARTZ"
+            ? addCalendarYears(
+                new Date(options.eventSourceStartsAt),
+                2,
+              ).toISOString()
+            : range
+              ? addCalendarYears(range.end, 2).toISOString()
+              : options.eventEndsAt,
+        dateBasis:
+          routine && reward.itemType === "SAINT_QUARTZ"
+            ? "START_RELATIVE"
+            : range
+              ? "ABSOLUTE"
+              : "UNKNOWN",
         nature: targeted ? "CONDITIONAL" : "DETERMINISTIC",
         eligibility: targeted ? context : null,
         defaultIncluded: !targeted,
@@ -1176,6 +1192,14 @@ export function extractFandomRewardSources(wikitext, options) {
             : `${baseIdentity}-${rowIdentity(cells.join("\n"))}`;
         const sourceKey = `fandom:JP:page:${options.pageId}:${stableSlug(table.heading)}:${identity}:projection:NA`;
         const isMaintenance = type === "MAINTENANCE";
+        const routineMaintenance =
+          isMaintenance &&
+          !/emergency|unscheduled|extended|extension|additional|extra compensation|eligible|affected|players? who|masters? who|only/i.test(
+            `${table.headingPath}\n${eligibility}`,
+          );
+        const firstDayMaintenance =
+          routineMaintenance &&
+          rewards.every((reward) => reward.itemType === "SAINT_QUARTZ");
         const isPermanentMission =
           type === "MASTER_MISSION" && /permanent/i.test(table.headingPath);
         const isPermanentQuestReward =
@@ -1197,9 +1221,12 @@ export function extractFandomRewardSources(wikitext, options) {
             sourceKey: `${sourceKey}:${reward.itemType.toLowerCase()}`,
             itemType: reward.itemType,
             amount: reward.amount,
-            expectedAt,
-            dateBasis:
-              isPermanentMission || invalidExchangePeriod
+            expectedAt: firstDayMaintenance
+              ? addCalendarYears(sourceStart, 2).toISOString()
+              : expectedAt,
+            dateBasis: firstDayMaintenance
+              ? "START_RELATIVE"
+              : isPermanentMission || invalidExchangePeriod
                 ? "UNKNOWN"
                 : type !== "LOGIN_BONUS" &&
                     !isMaintenance &&
@@ -1221,7 +1248,7 @@ export function extractFandomRewardSources(wikitext, options) {
             reviewedAt: null,
           })),
         });
-        if (!expectedSourceDate) {
+        if (!expectedSourceDate && !firstDayMaintenance) {
           dateWarnings.add(
             missionDate?.present
               ? `${table.heading} has an ambiguous, invalid or out-of-event mission period. The projected event end date was used.`

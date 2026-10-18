@@ -10,6 +10,7 @@ type Stage =
   | "banner_publication"
   | "servant_catalogue"
   | "servant_images"
+  | "maintenance_compensation"
   | "jp_fandom"
   | "atlas_global"
   | "atlas_global_recent"

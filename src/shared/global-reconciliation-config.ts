@@ -1,5 +1,15 @@
 export const MILLISECONDS_PER_DAY = 86_400_000;
 
+export const MAINTENANCE_SOURCE_LIMITS = {
+  maxIndexPages: 8,
+  maxArticles: 120,
+  concurrency: 4,
+  maxQuartz: 100,
+  collectionTimeoutMs: 60_000,
+  projectionYears: 2,
+  maxEvents: 1_000,
+} as const;
+
 // Shared limits for the curator UI and Global source collector. No server secrets.
 export const GLOBAL_SOURCE_LIMITS = {
   defaultRangeDays: 35,
