@@ -111,6 +111,7 @@ describe("bannerRouter.upcoming", () => {
     expect(database.banner.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          hidden: false,
           OR: [
             { startsAt: { gte: from, lte: to } },
             { dateOverlay: { is: { startsAt: { gte: from, lte: to } } } },
@@ -237,7 +238,7 @@ describe("bannerRouter.bannersForServant", () => {
     expect(result.banners[1]?.featured[0]?.soloRateUp).toBe(false);
     expect(database.banner.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { featured: { some: { servantId: servant.id } } },
+        where: { hidden: false, featured: { some: { servantId: servant.id } } },
       }),
     );
   });

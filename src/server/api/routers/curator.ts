@@ -37,8 +37,84 @@ import {
   collectAnnouncements,
   collectAnnouncementsSchema,
 } from "~/server/services/global-announcement-collection";
+import {
+  bannerVisibilitySchema,
+  curatorBannerListSchema,
+  curatorBannerPageSize,
+  saveBannerVisibility,
+} from "~/server/services/curator-banner-visibility";
 
 export const curatorRouter = createTRPCRouter({
+  banners: curatorProcedure
+    .input(curatorBannerListSchema)
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.db.banner.findMany({
+        where: {
+          ...(input.visibility === "ALL"
+            ? {}
+            : { hidden: input.visibility === "HIDDEN" }),
+          ...(input.search
+            ? {
+                OR: [
+                  {
+                    name: {
+                      contains: input.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    featured: {
+                      some: {
+                        servant: {
+                          name: {
+                            contains: input.search,
+                            mode: "insensitive" as const,
+                          },
+                        },
+                      },
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          hidden: true,
+          updatedAt: true,
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          sourceRegion: true,
+        },
+        orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+        skip: input.page * curatorBannerPageSize,
+        take: curatorBannerPageSize + 1,
+      });
+      return {
+        rows: rows.slice(0, curatorBannerPageSize),
+        hasMore: rows.length > curatorBannerPageSize,
+      };
+    }),
+  setBannerVisibility: curatorProcedure
+    .input(bannerVisibilitySchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await saveBannerVisibility(
+        ctx.db,
+        ctx.session.user.id,
+        input,
+      );
+      try {
+        if (result.changed) revalidateTag("timeline-public-data");
+        return { ...result, cacheInvalidated: true };
+      } catch {
+        console.warn(
+          "Banner visibility was saved, but the timeline cache could not refresh.",
+        );
+        return { ...result, cacheInvalidated: false };
+      }
+    }),
   collectAnnouncements: curatorProcedure
     .input(collectAnnouncementsSchema)
     .mutation(async ({ ctx, input }) => {
@@ -210,7 +286,7 @@ export const curatorRouter = createTRPCRouter({
     .input(
       z
         .object({
-          targetKind: z.enum(["EVENT", "REWARD", "FAMILY"]),
+          targetKind: z.enum(["EVENT", "REWARD", "FAMILY", "BANNER"]),
           targetId: z.string().min(1).max(100),
           page: z.number().int().min(0).max(10000).default(0),
         })

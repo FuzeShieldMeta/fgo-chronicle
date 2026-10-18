@@ -215,6 +215,7 @@ const relatedEventSelect = {
 } as const;
 
 const relatedBannerSelect = {
+  hidden: true,
   dateOverlay: publicBannerDateOverlaySelect,
   id: true,
   name: true,
@@ -235,6 +236,7 @@ const familyDetailSelect = {
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
   },
   banners: {
+    where: { hidden: false },
     select: relatedBannerSelect,
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
   },
@@ -365,6 +367,7 @@ function restoreCacheInput(input: CachedTimelineListInput): TimelineListInput {
 
 function commonWhere(input: TimelineListInput) {
   return {
+    hidden: false,
     OR: [
       intervalWhere(input.from, input.to),
       { dateOverlay: { is: intervalWhere(input.from, input.to) } },
@@ -686,7 +689,7 @@ async function getCuratorRevision() {
   // Keep this outside unstable_cache: missed tag invalidation must not hide edits.
   // Audit rows are appended in the same transaction as corrections and resets.
   return db.curatorChange.count({
-    where: { targetKind: { in: ["EVENT", "REWARD", "FAMILY"] } },
+    where: { targetKind: { in: ["EVENT", "REWARD", "FAMILY", "BANNER"] } },
   });
 }
 

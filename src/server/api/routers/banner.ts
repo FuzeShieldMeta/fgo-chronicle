@@ -91,6 +91,7 @@ export const bannerRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const banners = await ctx.db.banner.findMany({
         where: {
+          hidden: false,
           OR: [
             { startsAt: { gte: input.from, lte: input.to } },
             {
@@ -194,6 +195,7 @@ export const bannerRouter = createTRPCRouter({
 
       const banners = await ctx.db.banner.findMany({
         where: {
+          hidden: false,
           featured: {
             some: {
               servantId: input.servantId,
