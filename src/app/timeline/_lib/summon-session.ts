@@ -59,6 +59,17 @@ export type SummonSessionDraft = z.infer<typeof summonSessionDraftSchema>;
 export type SummonSession = z.infer<typeof summonSessionSchema>;
 export type SummonSessionStatus = SummonSession["status"];
 
+export function compareSummonSessions(
+  left: SummonSession,
+  right: SummonSession,
+) {
+  return (
+    left.day.localeCompare(right.day) ||
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 export const summonSessionsStorageKey = "fgo-chronicle:summon-sessions:v1";
 
 type SessionIdentity = {

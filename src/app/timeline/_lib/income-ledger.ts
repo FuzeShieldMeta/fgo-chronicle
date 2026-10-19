@@ -23,7 +23,7 @@ import {
   calculateSummonCost,
   type SummonSpendInput,
 } from "~/app/timeline/_lib/summon-cost";
-import type { SummonSession } from "~/app/timeline/_lib/summon-session";
+import { compareSummonSessions, type SummonSession } from "./summon-session";
 
 export const incomeResourceLabels: Record<ForecastResourceType, string> = {
   SAINT_QUARTZ: "Saint Quartz",
@@ -409,12 +409,7 @@ export function buildIncomeLedger(
   }
 
   const sessionChanges = [...summonSessions]
-    .sort(
-      (left, right) =>
-        left.day.localeCompare(right.day) ||
-        left.createdAt.localeCompare(right.createdAt) ||
-        left.id.localeCompare(right.id),
-    )
+    .sort(compareSummonSessions)
     .flatMap(summonSessionResourceChanges);
 
   for (const change of sessionChanges) {
@@ -485,7 +480,7 @@ export function buildIncomeLedger(
 }
 
 export function forecastBalancesOnDay(
-  cells: Map<string, IncomeLedgerCell>,
+  cells: ReadonlyMap<string, IncomeLedgerCell>,
   profile: PlayerForecastProfile | null,
   forecastStartDay: string,
   day: string,
@@ -510,6 +505,65 @@ export function forecastBalancesOnDay(
   }
 
   return balances;
+}
+
+/** Day income precedes sessions; sessions then spend in the ledger's order. */
+export function summonSessionBalances({
+  cells,
+  sessions,
+  profile,
+  fromDay,
+  throughDay,
+}: {
+  cells: ReadonlyMap<string, IncomeLedgerCell>;
+  sessions: readonly SummonSession[];
+  profile: PlayerForecastProfile | null;
+  fromDay: string;
+  throughDay: string;
+}) {
+  type Balances = ReturnType<typeof forecastBalancesOnDay>;
+  const result = new Map<string, { before: Balances; after: Balances }>();
+  const effectiveProfile =
+    profile ?? createDefaultPlayerForecastProfile(fromDay);
+  const effectiveDate = effectiveProfile.snapshot.effectiveDate;
+  const orderedCells = [...cells.values()]
+    .filter((cell) => cell.day >= effectiveDate && cell.closingBalance !== null)
+    .sort((left, right) => left.day.localeCompare(right.day));
+  const closingBalances = { ...effectiveProfile.snapshot.balances };
+  let cellIndex = 0;
+  let currentDay: string | null = null;
+  let balances = { ...closingBalances };
+  for (const session of [...sessions].sort(compareSummonSessions)) {
+    if (
+      session.day < fromDay ||
+      session.day < effectiveDate ||
+      session.day > throughDay
+    )
+      continue;
+    if (currentDay !== session.day) {
+      currentDay = session.day;
+      while (
+        cellIndex < orderedCells.length &&
+        orderedCells[cellIndex]!.day <= session.day
+      ) {
+        const cell = orderedCells[cellIndex++]!;
+        closingBalances[cell.itemType] = cell.closingBalance!;
+      }
+      balances = { ...closingBalances };
+      // Closing balances already include every session on this day. Undo the
+      // day's session deltas, retaining its income and the snapshot-day rule.
+      for (const resource of forecastResourceTypes) {
+        balances[resource] -=
+          cells.get(cellKey(session.day, resource))?.sessionDelta ?? 0;
+      }
+    }
+    const before = { ...balances };
+    for (const change of summonSessionResourceChanges(session)) {
+      balances[change.itemType] += change.amount;
+    }
+    result.set(session.id, { before, after: { ...balances } });
+  }
+  return result;
 }
 
 export function findEarliestAffordableSummonDay(
