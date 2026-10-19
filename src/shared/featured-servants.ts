@@ -2,6 +2,7 @@ export type FeaturedServant = {
   id: number;
   name: string;
   rarity: number | null;
+  className?: string;
   thumbnailUrl?: string | null;
   atlasNaAvailable?: boolean | null;
 };

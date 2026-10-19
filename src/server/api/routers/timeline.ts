@@ -787,6 +787,45 @@ const cachedSearchIndex = unstable_cache(
 );
 
 export const timelineRouter = createTRPCRouter({
+  servants: publicProcedure
+    .input(
+      z
+        .object({
+          ids: z
+            .array(
+              z
+                .number()
+                .int()
+                .positive()
+                .max(plannerChangesLimits.maximumServantId),
+            )
+            .min(1)
+            .max(plannerChangesLimits.servantLookupBatchSize),
+        })
+        .strict(),
+    )
+    .query(async ({ ctx, input }) => {
+      try {
+        const servants = await ctx.db.servant.findMany({
+          where: { id: { in: [...new Set(input.ids)] } },
+          select: {
+            id: true,
+            name: true,
+            className: true,
+            rarity: true,
+            faceId: true,
+            thumbnailPath: true,
+            atlasNaAvailable: true,
+          },
+        });
+        return servants.map(withServantThumbnail);
+      } catch {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Servant details could not load.",
+        });
+      }
+    }),
   rewardChoices: publicProcedure
     .input(
       z
