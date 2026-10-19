@@ -1679,8 +1679,7 @@ button {
   padding-inline: 3px;
 }
 
-.timeline-personal-markers i,
-.timeline-change-key [data-change]::before {
+.timeline-personal-markers i {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -1688,8 +1687,7 @@ button {
   background: var(--md-personal-reward);
 }
 
-.timeline-personal-markers [data-change="summon"],
-.timeline-change-key [data-change="summon"]::before {
+.timeline-personal-markers [data-change="summon"] {
   border-radius: 50%;
   background: var(--md-personal-summon);
 }
@@ -1723,25 +1721,6 @@ button {
   z-index: 1;
 }
 
-.timeline-change-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
-  font-size: var(--timeline-type-label);
-  color: var(--md-on-surface-variant);
-}
-
-.timeline-change-key [data-change] {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.timeline-change-key [data-change]::before {
-  content: "";
-}
-
 .timeline-detail-section .timeline-change-row {
   border-inline-start: 3px solid var(--md-personal-reward);
   overflow-wrap: anywhere;
@@ -1751,6 +1730,119 @@ button {
 .timeline-detail-section .timeline-change-row[data-change="summon"] {
   padding: 0;
   border-inline-start-color: var(--md-personal-summon);
+}
+
+.timeline-change-summon-heading {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.timeline-change-servant {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: var(--timeline-control-height);
+  color: var(--md-on-surface);
+  text-decoration: none;
+}
+
+.timeline-change-servant small,
+.timeline-change-campaign,
+.timeline-change-plan-actions > span,
+.timeline-change-summon-heading > small {
+  color: var(--md-on-surface-variant);
+}
+
+.timeline-change-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.timeline-change-plan-actions > span {
+  min-width: 0;
+  flex: 1 1 10rem;
+}
+
+.timeline-change-plan-actions > button {
+  flex: 0 0 auto;
+  min-height: var(--timeline-control-height);
+  padding-inline: 12px;
+  font-size: var(--timeline-type-dense);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.timeline-change-summon-resources {
+  padding: 0 12px 12px;
+}
+
+.timeline-change-summon-resources .summon-helper-text {
+  margin: 0 0 12px;
+}
+
+.timeline-detail-section .timeline-change-balances {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border-top: 1px solid var(--md-outline-variant);
+  padding-top: 8px;
+}
+
+.timeline-change-balances > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.timeline-change-balances dt,
+.timeline-change-balances dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.timeline-change-balances [data-resource="SAINT_QUARTZ"] dt {
+  color: var(--md-income-sq);
+}
+
+.timeline-change-balances [data-resource="SUMMON_TICKET"] dt {
+  color: var(--md-income-ticket);
+}
+
+.timeline-change-balances [data-resource="SAINT_QUARTZ_FRAGMENT"] dt {
+  color: var(--md-income-fragment);
+}
+
+.timeline-change-balances dd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 2px 12px;
+  text-align: end;
+}
+
+.timeline-change-balance-values {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.timeline-change-balances small {
+  color: var(--md-on-surface-variant);
+}
+
+.timeline-change-balances [data-shortfall="true"] {
+  color: var(--md-error);
 }
 
 .servant-thumbnail {

@@ -1,15 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { RewardPreferences } from "../_lib/reward-preferences";
-import type { SummonSession } from "../_lib/summon-session";
+import {
+  compareSummonSessions,
+  type SummonSession,
+} from "../_lib/summon-session";
 import { calculateSummonCost } from "../_lib/summon-cost";
-import { incomeResourceLabels } from "../_lib/income-ledger";
+import {
+  incomeResourceLabels,
+  summonSessionBalances,
+} from "../_lib/income-ledger";
 import type { IncomeLedgerCell } from "../_lib/income-ledger";
 import { englishRewardLabel } from "../_lib/reward-labels";
 import { calendarDayKey } from "../_lib/schedule-layout";
 import type { RewardChoiceDetails } from "./use-reward-choice-details";
 import type { TimelineSearchEntry } from "~/shared/timeline-search";
+import {
+  servantAtlasUrl,
+  type FeaturedServant,
+} from "~/shared/featured-servants";
+import type { PlayerForecastProfile } from "../_lib/player-forecast";
+import { ServantThumbnail } from "./servant-thumbnail";
+import { timelineLayout } from "../_lib/timeline-layout-config";
+
+const planDateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 export function PlannerChangesDetails({
   sessions,
@@ -17,6 +37,10 @@ export function PlannerChangesDetails({
   rewards,
   ledgerCells,
   entries = [],
+  servants = [],
+  servantLookupFailed = false,
+  onRetryServants,
+  forecast,
   status,
   timeZone,
   fromDay,
@@ -31,10 +55,18 @@ export function PlannerChangesDetails({
   preferences: RewardPreferences;
   rewards: readonly RewardChoiceDetails[];
   ledgerCells: ReadonlyMap<string, IncomeLedgerCell>;
-  entries?: readonly Pick<
+  entries?: readonly (Pick<
     TimelineSearchEntry,
     "key" | "name" | "startsAt" | "startsAtPrecision"
-  >[];
+  > & { featuredServants?: readonly FeaturedServant[] })[];
+  servants?: readonly FeaturedServant[];
+  servantLookupFailed?: boolean;
+  onRetryServants?: () => void;
+  forecast?: {
+    ready: boolean;
+    throughDay: string;
+    profile: PlayerForecastProfile | null;
+  };
   status: "loading" | "ready" | "error";
   timeZone: string;
   fromDay: string;
@@ -49,8 +81,29 @@ export function PlannerChangesDetails({
 }) {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState(false);
+  const sessionBalances = useMemo(
+    () =>
+      forecast?.ready
+        ? summonSessionBalances({
+            cells: ledgerCells,
+            sessions,
+            profile: forecast.profile,
+            fromDay,
+            throughDay: forecast.throughDay,
+          })
+        : new Map<string, never>(),
+    [
+      ledgerCells,
+      sessions,
+      forecast?.ready,
+      forecast?.profile,
+      forecast?.throughDay,
+      fromDay,
+    ],
+  );
   const metadata = new Map(rewards.map((reward) => [reward.id, reward]));
   const events = new Map(entries.map((entry) => [entry.key, entry]));
+  const servantById = new Map(servants.map((servant) => [servant.id, servant]));
   // Keep loaded rewards readable even when the metadata request fails.
   for (const cell of ledgerCells.values()) {
     for (const reward of cell.contributions) {
@@ -115,60 +168,208 @@ export function PlannerChangesDetails({
         Your saved summon sessions and reward choices. Starting balances are
         under Balances.
       </p>
-      <div className="timeline-change-key">
-        <span data-change="reward">Reward choice</span>
-        <span data-change="summon">Summon session</span>
-      </div>
       {opening ? <p role="status">Opening the timeline…</p> : null}
       {error ? <p role="alert">This entry could not open. Try again.</p> : null}
       <section className="timeline-detail-section">
         <h4>Summons ({sessions.length})</h4>
+        {servantLookupFailed ? (
+          <div className="timeline-details-message" role="alert">
+            <p>
+              Some servant details could not load. Your plans are still saved.
+            </p>
+            {onRetryServants ? (
+              <button type="button" onClick={onRetryServants}>
+                Retry servant details
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {sessions.length ? (
+          <p>
+            Balances include income and earlier plans. Same-day plans use
+            creation order.
+          </p>
+        ) : null}
         {sessions.length ? (
           <ul>
-            {[...sessions]
-              .sort(
-                (a, b) =>
-                  a.day.localeCompare(b.day) || a.id.localeCompare(b.id),
-              )
-              .map((session) => {
-                const cost = calculateSummonCost({
-                  ...session.spending,
-                  startingBonusCount: session.startingBonusCount,
-                });
-                const outsideTimeline =
-                  session.day < fromDay || session.day > throughDay;
-                return (
-                  <li
-                    key={session.id}
-                    className="timeline-change-row"
-                    data-change="summon"
-                  >
-                    <button
-                      type="button"
-                      className="timeline-related-entry-button"
-                      disabled={opening || outsideTimeline}
-                      onClick={() => void open(() => onOpenSession(session))}
-                    >
-                      <strong>{session.target.name}</strong>
-                      <span>{session.banner.name}</span>
-                      <small>
-                        {session.day} ·{" "}
-                        {session.day < fromDay ? "Past plan" : "Planned"}
-                      </small>
-                      {outsideTimeline ? (
-                        <small>Outside the current timeline</small>
-                      ) : null}
-                      <small>
+            {[...sessions].sort(compareSummonSessions).map((session) => {
+              const cost = calculateSummonCost({
+                ...session.spending,
+                startingBonusCount: session.startingBonusCount,
+              });
+              const outsideTimeline =
+                session.day < fromDay || session.day > throughDay;
+              const balances = sessionBalances.get(session.id);
+              const banner = events.get(`banner:${session.banner.id}`);
+              const servant =
+                (session.target.servantId === null
+                  ? undefined
+                  : servantById.get(session.target.servantId)) ??
+                banner?.featuredServants?.find(
+                  (servant) => servant.id === session.target.servantId,
+                );
+              const servantUrl = servant ? servantAtlasUrl(servant) : null;
+              const identity = (
+                <>
+                  <ServantThumbnail
+                    url={servant?.thumbnailUrl}
+                    size={timelineLayout.servantDetailsThumbnailSize}
+                  />
+                  <span className="timeline-servant-description">
+                    <span>{session.target.name}</span>
+                    {servant?.className ? (
+                      <small>{servant.className}</small>
+                    ) : null}
+                  </span>
+                </>
+              );
+              return (
+                <li
+                  key={session.id}
+                  className="timeline-change-row"
+                  data-change="summon"
+                >
+                  <div className="timeline-change-summon-heading">
+                    {servantUrl ? (
+                      <a
+                        className="timeline-servant-link timeline-change-servant"
+                        href={servantUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${session.target.name} - Atlas Academy Servant Page (opens in a new tab)`}
+                      >
+                        {identity}
+                      </a>
+                    ) : (
+                      <div className="timeline-change-servant">{identity}</div>
+                    )}
+                    <span className="timeline-change-campaign">
+                      {session.banner.name}
+                    </span>
+                    <div className="timeline-change-plan-actions">
+                      <span>
+                        <time dateTime={session.day}>
+                          {planDateFormatter.format(
+                            new Date(`${session.day}T00:00:00Z`),
+                          )}
+                        </time>{" "}
+                        · {cost.totalResults.toLocaleString("en")} summons
+                      </span>
+                      <button
+                        type="button"
+                        className="timeline-tonal-button"
+                        disabled={opening || outsideTimeline}
+                        aria-label={`Edit plan for ${session.target.name} on ${session.day}`}
+                        onClick={() => void open(() => onOpenSession(session))}
+                      >
+                        Edit plan
+                      </button>
+                    </div>
+                    {outsideTimeline ? (
+                      <small>Outside the current timeline</small>
+                    ) : null}
+                  </div>
+                  <div className="timeline-change-summon-resources">
+                    {!balances ? (
+                      <p className="summon-helper-text">
                         {cost.quartzSpent.toLocaleString("en")} SQ ·{" "}
                         {cost.ticketsSpent.toLocaleString("en")} tickets
                         {cost.fragmentsConverted
                           ? ` · ${cost.fragmentsConverted.toLocaleString("en")} fragments converted`
                           : ""}
-                      </small>
-                    </button>
-                  </li>
-                );
-              })}
+                      </p>
+                    ) : null}
+                    {balances ? (
+                      <dl
+                        className="timeline-change-balances"
+                        aria-label={`Resources for ${session.target.name}`}
+                      >
+                        {(
+                          [
+                            [
+                              "SAINT_QUARTZ",
+                              "SQ",
+                              [
+                                cost.quartzFromFragments
+                                  ? `+${cost.quartzFromFragments.toLocaleString("en")} converted`
+                                  : null,
+                                cost.quartzSpent
+                                  ? `−${cost.quartzSpent.toLocaleString("en")} spent`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · "),
+                            ],
+                            [
+                              "SUMMON_TICKET",
+                              "Tickets",
+                              cost.ticketsSpent
+                                ? `−${cost.ticketsSpent.toLocaleString("en")} spent`
+                                : null,
+                            ],
+                            [
+                              "SAINT_QUARTZ_FRAGMENT",
+                              "Fragments",
+                              cost.fragmentsConverted
+                                ? `−${cost.fragmentsConverted.toLocaleString("en")} converted`
+                                : null,
+                            ],
+                          ] as const
+                        ).map(([resource, label, spending]) => (
+                          <div key={resource} data-resource={resource}>
+                            <dt>{label}</dt>
+                            <dd>
+                              <span className="timeline-change-balance-values">
+                                <span>
+                                  <span className="sr-only">Before: </span>
+                                  {balances.before[resource].toLocaleString(
+                                    "en",
+                                  )}
+                                </span>
+                                <span aria-hidden="true">→</span>
+                                <span
+                                  data-shortfall={
+                                    balances.after[resource] < 0
+                                      ? "true"
+                                      : undefined
+                                  }
+                                >
+                                  <span className="sr-only">After: </span>
+                                  {balances.after[resource].toLocaleString(
+                                    "en",
+                                  )}
+                                </span>
+                              </span>
+                              {spending ? <small>{spending}</small> : null}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="summon-helper-text">
+                        {session.day < fromDay ||
+                        session.day <
+                          (forecast?.profile?.snapshot.effectiveDate ?? fromDay)
+                          ? "Before/after balances are unavailable before the forecast starting point."
+                          : session.day > throughDay
+                            ? "Before/after balances are outside the current forecast."
+                            : "Before/after balances will appear when forecast income has loaded."}
+                      </p>
+                    )}
+                    {balances &&
+                    [
+                      balances.after.SAINT_QUARTZ,
+                      balances.after.SUMMON_TICKET,
+                      balances.after.SAINT_QUARTZ_FRAGMENT,
+                    ].some((value) => value < 0) ? (
+                      <p className="summon-affordability-note">
+                        Resource shortfall after this plan.
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p>No summon sessions saved.</p>

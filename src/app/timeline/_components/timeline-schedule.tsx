@@ -53,6 +53,7 @@ import {
 import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
 import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
 import { useForecastHistory } from "./use-forecast-history";
+import { useServantDetails } from "./use-servant-details";
 import {
   buildIncomeLedger,
   findEarliestAffordableSummonDay,
@@ -502,6 +503,13 @@ function TimelineScheduleContent({
   const forecastReady = forecastHistory.ready;
   const rewardChoices = useRewardChoiceDetails(
     Object.keys(rewardPreferences.includedByRewardId),
+  );
+  const planServants = useServantDetails(
+    changesPanelOpen
+      ? summonSessions.flatMap((session) =>
+          session.target.servantId === null ? [] : [session.target.servantId],
+        )
+      : [],
   );
   const timelineLoadingComplete = loadedTimeline.throughDay === scheduleEndDay;
 
@@ -1656,7 +1664,15 @@ function TimelineScheduleContent({
               sessions={summonSessions}
               preferences={rewardPreferences}
               rewards={rewardChoices.items}
+              servants={planServants.items}
+              servantLookupFailed={planServants.failed}
+              onRetryServants={planServants.retry}
               ledgerCells={view.incomeCells}
+              forecast={{
+                ready: forecastReady,
+                throughDay: loadedTimeline.throughDay,
+                profile: playerProfile,
+              }}
               entries={entries}
               status={rewardChoices.status}
               timeZone={calendar.timeZone}
