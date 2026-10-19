@@ -85,7 +85,7 @@ export function SummonPlanPanel({
       const withoutFragments = calculateSummonCost({
         ...spending,
         fragmentsConverted: 0,
-        startingBonusCount: 0,
+        startingBonusCount: spending.startingBonusCount,
       });
       const fragmentsConverted = spending.autoConvertFragments
         ? automaticFragmentConversion({
@@ -93,11 +93,11 @@ export function SummonPlanPanel({
             quartzAvailable: previewBalances.SAINT_QUARTZ,
             fragmentsAvailable: previewBalances.SAINT_QUARTZ_FRAGMENT,
           })
-        : 0;
+        : spending.fragmentsConverted;
       return calculateSummonCost({
         ...spending,
         fragmentsConverted,
-        startingBonusCount: 0,
+        startingBonusCount: spending.startingBonusCount,
       });
     } catch {
       return null;
@@ -116,7 +116,9 @@ export function SummonPlanPanel({
       }
     : null;
   const paidSingles = spending.quartzSingles + spending.tickets;
-  const singleBonuses = Math.floor(paidSingles / 10);
+  const singleBonuses = Math.floor(
+    (paidSingles + spending.startingBonusCount) / 10,
+  );
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,7 +142,7 @@ export function SummonPlanPanel({
           guaranteedEligible: target.guaranteedEligible,
         },
         startingGuaranteedCount: target.startingGuaranteedCount,
-        startingBonusCount: 0,
+        startingBonusCount: spending.startingBonusCount,
         spending: {
           multis: spending.multis,
           quartzSingles: spending.quartzSingles,
@@ -282,6 +284,7 @@ export function SummonPlanPanel({
             onSpendingChange({
               ...spending,
               autoConvertFragments: event.target.checked,
+              fragmentsConverted: 0,
             })
           }
         />

@@ -59,6 +59,7 @@ import {
   forecastBalancesOnDay,
   incomeResourceIcons,
   incomeResourceLabels,
+  summonSessionBalances,
   type IncomeLedgerCell,
 } from "~/app/timeline/_lib/income-ledger";
 import {
@@ -399,6 +400,9 @@ function TimelineScheduleContent({
     null,
   );
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedDaySessionId, setSelectedDaySessionId] = useState<string | null>(
+    null,
+  );
   const [selectedDayBannerId, setSelectedDayBannerId] = useState<string | null>(
     null,
   );
@@ -870,6 +874,7 @@ function TimelineScheduleContent({
   function closeSelectedDay() {
     const day = selectedDay;
     setSelectedDay(null);
+    setSelectedDaySessionId(null);
     setSelectedDayBannerId(null);
     setSelectedDayServantId(null);
     if (day) {
@@ -940,6 +945,7 @@ function TimelineScheduleContent({
       return next;
     });
     setChangesPanelOpen(false);
+    setSelectedDaySessionId(session.id);
     setSelectedDayBannerId(session.banner.id);
     setSelectedDayServantId(null);
     setSelectedDay(session.day);
@@ -1024,6 +1030,7 @@ function TimelineScheduleContent({
     setSelectedKey(null);
     setSelectedIncomeKey(null);
     setSelectedDayBannerId(null);
+    setSelectedDaySessionId(null);
     setSelectedDayServantId(null);
     setSelectedDay(null);
     setAccountPanelOpen(false);
@@ -1112,6 +1119,18 @@ function TimelineScheduleContent({
           selectedDay,
         )
       : null;
+  const daySessionBalances = useMemo(
+    () => selectedDay && forecastReady
+      ? summonSessionBalances({
+          cells: view.incomeCells,
+          sessions: summonSessions,
+          profile: playerProfile,
+          fromDay: calendar.today,
+          throughDay: selectedDay,
+        })
+      : undefined,
+    [selectedDay, forecastReady, view.incomeCells, summonSessions, playerProfile, calendar.today],
+  );
   const findAffordableDay =
     selectedDay && forecastReady
       ? (spending: SummonPlanSpending, excludedSessionId?: string) =>
@@ -1523,6 +1542,7 @@ function TimelineScheduleContent({
                           setSelectedKey(null);
                           setSelectedIncomeKey(null);
                           setSelectedDayBannerId(null);
+                          setSelectedDaySessionId(null);
                           setSelectedDayServantId(null);
                           setSelectedDay(day);
                         }}
@@ -1695,13 +1715,15 @@ function TimelineScheduleContent({
             </aside>
           ) : selectedDay && selectedDayBalances ? (
             <TimelineDayDetails
-              key={`${selectedDay}:${selectedDayBannerId ?? ""}:${selectedDayServantId ?? ""}`}
+              key={`${selectedDay}:${selectedDayBannerId ?? ""}:${selectedDayServantId ?? ""}:${selectedDaySessionId ?? ""}`}
               day={selectedDay}
               banners={selectedDayBanners}
               balances={selectedDayBalances}
               sessions={selectedDaySessions}
               initialBannerId={selectedDayBannerId}
               initialServantId={selectedDayServantId}
+              initialSessionId={selectedDaySessionId}
+              sessionBalances={daySessionBalances}
               onSave={addSummonSession}
               onUpdate={replaceSummonSession}
               onDuplicate={copySummonSession}
@@ -1788,6 +1810,7 @@ function TimelineScheduleContent({
                             ? lastDay
                             : preferredDay;
                       setSelectedDayBannerId(selectedEntry.id);
+                      setSelectedDaySessionId(null);
                       setSelectedDayServantId(servantId ?? null);
                       setSelectedKey(null);
                       setSelectedDay(day);

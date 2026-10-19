@@ -11,6 +11,7 @@ import {
   type SummonProbabilitySettings,
 } from "~/app/timeline/_components/summon-probability-panel";
 import type { ForecastBalances } from "~/app/timeline/_lib/player-forecast";
+import type { summonSessionBalances } from "~/app/timeline/_lib/income-ledger";
 import {
   resolveAutomaticSummonRate,
   standardSummonRateEvidenceUrl,
@@ -34,6 +35,14 @@ const initialSpending: SummonPlanSpending = {
   autoConvertFragments: false,
 };
 
+function spendingForSession(session: SummonSession): SummonPlanSpending {
+  return {
+    ...session.spending,
+    startingBonusCount: session.startingBonusCount,
+    autoConvertFragments: false,
+  };
+}
+
 const summonTabs = ["PLAN", "PROBABILITY"] as const;
 type SummonTab = (typeof summonTabs)[number];
 
@@ -44,6 +53,8 @@ export function TimelineDayDetails({
   sessions,
   initialBannerId,
   initialServantId,
+  initialSessionId,
+  sessionBalances,
   onSave,
   onUpdate,
   onDuplicate,
@@ -61,6 +72,8 @@ export function TimelineDayDetails({
   sessions: SummonSession[];
   initialBannerId?: string | null;
   initialServantId?: number | null;
+  initialSessionId?: string | null;
+  sessionBalances?: ReturnType<typeof summonSessionBalances>;
   onSave: (session: SummonSession) => void;
   onUpdate: (session: SummonSession) => void;
   onDuplicate: (sessionId: string) => void;
@@ -75,33 +88,59 @@ export function TimelineDayDetails({
   timeZone: string;
   onClose: () => void;
 }) {
+  const initialSession = sessions.find(
+    (session) => session.id === initialSessionId && session.day === day,
+  );
   const [tab, setTab] = useState<SummonTab>("PLAN");
   const tabRefs = useRef<Record<SummonTab, HTMLButtonElement | null>>({
     PLAN: null,
     PROBABILITY: null,
   });
   const [selectedBannerId, setSelectedBannerId] = useState(
-    initialBannerId ?? banners[0]?.id ?? "",
+    initialSession?.banner.id ?? initialBannerId ?? banners[0]?.id ?? "",
   );
   const [selectedServantId, setSelectedServantId] = useState(
-    String(initialServantId ?? ""),
+    String(
+      initialSession
+        ? (initialSession.target.servantId ?? "")
+        : (initialServantId ?? ""),
+    ),
   );
   const [selectedLineupId, setSelectedLineupId] = useState("");
-  const [customTargetName, setCustomTargetName] = useState("");
-  const [startingNp, setStartingNp] = useState(0);
+  const [customTargetName, setCustomTargetName] = useState(
+    initialSession?.target.name ?? "",
+  );
+  const [startingNp, setStartingNp] = useState(
+    initialSession?.target.startingNp ?? 0,
+  );
   const [rateSelection, setRateSelection] = useState<
     "AUTOMATIC" | "ENTERED" | null
-  >(null);
-  const [customRatePercent, setCustomRatePercent] = useState(0.8);
-  const [customGuaranteedEligible, setCustomGuaranteedEligible] =
-    useState(true);
-  const [currentGuaranteedCount, setCurrentGuaranteedCount] = useState(0);
-  const [spending, setSpending] = useState<SummonPlanSpending>(initialSpending);
+  >(
+    initialSession && initialSession.target.rateKind !== "STANDARD_PRESET"
+      ? "ENTERED"
+      : null,
+  );
+  const [customRatePercent, setCustomRatePercent] = useState(
+    initialSession ? initialSession.target.rate * 100 : 0.8,
+  );
+  const [customGuaranteedEligible, setCustomGuaranteedEligible] = useState(
+    initialSession?.target.guaranteedEligible ?? true,
+  );
+  const [currentGuaranteedCount, setCurrentGuaranteedCount] = useState(
+    initialSession?.startingGuaranteedCount ?? 0,
+  );
+  const [spending, setSpending] = useState<SummonPlanSpending>(() =>
+    initialSession ? spendingForSession(initialSession) : initialSpending,
+  );
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(
+    initialSessionId ?? null,
+  );
   const editingSession = editingSessionId
-    ? (sessions.find((session) => session.id === editingSessionId) ?? null)
+    ? (sessions.find(
+        (session) => session.id === editingSessionId && session.day === day,
+      ) ?? null)
     : null;
 
   const details = api.timeline.details.useQuery(
@@ -242,12 +281,7 @@ export function TimelineDayDetails({
     setCustomRatePercent(session.target.rate * 100);
     setCustomGuaranteedEligible(session.target.guaranteedEligible);
     setCurrentGuaranteedCount(session.startingGuaranteedCount);
-    setSpending({
-      ...session.spending,
-      fragmentsConverted: 0,
-      startingBonusCount: 0,
-      autoConvertFragments: session.spending.fragmentsConverted > 0,
-    });
+    setSpending(spendingForSession(session));
     setEditingSessionId(session.id);
     setTab("PLAN");
     setSavedMessage(null);
@@ -276,6 +310,35 @@ export function TimelineDayDetails({
     if (!nextTab) return;
     setTab(nextTab);
     tabRefs.current[nextTab]?.focus();
+  }
+
+  if (editingSessionId && !editingSession) {
+    return (
+      <aside
+        className="timeline-details timeline-day-details"
+        data-empty="false"
+        aria-labelledby="timeline-day-heading"
+      >
+        <div className="timeline-details-header">
+          <h3 id="timeline-day-heading" tabIndex={-1}>
+            Summon planning
+          </h3>
+          <button
+            type="button"
+            className="timeline-close-button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <div className="timeline-details-message" role="alert">
+          <p>
+            This plan is no longer available on this date. It may have been
+            deleted or moved. Reopen Changes to select a saved plan.
+          </p>
+        </div>
+      </aside>
+    );
   }
 
   return (
@@ -565,7 +628,11 @@ export function TimelineDayDetails({
                 : null
             }
             target={planTarget}
-            balances={balances}
+            balances={
+              editingSession
+                ? (sessionBalances?.get(editingSession.id)?.after ?? balances)
+                : balances
+            }
             spending={spending}
             onSpendingChange={setSpending}
             onSave={(session) => {
