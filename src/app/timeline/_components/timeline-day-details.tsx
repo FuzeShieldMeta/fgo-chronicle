@@ -1,5 +1,6 @@
 "use client";
 import { TimelinePanelHeader } from "./timeline-panel-header";
+import { formatCalendarDay } from "../_lib/schedule-date";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
@@ -343,7 +344,7 @@ export function TimelineDayDetails({
     >
       <div className="timeline-details-handle" aria-hidden="true" />
       <TimelinePanelHeader
-        title={day}
+        title={formatCalendarDay(day)}
         headingId="timeline-day-heading"
         eyebrow="Summon planning"
         onClose={onClose}
@@ -625,7 +626,7 @@ export function TimelineDayDetails({
               else onSave(session);
               setEditingSessionId(session.id);
               setSavedMessage(
-                `${editingSession ? "Plan updated" : "Plan saved"} for ${session.day}.`,
+                `${editingSession ? "Plan updated" : "Plan saved"} for ${formatCalendarDay(session.day)}.`,
               );
             }}
             earliestAffordableDay={earliestAffordableDay}

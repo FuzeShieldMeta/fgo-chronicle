@@ -2,6 +2,16 @@ import type { ScheduleTimePrecision } from "~/app/timeline/_lib/schedule-layout"
 import { calendarDayKey, calendarDayDistance } from "./schedule-layout";
 import type { TimelineSearchEntry } from "~/shared/timeline-search";
 
+export function formatCalendarDay(day: string, locale = "en") {
+  return formatScheduleDate(
+    new Date(`${day}T00:00:00Z`),
+    "DATE_ONLY",
+    "UTC",
+    undefined,
+    locale,
+  );
+}
+
 export function formatSearchAvailability(
   entry: Pick<
     TimelineSearchEntry,

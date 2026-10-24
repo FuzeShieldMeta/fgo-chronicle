@@ -11,6 +11,7 @@ import {
 } from "~/app/timeline/_lib/player-forecast";
 import { useStoryCatalogue } from "./story-catalogue-provider";
 import { recurringIncomeRules } from "~/app/timeline/_lib/recurring-income-rules";
+import { formatCalendarDay } from "../_lib/schedule-date";
 
 export function PlayerForecastPanel({
   profile,
@@ -57,7 +58,10 @@ export function PlayerForecastPanel({
         <h4>Forecast starting point</h4>
         <p>
           Balances are counted from{" "}
-          <time>{profile.snapshot.effectiveDate}</time>.
+          <time dateTime={profile.snapshot.effectiveDate}>
+            {formatCalendarDay(profile.snapshot.effectiveDate)}
+          </time>
+          .
         </p>
         <button
           type="button"
@@ -171,7 +175,10 @@ export function PlayerForecastPanel({
           Enter the resources you have today to replace the default zero
           balances.
         </p>
-        <small>These balances will be saved as current for {today}.</small>
+        <small>
+          These balances will be saved as current for{" "}
+          <time dateTime={today}>{formatCalendarDay(today)}</time>.
+        </small>
       </div>
 
       <fieldset className="timeline-form-group">

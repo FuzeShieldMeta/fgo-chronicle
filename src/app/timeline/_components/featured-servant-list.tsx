@@ -6,7 +6,7 @@ import {
   type FeaturedServant,
 } from "~/shared/featured-servants";
 import { timelineLayout } from "../_lib/timeline-layout-config";
-import { ServantThumbnail } from "./servant-thumbnail";
+import { ServantIdentity } from "./servant-thumbnail";
 import { servantMatchesSearch } from "~/shared/timeline-search";
 
 type Featured = {
@@ -52,14 +52,12 @@ export function FeaturedServantList({
                     rel="noopener noreferrer"
                     aria-label={`${servant.name} - Atlas Academy Servant Page (opens in a new tab)`}
                   >
-                    <ServantThumbnail
-                      url={servant.thumbnailUrl}
+                    <ServantIdentity
+                      name={servant.name}
+                      className={servant.className}
+                      thumbnailUrl={servant.thumbnailUrl}
                       size={timelineLayout.servantDetailsThumbnailSize}
                     />
-                    <div className="timeline-servant-description">
-                      <span>{servant.name}</span>
-                      <small>{servant.className}</small>
-                    </div>
                     {!onPlanSummons ? (
                       <small className="timeline-servant-rate-up">
                         {servant.soloRateUp ? "Solo rate-up" : "Shared rate-up"}

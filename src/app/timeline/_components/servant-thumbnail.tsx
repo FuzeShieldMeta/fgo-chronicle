@@ -31,3 +31,27 @@ export function ServantThumbnail({
     </span>
   );
 }
+
+export function ServantIdentity({
+  name,
+  className,
+  thumbnailUrl,
+  size,
+  highlighted = false,
+}: {
+  name: string;
+  className?: string;
+  thumbnailUrl?: string | null;
+  size: number;
+  highlighted?: boolean;
+}) {
+  return (
+    <>
+      <ServantThumbnail url={thumbnailUrl} size={size} />
+      <span className="timeline-servant-description">
+        {highlighted ? <strong>{name}</strong> : <span>{name}</span>}
+        {className ? <small>{className}</small> : null}
+      </span>
+    </>
+  );
+}

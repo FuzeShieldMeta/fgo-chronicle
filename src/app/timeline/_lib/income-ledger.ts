@@ -33,6 +33,14 @@ export const incomeResourceLabels: Record<ForecastResourceType, string> = {
   CRYSTALLIZED_LORE: "Crystallised Lores",
 };
 
+export const incomeResourceShortLabels: Record<ForecastResourceType, string> = {
+  SAINT_QUARTZ: "SQ",
+  SUMMON_TICKET: "Tickets",
+  SAINT_QUARTZ_FRAGMENT: "Fragments",
+  HOLY_GRAIL: "Grails",
+  CRYSTALLIZED_LORE: "Lores",
+};
+
 export const incomeResourceIcons: Record<ForecastResourceType, string> = {
   SAINT_QUARTZ: "https://static.atlasacademy.io/NA/Items/6.png",
   SUMMON_TICKET: "https://static.atlasacademy.io/NA/Items/4001.png",

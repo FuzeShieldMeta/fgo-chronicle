@@ -3,6 +3,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import type { ForecastBalances } from "~/app/timeline/_lib/player-forecast";
+import { formatCalendarDay } from "../_lib/schedule-date";
+import { ResourceLabel } from "./resource-label";
 import {
   automaticFragmentConversion,
   calculateSummonCost,
@@ -319,15 +321,21 @@ export function SummonPlanPanel({
               </div>
             ) : null}
             <div data-shortfall={remaining.quartz < 0 ? "true" : undefined}>
-              <dt>Quartz after</dt>
+              <dt>
+                <ResourceLabel resource="SAINT_QUARTZ" compact /> after
+              </dt>
               <dd>{remaining.quartz.toLocaleString("en")}</dd>
             </div>
             <div data-shortfall={remaining.tickets < 0 ? "true" : undefined}>
-              <dt>Tickets after</dt>
+              <dt>
+                <ResourceLabel resource="SUMMON_TICKET" compact /> after
+              </dt>
               <dd>{remaining.tickets.toLocaleString("en")}</dd>
             </div>
             <div data-shortfall={remaining.fragments < 0 ? "true" : undefined}>
-              <dt>Fragments after</dt>
+              <dt>
+                <ResourceLabel resource="SAINT_QUARTZ_FRAGMENT" compact /> after
+              </dt>
               <dd>{remaining.fragments.toLocaleString("en")}</dd>
             </div>
           </dl>
@@ -341,7 +349,10 @@ export function SummonPlanPanel({
               {earliestAffordableDay === null ? (
                 <p>It is not affordable within the current forecast.</p>
               ) : earliestAffordableDay && earliestAffordableDay !== day ? (
-                <p>Earliest affordable date: {earliestAffordableDay}.</p>
+                <p>
+                  Earliest affordable date:{" "}
+                  {formatCalendarDay(earliestAffordableDay)}.
+                </p>
               ) : null}
             </div>
           ) : null}

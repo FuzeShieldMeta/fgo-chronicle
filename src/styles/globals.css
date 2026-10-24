@@ -1812,18 +1812,6 @@ button {
   margin: 0;
 }
 
-.timeline-change-balances [data-resource="SAINT_QUARTZ"] dt {
-  color: var(--md-income-sq);
-}
-
-.timeline-change-balances [data-resource="SUMMON_TICKET"] dt {
-  color: var(--md-income-ticket);
-}
-
-.timeline-change-balances [data-resource="SAINT_QUARTZ_FRAGMENT"] dt {
-  color: var(--md-income-fragment);
-}
-
 .timeline-change-balances dd {
   display: flex;
   flex-wrap: wrap;
@@ -1848,6 +1836,25 @@ button {
 .timeline-change-balances [data-shortfall="true"] {
   color: var(--md-error);
 }
+
+.timeline-resource-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.timeline-resource-label img {
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.timeline-resource-label[data-resource="SAINT_QUARTZ"] { color: var(--md-income-sq); }
+.timeline-resource-label[data-resource="SUMMON_TICKET"] { color: var(--md-income-ticket); }
+.timeline-resource-label[data-resource="SAINT_QUARTZ_FRAGMENT"] { color: var(--md-income-fragment); }
+.timeline-resource-label[data-resource="HOLY_GRAIL"] { color: var(--md-income-grail); }
+.timeline-resource-label[data-resource="CRYSTALLIZED_LORE"] { color: var(--md-income-lore); }
 
 .servant-thumbnail {
   display: inline-flex;

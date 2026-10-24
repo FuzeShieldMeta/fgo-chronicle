@@ -1,5 +1,7 @@
 "use client";
 import { TimelinePanelHeader } from "./timeline-panel-header";
+import { ResourceLabel } from "./resource-label";
+import { formatCalendarDay } from "../_lib/schedule-date";
 
 import { useMemo, useState } from "react";
 import type { RewardPreferences } from "../_lib/reward-preferences";
@@ -8,10 +10,7 @@ import {
   type SummonSession,
 } from "../_lib/summon-session";
 import { calculateSummonCost } from "../_lib/summon-cost";
-import {
-  incomeResourceLabels,
-  summonSessionBalances,
-} from "../_lib/income-ledger";
+import { summonSessionBalances } from "../_lib/income-ledger";
 import type { IncomeLedgerCell } from "../_lib/income-ledger";
 import { englishRewardLabel } from "../_lib/reward-labels";
 import { calendarDayKey } from "../_lib/schedule-layout";
@@ -22,15 +21,8 @@ import {
   type FeaturedServant,
 } from "~/shared/featured-servants";
 import type { PlayerForecastProfile } from "../_lib/player-forecast";
-import { ServantThumbnail } from "./servant-thumbnail";
+import { ServantIdentity } from "./servant-thumbnail";
 import { timelineLayout } from "../_lib/timeline-layout-config";
-
-const planDateFormatter = new Intl.DateTimeFormat("en", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 export function PlannerChangesDetails({
   sessions,
@@ -204,18 +196,12 @@ export function PlannerChangesDetails({
                 );
               const servantUrl = servant ? servantAtlasUrl(servant) : null;
               const identity = (
-                <>
-                  <ServantThumbnail
-                    url={servant?.thumbnailUrl}
-                    size={timelineLayout.servantDetailsThumbnailSize}
-                  />
-                  <span className="timeline-servant-description">
-                    <span>{session.target.name}</span>
-                    {servant?.className ? (
-                      <small>{servant.className}</small>
-                    ) : null}
-                  </span>
-                </>
+                <ServantIdentity
+                  name={session.target.name}
+                  className={servant?.className}
+                  thumbnailUrl={servant?.thumbnailUrl}
+                  size={timelineLayout.servantDetailsThumbnailSize}
+                />
               );
               return (
                 <li
@@ -243,9 +229,7 @@ export function PlannerChangesDetails({
                     <div className="timeline-change-plan-actions">
                       <span>
                         <time dateTime={session.day}>
-                          {planDateFormatter.format(
-                            new Date(`${session.day}T00:00:00Z`),
-                          )}
+                          {formatCalendarDay(session.day)}
                         </time>{" "}
                         · {cost.totalResults.toLocaleString("en")} summons
                       </span>
@@ -282,7 +266,6 @@ export function PlannerChangesDetails({
                           [
                             [
                               "SAINT_QUARTZ",
-                              "SQ",
                               [
                                 cost.quartzFromFragments
                                   ? `+${cost.quartzFromFragments.toLocaleString("en")} converted`
@@ -296,22 +279,22 @@ export function PlannerChangesDetails({
                             ],
                             [
                               "SUMMON_TICKET",
-                              "Tickets",
                               cost.ticketsSpent
                                 ? `−${cost.ticketsSpent.toLocaleString("en")} spent`
                                 : null,
                             ],
                             [
                               "SAINT_QUARTZ_FRAGMENT",
-                              "Fragments",
                               cost.fragmentsConverted
                                 ? `−${cost.fragmentsConverted.toLocaleString("en")} converted`
                                 : null,
                             ],
                           ] as const
-                        ).map(([resource, label, spending]) => (
+                        ).map(([resource, spending]) => (
                           <div key={resource} data-resource={resource}>
-                            <dt>{label}</dt>
+                            <dt>
+                              <ResourceLabel resource={resource} compact />
+                            </dt>
                             <dd>
                               <span className="timeline-change-balance-values">
                                 <span>
@@ -400,15 +383,17 @@ export function PlannerChangesDetails({
                       <strong>{englishRewardLabel(reward.name)}</strong>
                       <span>
                         {reward.amount.toLocaleString("en")}{" "}
-                        {incomeResourceLabels[reward.itemType]} ·{" "}
+                        <ResourceLabel resource={reward.itemType} /> ·{" "}
                         {included ? "Include" : "Exclude"}
                       </span>
                       <small>
                         {reward.expectedAt
-                          ? calendarDayKey(
-                              reward.expectedAt,
-                              reward.expectedAtPrecision,
-                              timeZone,
+                          ? formatCalendarDay(
+                              calendarDayKey(
+                                reward.expectedAt,
+                                reward.expectedAtPrecision,
+                                timeZone,
+                              ),
                             )
                           : "No forecast date"}
                       </small>

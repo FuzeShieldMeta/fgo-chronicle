@@ -16,10 +16,13 @@ import {
   servantMatchesSearch,
   type TimelineSearchEntry,
 } from "~/shared/timeline-search";
-import { ServantThumbnail } from "./servant-thumbnail";
+import { ServantIdentity } from "./servant-thumbnail";
 import { TimelinePanelHeader } from "./timeline-panel-header";
 import { timelineLayout } from "../_lib/timeline-layout-config";
-import { formatSearchAvailability } from "../_lib/schedule-date";
+import {
+  formatCalendarDay,
+  formatSearchAvailability,
+} from "../_lib/schedule-date";
 
 const statuses = {
   OFFICIAL: "Official",
@@ -44,18 +47,13 @@ function SearchServants({
           className="timeline-search-servant"
           data-matching={matching ? "true" : undefined}
         >
-          <ServantThumbnail
-            url={servant.thumbnailUrl}
+          <ServantIdentity
+            name={servant.name}
+            className={servant.className}
+            thumbnailUrl={servant.thumbnailUrl}
             size={timelineLayout.servantSearchThumbnailSize}
+            highlighted={matching}
           />
-          <span>
-            {matching ? (
-              <strong>{servant.name}</strong>
-            ) : (
-              <span>{servant.name}</span>
-            )}
-            <small>{servant.className}</small>
-          </span>
         </span>
       ))}
     </span>
@@ -111,9 +109,11 @@ export function TimelineSearchResult({
           {formatSearchAvailability(entry, now, timeZone)}
         </span>
         <span className="timeline-search-result-meta">
-          {calendarDayKey(entry.startsAt, entry.startsAtPrecision, timeZone)}
+          {formatCalendarDay(
+            calendarDayKey(entry.startsAt, entry.startsAtPrecision, timeZone),
+          )}
           {entry.endsAt
-            ? ` – ${calendarDayKey(entry.endsAt, entry.endsAtPrecision ?? "EXACT", timeZone)}`
+            ? ` – ${formatCalendarDay(calendarDayKey(entry.endsAt, entry.endsAtPrecision ?? "EXACT", timeZone))}`
             : ""}
           <span
             className="timeline-search-result-status"

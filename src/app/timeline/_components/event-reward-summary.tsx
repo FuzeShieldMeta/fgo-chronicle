@@ -1,4 +1,4 @@
-import { incomeResourceLabels } from "../_lib/income-ledger";
+import { ResourceLabel } from "./resource-label";
 import {
   forecastResourceTypes,
   type ForecastResourceType,
@@ -92,7 +92,9 @@ export function EventRewardSummary({
                   const total = totals.get(type);
                   return total ? (
                     <tr key={type}>
-                      <th scope="row">{incomeResourceLabels[type]}</th>
+                      <th scope="row">
+                        <ResourceLabel resource={type} />
+                      </th>
                       <td>{total.included.toLocaleString("en")}</td>
                       <td>{total.notIncluded.toLocaleString("en")}</td>
                     </tr>

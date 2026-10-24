@@ -37,14 +37,6 @@ const statusNames = {
   PROJECTED: "Projected",
 } as const;
 
-const itemTypeNames = {
-  SAINT_QUARTZ: "Saint Quartz",
-  SAINT_QUARTZ_FRAGMENT: "Saint Quartz Fragments",
-  SUMMON_TICKET: "Summon Tickets",
-  CRYSTALLIZED_LORE: "Crystallised Lores",
-  HOLY_GRAIL: "Holy Grails",
-} as const;
-
 function formatType(value: string) {
   return value
     .toLowerCase()
@@ -617,7 +609,7 @@ export function TimelineEntryDetails({
                               <span className="timeline-resource-amount">
                                 {reward.amount.toLocaleString("en")}
                               </span>{" "}
-                              {itemTypeNames[reward.itemType]}
+                              {incomeResourceLabels[reward.itemType]}
                             </span>
                             <small>
                               {inclusion.included
@@ -650,7 +642,7 @@ export function TimelineEntryDetails({
                             {reward.nature === "CONDITIONAL" ? (
                               <RewardInclusionControls
                                 rewardId={reward.id}
-                                label={`${englishRewardLabel(source.name)}: ${reward.amount} ${itemTypeNames[reward.itemType]}`}
+                                label={`${englishRewardLabel(source.name)}: ${reward.amount} ${incomeResourceLabels[reward.itemType]}`}
                                 override={
                                   rewardPreferences.includedByRewardId[
                                     reward.id
