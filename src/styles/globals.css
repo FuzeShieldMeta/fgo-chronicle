@@ -56,6 +56,11 @@
   --md-personal-summon: var(--md-income-ticket);
   --timeline-income-change-marker-size: 10px;
   --md-shadow: rgb(24 28 35 / 20%);
+  --md-control-height: 44px;
+  --md-control-radius: 4px;
+  --md-control-label-size: 0.8125rem;
+  --md-field-text-size: 1rem;
+  --md-focus-ring: 3px solid var(--md-primary);
   --app-bar-height: 72px;
   --timeline-date-axis-height: 56px;
   --timeline-grid-line-width: 1px;
@@ -466,18 +471,18 @@ button {
 .timeline-search-back,
 .timeline-primary-button,
 .timeline-details-message button {
-  min-height: 44px;
+  min-height: var(--md-control-height);
   padding: 0 18px;
   cursor: pointer;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--md-control-radius);
   background: var(--md-primary);
   box-shadow:
     0 2px 2px rgb(0 0 0 / 14%),
     0 3px 1px -2px rgb(0 0 0 / 20%),
     0 1px 5px rgb(0 0 0 / 12%);
   color: var(--md-on-primary);
-  font-size: 0.8125rem;
+  font-size: var(--md-control-label-size);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -501,11 +506,14 @@ button {
   color: var(--md-on-primary-container);
 }
 
-:root[data-theme="dark"] .timeline-toolbar-action:not([data-primary-action]),
-:root[data-theme="dark"] .timeline-close-button,
-:root[data-theme="dark"] .timeline-search-back {
+.timeline-tonal-button {
   background: var(--md-primary-container);
   color: var(--md-on-primary-container);
+}
+
+.timeline-toolbar-action[data-primary-action] {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
 }
 
 @keyframes timeline-balance-attention {
@@ -547,7 +555,7 @@ button {
 .timeline-primary-button:focus-visible,
 .timeline-details-message button:focus-visible,
 .timeline-source-link:focus-visible {
-  outline: 3px solid var(--md-primary);
+  outline: var(--md-focus-ring);
   outline-offset: 3px;
 }
 
@@ -2110,8 +2118,8 @@ button {
 
 .timeline-details {
   --timeline-details-padding: 20px;
-  --timeline-control-height: 44px;
-  --timeline-control-radius: 4px;
+  --timeline-control-height: var(--md-control-height);
+  --timeline-control-radius: var(--md-control-radius);
   --timeline-section-gap: 24px;
   height: 100%;
   min-height: calc(
@@ -2734,6 +2742,8 @@ button {
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
+  font-size: var(--md-field-text-size);
+  font-weight: 400;
 }
 
 .timeline-profile-form input:focus-visible,
@@ -3417,16 +3427,14 @@ button {
 
   .timeline-toolbar-action {
     min-width: 60px;
-    flex: 1 1 60px;
+    flex: 1 0 auto;
     align-self: stretch;
     padding-inline: 10px;
   }
 
   .timeline-toolbar-action-label {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-    container-type: inline-size;
+    min-width: max-content;
+    white-space: nowrap;
   }
 
   .timeline-toolbar-action-label > span {
@@ -3488,7 +3496,8 @@ button {
 
   .timeline-toolbar-action {
     padding-inline: 6px;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
   }
 }
 
