@@ -46,6 +46,7 @@ function spendingForSession(session: SummonSession): SummonPlanSpending {
 }
 
 const summonTabs = ["PLAN", "PROBABILITY"] as const;
+const manualTargetValue = "manual";
 type SummonTab = (typeof summonTabs)[number];
 
 export function TimelineDayDetails({
@@ -104,7 +105,7 @@ export function TimelineDayDetails({
   const [selectedServantId, setSelectedServantId] = useState(
     String(
       initialSession
-        ? (initialSession.target.servantId ?? "")
+        ? (initialSession.target.servantId ?? manualTargetValue)
         : (initialServantId ?? ""),
     ),
   );
@@ -125,6 +126,7 @@ export function TimelineDayDetails({
   const [customRatePercent, setCustomRatePercent] = useState(
     initialSession ? initialSession.target.rate * 100 : 0.8,
   );
+  const [rateChanged, setRateChanged] = useState(false);
   const [customGuaranteedEligible, setCustomGuaranteedEligible] = useState(
     initialSession?.target.guaranteedEligible ?? true,
   );
@@ -227,12 +229,18 @@ export function TimelineDayDetails({
     rateSelection ?? (automaticRate ? "AUTOMATIC" : "ENTERED");
   const selectedAutomaticRate =
     effectiveRateSelection === "AUTOMATIC" ? automaticRate : null;
-  const rate = selectedAutomaticRate
-    ? selectedAutomaticRate.rate
-    : customRatePercent / 100;
-  const guaranteedEligible = selectedAutomaticRate
-    ? selectedAutomaticRate.guaranteedEligible
-    : customGuaranteedEligible;
+  const savedRate =
+    editingSession &&
+    !rateChanged &&
+    editingSession.target.rateKind !== "STANDARD_PRESET"
+      ? editingSession.target
+      : null;
+  const rate =
+    savedRate?.rate ?? selectedAutomaticRate?.rate ?? customRatePercent / 100;
+  const guaranteedEligible =
+    savedRate?.guaranteedEligible ??
+    selectedAutomaticRate?.guaranteedEligible ??
+    customGuaranteedEligible;
   const probabilitySettings: SummonProbabilitySettings = {
     startingNp,
     currentGuaranteedCount: guaranteedEligible ? currentGuaranteedCount : 0,
@@ -245,12 +253,16 @@ export function TimelineDayDetails({
         name: targetName,
         startingNp,
         rate,
-        rateKind: selectedAutomaticRate
-          ? ("STANDARD_PRESET" as const)
-          : ("CUSTOM" as const),
-        rateEvidenceUrl: selectedAutomaticRate
-          ? standardSummonRateEvidenceUrl
-          : null,
+        rateKind: savedRate
+          ? savedRate.rateKind
+          : selectedAutomaticRate
+            ? ("STANDARD_PRESET" as const)
+            : ("CUSTOM" as const),
+        rateEvidenceUrl: savedRate
+          ? savedRate.rateEvidenceUrl
+          : selectedAutomaticRate
+            ? standardSummonRateEvidenceUrl
+            : null,
         guaranteedEligible,
         startingGuaranteedCount: guaranteedEligible
           ? currentGuaranteedCount
@@ -274,13 +286,14 @@ export function TimelineDayDetails({
   function editSession(session: SummonSession) {
     setSelectedBannerId(session.banner.id);
     setSelectedLineupId("");
-    setSelectedServantId(String(session.target.servantId ?? ""));
+    setSelectedServantId(String(session.target.servantId ?? manualTargetValue));
     setCustomTargetName(session.target.name);
     setStartingNp(session.target.startingNp);
     setRateSelection(
       session.target.rateKind === "STANDARD_PRESET" ? null : "ENTERED",
     );
     setCustomRatePercent(session.target.rate * 100);
+    setRateChanged(false);
     setCustomGuaranteedEligible(session.target.guaranteedEligible);
     setCurrentGuaranteedCount(session.startingGuaranteedCount);
     setSpending(spendingForSession(session));
@@ -360,8 +373,10 @@ export function TimelineDayDetails({
             onChange={(event) => {
               setSelectedBannerId(event.target.value);
               setSelectedServantId("");
+              setCustomTargetName("");
               setSelectedLineupId("");
               setRateSelection(null);
+              setRateChanged(true);
               setSavedMessage(null);
             }}
           >
@@ -394,6 +409,7 @@ export function TimelineDayDetails({
             onChange={(event) => {
               setSelectedLineupId(event.target.value);
               setRateSelection(null);
+              setRateChanged(true);
               setSavedMessage(null);
             }}
           >
@@ -450,6 +466,7 @@ export function TimelineDayDetails({
             onChange={(event) => {
               setSelectedServantId(event.target.value);
               setRateSelection(null);
+              setRateChanged(true);
             }}
           >
             {savedTargetIsOutsideLineup ? (
@@ -479,7 +496,11 @@ export function TimelineDayDetails({
           <input
             type="text"
             value={customTargetName}
-            onChange={(event) => setCustomTargetName(event.target.value)}
+            onChange={(event) => {
+              setCustomTargetName(event.target.value);
+              setSelectedServantId(manualTargetValue);
+              setRateChanged(true);
+            }}
             placeholder="Enter a target name"
           />
         </label>
@@ -503,9 +524,10 @@ export function TimelineDayDetails({
           Target rate
           <select
             value={effectiveRateSelection}
-            onChange={(event) =>
-              setRateSelection(event.target.value as "AUTOMATIC" | "ENTERED")
-            }
+            onChange={(event) => {
+              setRateSelection(event.target.value as "AUTOMATIC" | "ENTERED");
+              setRateChanged(true);
+            }}
           >
             {automaticRate ? (
               <option value="AUTOMATIC">{automaticRate.label}</option>
@@ -525,11 +547,12 @@ export function TimelineDayDetails({
               max="100"
               step="0.0001"
               value={customRatePercent}
-              onChange={(event) =>
+              onChange={(event) => {
                 setCustomRatePercent(
                   Math.min(100, Math.max(0.0001, Number(event.target.value))),
-                )
-              }
+                );
+                setRateChanged(true);
+              }}
             />
           </label>
         ) : null}
@@ -538,9 +561,10 @@ export function TimelineDayDetails({
             <input
               type="checkbox"
               checked={customGuaranteedEligible}
-              onChange={(event) =>
-                setCustomGuaranteedEligible(event.target.checked)
-              }
+              onChange={(event) => {
+                setCustomGuaranteedEligible(event.target.checked);
+                setRateChanged(true);
+              }}
             />
             Apply the 330-summon guarantee
           </label>
