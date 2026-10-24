@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   appearanceStorageKey,
   applyAppearance,
@@ -8,7 +14,12 @@ import {
   type Appearance,
 } from "../_lib/appearance";
 
-export function AppearanceControl() {
+const AppearanceContext = createContext<{
+  preference: Appearance;
+  setAppearance: (preference: Appearance) => void;
+}>({ preference: "system", setAppearance: () => undefined });
+
+export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [preference, setPreference] = useState<Appearance>("system");
 
   useEffect(() => {
@@ -41,32 +52,37 @@ export function AppearanceControl() {
     };
   }, []);
 
+  function setAppearance(next: Appearance) {
+    setPreference(next);
+    applyAppearance(
+      next,
+      window.matchMedia("(prefers-color-scheme: dark)").matches,
+    );
+    try {
+      window.localStorage.setItem(appearanceStorageKey, next);
+    } catch {
+      // Keep the current page usable when browser storage is blocked.
+    }
+  }
+
   return (
-    <label className="timeline-tonal-button timeline-toolbar-action appearance-control">
-      <span
-        className="timeline-toolbar-action-label"
-        data-short-label="Theme"
-        aria-hidden="true"
-      >
-        <span>Appearance</span>
-      </span>
+    <AppearanceContext.Provider value={{ preference, setAppearance }}>
+      {children}
+    </AppearanceContext.Provider>
+  );
+}
+
+export function AppearanceControl() {
+  const { preference, setAppearance } = useContext(AppearanceContext);
+
+  return (
+    <label className="appearance-setting">
+      <span className="sr-only">Appearance</span>
       <select
         aria-label="Appearance"
         title={`Appearance: ${preference}`}
         value={preference}
-        onChange={(event) => {
-          const next = parseAppearance(event.target.value);
-          setPreference(next);
-          applyAppearance(
-            next,
-            window.matchMedia("(prefers-color-scheme: dark)").matches,
-          );
-          try {
-            window.localStorage.setItem(appearanceStorageKey, next);
-          } catch {
-            // The current page still follows the choice when storage is blocked.
-          }
-        }}
+        onChange={(event) => setAppearance(parseAppearance(event.target.value))}
       >
         <option value="system">System</option>
         <option value="light">Light</option>

@@ -6,7 +6,6 @@ import {
 import { storyChapters, type StoryChapter } from "../_lib/story-progress";
 
 import Image from "next/image";
-import { AppearanceControl } from "~/app/_components/appearance-control";
 import { RailServantThumbnails } from "./rail-servant-thumbnails";
 import { sortFeaturedServants } from "~/shared/featured-servants";
 import {
@@ -41,15 +40,13 @@ import {
 } from "../_lib/planner-change-markers";
 import type { TimelineSearchEntry } from "~/shared/timeline-search";
 import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-details-layer";
-import {
-  TimelineAccountMenu,
-  type TimelineAccountUser,
-} from "~/app/timeline/_components/timeline-account-menu";
+import type { TimelineAccountUser } from "~/app/timeline/_components/timeline-account-details";
 import { TimelineAccountDetails } from "~/app/timeline/_components/timeline-account-details";
+import { TimelineMethodologyDetails } from "./timeline-methodology";
 import {
-  TimelineMethodologyDetails,
-  useTimelineMethodology,
-} from "./timeline-methodology";
+  TimelineSettingsDetails,
+  useTimelineSettings,
+} from "./timeline-settings";
 import { PlannerSyncConflictDialog } from "~/app/timeline/_components/planner-sync-conflict-dialog";
 import { usePlannerStateSync } from "~/app/timeline/_components/use-planner-state-sync";
 import { useForecastHistory } from "./use-forecast-history";
@@ -401,9 +398,9 @@ function TimelineScheduleContent({
     null,
   );
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [selectedDaySessionId, setSelectedDaySessionId] = useState<string | null>(
-    null,
-  );
+  const [selectedDaySessionId, setSelectedDaySessionId] = useState<
+    string | null
+  >(null);
   const [selectedDayBannerId, setSelectedDayBannerId] = useState<string | null>(
     null,
   );
@@ -430,9 +427,15 @@ function TimelineScheduleContent({
   const [searchResultKey, setSearchResultKey] = useState<string | null>(null);
   const [changesPanelOpen, setChangesPanelOpen] = useState(false);
   const entryNavigationRef = useRef<AbortController | null>(null);
-  const [accountPanelOpen, setAccountPanelOpen] = useState(authError);
-  const { open: methodologyPanelOpen, setOpen: setMethodologyPanelOpen } =
-    useTimelineMethodology();
+  const {
+    panel: settingsPanel,
+    setPanel: setSettingsPanel,
+    closePanel,
+  } = useTimelineSettings();
+  const accountPanelOpen = settingsPanel === "account";
+  const methodologyPanelOpen = settingsPanel === "help";
+  const settingsPanelOpen = settingsPanel === "settings";
+  const settingsReturnFocusRef = useRef<string | null>(null);
   const [localPlannerReady, setLocalPlannerReady] = useState(false);
   const [loadedWindows, setLoadedWindows] = useState(
     () =>
@@ -544,6 +547,7 @@ function TimelineScheduleContent({
       profilePanelOpen,
       accountPanelOpen,
       methodologyPanelOpen,
+      settingsPanelOpen,
     ],
   );
 
@@ -621,12 +625,19 @@ function TimelineScheduleContent({
       selectedDay !== null ||
       profilePanelOpen
     ) {
-      setAccountPanelOpen(false);
+      closePanel("account");
+      closePanel("settings");
     }
-  }, [profilePanelOpen, selectedDay, selectedIncomeKey, selectedKey]);
+  }, [
+    profilePanelOpen,
+    selectedDay,
+    selectedIncomeKey,
+    selectedKey,
+    closePanel,
+  ]);
 
   useEffect(() => {
-    if (!methodologyPanelOpen) return;
+    if (!methodologyPanelOpen && !settingsPanelOpen) return;
     setChangesPanelOpen(false);
     setSearchPanelOpen(false);
     setIsChoosingSummonDate(false);
@@ -634,8 +645,8 @@ function TimelineScheduleContent({
     setSelectedIncomeKey(null);
     setSelectedDay(null);
     setProfilePanelOpen(false);
-    setAccountPanelOpen(false);
-  }, [methodologyPanelOpen]);
+    closePanel("account");
+  }, [methodologyPanelOpen, settingsPanelOpen, closePanel]);
 
   useEffect(() => {
     if (
@@ -645,7 +656,7 @@ function TimelineScheduleContent({
       profilePanelOpen ||
       accountPanelOpen
     ) {
-      setMethodologyPanelOpen(false);
+      closePanel("help");
       setSearchPanelOpen(false);
       setChangesPanelOpen(false);
     }
@@ -655,7 +666,7 @@ function TimelineScheduleContent({
     selectedDay,
     profilePanelOpen,
     accountPanelOpen,
-    setMethodologyPanelOpen,
+    closePanel,
   ]);
 
   useEffect(() => {
@@ -1041,7 +1052,7 @@ function TimelineScheduleContent({
     setSelectedDaySessionId(null);
     setSelectedDayServantId(null);
     setSelectedDay(null);
-    setAccountPanelOpen(false);
+    setSettingsPanel(null);
     setSearchPanelOpen(false);
     setChangesPanelOpen(false);
     setIsChoosingSummonDate(true);
@@ -1128,16 +1139,24 @@ function TimelineScheduleContent({
         )
       : null;
   const daySessionBalances = useMemo(
-    () => selectedDay && forecastReady
-      ? summonSessionBalances({
-          cells: view.incomeCells,
-          sessions: summonSessions,
-          profile: playerProfile,
-          fromDay: calendar.today,
-          throughDay: selectedDay,
-        })
-      : undefined,
-    [selectedDay, forecastReady, view.incomeCells, summonSessions, playerProfile, calendar.today],
+    () =>
+      selectedDay && forecastReady
+        ? summonSessionBalances({
+            cells: view.incomeCells,
+            sessions: summonSessions,
+            profile: playerProfile,
+            fromDay: calendar.today,
+            throughDay: selectedDay,
+          })
+        : undefined,
+    [
+      selectedDay,
+      forecastReady,
+      view.incomeCells,
+      summonSessions,
+      playerProfile,
+      calendar.today,
+    ],
   );
   const findAffordableDay =
     selectedDay && forecastReady
@@ -1164,38 +1183,43 @@ function TimelineScheduleContent({
     accountPanelOpen ||
     searchPanelOpen ||
     changesPanelOpen ||
-    methodologyPanelOpen,
+    methodologyPanelOpen ||
+    settingsPanelOpen,
   );
-  const detailsSelectionKey = changesPanelOpen
-    ? "changes"
-    : searchPanelOpen
-      ? "search"
-      : methodologyPanelOpen
-        ? "methodology"
-        : selectedDay
-          ? `day:${selectedDay}`
-          : profilePanelOpen
-            ? "profile"
-            : accountPanelOpen
-              ? "account"
-              : selectedIncomeCell
-                ? `income:${selectedIncomeCell.key}`
-                : selectedEntry
-                  ? `entry:${selectedEntry.key}`
-                  : "placeholder";
-  const detailsHeadingId = changesPanelOpen
-    ? "timeline-changes-heading"
-    : searchPanelOpen
-      ? "timeline-search-heading"
-      : methodologyPanelOpen
-        ? "timeline-methodology-heading"
-        : selectedDay
-          ? "timeline-day-heading"
-          : profilePanelOpen
-            ? "timeline-profile-heading"
-            : accountPanelOpen
-              ? "timeline-account-heading"
-              : "timeline-details-heading";
+  const detailsSelectionKey = settingsPanelOpen
+    ? "settings"
+    : changesPanelOpen
+      ? "changes"
+      : searchPanelOpen
+        ? "search"
+        : methodologyPanelOpen
+          ? "methodology"
+          : selectedDay
+            ? `day:${selectedDay}`
+            : profilePanelOpen
+              ? "profile"
+              : accountPanelOpen
+                ? "account"
+                : selectedIncomeCell
+                  ? `income:${selectedIncomeCell.key}`
+                  : selectedEntry
+                    ? `entry:${selectedEntry.key}`
+                    : "placeholder";
+  const detailsHeadingId = settingsPanelOpen
+    ? "timeline-settings-heading"
+    : changesPanelOpen
+      ? "timeline-changes-heading"
+      : searchPanelOpen
+        ? "timeline-search-heading"
+        : methodologyPanelOpen
+          ? "timeline-methodology-heading"
+          : selectedDay
+            ? "timeline-day-heading"
+            : profilePanelOpen
+              ? "timeline-profile-heading"
+              : accountPanelOpen
+                ? "timeline-account-heading"
+                : "timeline-details-heading";
 
   const forecastHistoryMessage = (
     <div
@@ -1217,6 +1241,11 @@ function TimelineScheduleContent({
 
   function closeActiveDetails() {
     entryNavigationRef.current?.abort();
+    if (settingsPanel) {
+      setSettingsPanel(null);
+      document.getElementById("timeline-settings-button")?.focus();
+      return;
+    }
     if (changesPanelOpen) {
       setChangesPanelOpen(false);
       document.getElementById("timeline-changes-button")?.focus();
@@ -1227,22 +1256,18 @@ function TimelineScheduleContent({
       document.getElementById("timeline-search-button")?.focus();
       return;
     }
-    if (methodologyPanelOpen) {
-      setMethodologyPanelOpen(false);
-      document.getElementById("timeline-methodology-button")?.focus();
-      return;
-    }
     if (selectedDay) {
       closeSelectedDay();
-      return;
-    }
-    if (accountPanelOpen) {
-      setAccountPanelOpen(false);
       return;
     }
     setProfilePanelOpen(false);
     setSelectedIncomeKey(null);
     setSelectedKey(null);
+  }
+
+  function returnToSettings(targetId: string) {
+    settingsReturnFocusRef.current = targetId;
+    setSettingsPanel("settings");
   }
 
   return (
@@ -1301,8 +1326,7 @@ function TimelineScheduleContent({
               setSelectedIncomeKey(null);
               setSelectedDay(null);
               setProfilePanelOpen(false);
-              setAccountPanelOpen(false);
-              setMethodologyPanelOpen(false);
+              setSettingsPanel(null);
               setSearchPanelOpen(true);
             }}
           >
@@ -1327,8 +1351,7 @@ function TimelineScheduleContent({
               setSelectedIncomeKey(null);
               setSelectedDay(null);
               setProfilePanelOpen(false);
-              setAccountPanelOpen(false);
-              setMethodologyPanelOpen(false);
+              setSettingsPanel(null);
               setSearchPanelOpen(false);
               setChangesPanelOpen(true);
             }}
@@ -1382,20 +1405,6 @@ function TimelineScheduleContent({
               <span>Today</span>
             </span>
           </button>
-
-          <AppearanceControl />
-
-          <TimelineAccountMenu
-            user={user ?? null}
-            onOpen={() => {
-              setIsChoosingSummonDate(false);
-              setSelectedKey(null);
-              setSelectedIncomeKey(null);
-              setSelectedDay(null);
-              setProfilePanelOpen(false);
-              setAccountPanelOpen(true);
-            }}
-          />
         </div>
       </div>
 
@@ -1645,21 +1654,25 @@ function TimelineScheduleContent({
           labelledBy={detailsHeadingId}
           selectionKey={detailsSelectionKey}
           returnFocusId={
-            changesPanelOpen
-              ? "timeline-changes-button"
-              : searchPanelOpen
-                ? "timeline-search-button"
-                : methodologyPanelOpen
-                  ? "timeline-methodology-button"
+            settingsPanel
+              ? "timeline-settings-button"
+              : changesPanelOpen
+                ? "timeline-changes-button"
+                : searchPanelOpen
+                  ? "timeline-search-button"
                   : selectedDay
                     ? `timeline-day-${selectedDay}`
-                    : accountPanelOpen
-                      ? "timeline-account-button"
-                      : undefined
+                    : undefined
           }
           onClose={closeActiveDetails}
         >
-          {changesPanelOpen ? (
+          {settingsPanelOpen ? (
+            <TimelineSettingsDetails
+              signedIn={Boolean(user)}
+              onClose={closeActiveDetails}
+              returnFocusRef={settingsReturnFocusRef}
+            />
+          ) : changesPanelOpen ? (
             <PlannerChangesDetails
               sessions={summonSessions}
               preferences={rewardPreferences}
@@ -1698,7 +1711,10 @@ function TimelineScheduleContent({
               onClose={closeActiveDetails}
             />
           ) : methodologyPanelOpen ? (
-            <TimelineMethodologyDetails onClose={closeActiveDetails} />
+            <TimelineMethodologyDetails
+              onClose={closeActiveDetails}
+              onBack={() => returnToSettings("timeline-methodology-button")}
+            />
           ) : selectedDay && !forecastReady ? (
             <aside
               className="timeline-details timeline-day-details"
@@ -1762,7 +1778,8 @@ function TimelineScheduleContent({
             <TimelineAccountDetails
               signedIn={Boolean(user)}
               authError={authError}
-              onClose={() => setAccountPanelOpen(false)}
+              onClose={closeActiveDetails}
+              onBack={() => returnToSettings("timeline-account-button")}
             />
           ) : selectedIncomeCell ? (
             <TimelineIncomeDetails

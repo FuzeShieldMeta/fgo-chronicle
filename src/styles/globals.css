@@ -167,7 +167,7 @@ button {
   right: 0;
   left: 0;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   min-height: var(--app-bar-height);
   align-items: center;
@@ -201,64 +201,59 @@ button {
   font-size: var(--timeline-type-label);
 }
 
-.timeline-intro {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  justify-self: end;
-  max-width: 60ch;
-  margin: 0;
-  color: color-mix(in srgb, var(--md-on-brand-bar) 85%, transparent);
-  font-size: var(--timeline-type-body);
-  line-height: 1.45;
-  text-align: right;
-}
-
-.timeline-intro a,
-.timeline-intro button {
-  flex: 0 0 auto;
-  color: var(--md-on-brand-bar);
-  font-weight: 600;
-  text-underline-offset: 3px;
-}
-
-.timeline-intro button {
+.timeline-settings-button {
   min-height: 44px;
-  padding: 4px 0;
-  border: 0;
+  padding: 8px 16px;
+  border: 1px solid color-mix(in srgb, var(--md-on-brand-bar) 45%, transparent);
+  border-radius: 4px;
   background: transparent;
+  color: var(--md-on-brand-bar);
   font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.timeline-intro button:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 4px;
+.timeline-settings-button:hover,
+.timeline-settings-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--md-on-brand-bar) 12%, transparent);
 }
 
-.appearance-control {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.timeline-settings-button:focus-visible {
+  outline: 3px solid var(--md-on-brand-bar);
+  outline-offset: 3px;
 }
 
-.appearance-control select {
-  position: absolute;
-  inset: 0;
+.timeline-settings-section {
+  padding-block: 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+
+.timeline-settings-section:last-child {
+  border-bottom: 0;
+}
+
+.timeline-settings-section h4 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.timeline-settings-section p {
+  color: var(--md-on-surface-variant);
+}
+
+.appearance-setting select {
   width: 100%;
-  height: 100%;
-  opacity: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: 4px;
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
-  cursor: pointer;
 }
 
-.appearance-control:has(select:focus-visible) {
+.appearance-setting select:focus-visible {
   outline: 3px solid var(--md-primary);
   outline-offset: 3px;
 }
@@ -331,7 +326,6 @@ button {
 
 .content-brand:focus-visible,
 .content-back-link:focus-visible,
-.timeline-intro a:focus-visible,
 .content-main a:focus-visible {
   outline: 3px solid var(--md-attention);
   outline-offset: 3px;
@@ -568,6 +562,8 @@ button {
 
 .timeline-toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 16px;
   align-items: center;
 }
@@ -3384,7 +3380,7 @@ button {
   }
 
   .timeline-app-bar {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 12px;
     min-height: var(--app-bar-height);
     padding-inline: 14px;
@@ -3400,8 +3396,7 @@ button {
     font-size: 1.05rem;
   }
 
-  .timeline-app-title p,
-  .timeline-intro {
+  .timeline-app-title p {
     display: none;
   }
 
@@ -3421,8 +3416,8 @@ button {
   }
 
   .timeline-toolbar-action {
-    min-width: 0;
-    flex: 1 1 0;
+    min-width: 60px;
+    flex: 1 1 60px;
     align-self: stretch;
     padding-inline: 10px;
   }
@@ -3435,7 +3430,11 @@ button {
   }
 
   .timeline-toolbar-action-label > span {
-    animation: timeline-toolbar-label-pan 8s ease-in-out infinite;
+    display: none;
+  }
+
+  .timeline-toolbar-action-label::after {
+    content: attr(data-short-label);
   }
 
   .planner-conflict-copies {
@@ -3482,19 +3481,6 @@ button {
   }
 }
 
-@keyframes timeline-toolbar-label-pan {
-  0%,
-  28%,
-  100% {
-    transform: translateX(0);
-  }
-
-  48%,
-  76% {
-    transform: translateX(min(0px, calc(100cqw - 100%)));
-  }
-}
-
 @media (max-width: 420px) {
   .timeline-toolbar-actions {
     gap: 6px;
@@ -3527,17 +3513,6 @@ button {
       0 0 var(--timeline-balance-attention-halo-size)
         color-mix(in srgb, var(--md-attention) 72%, transparent),
       0 3px 5px rgb(0 0 0 / 18%);
-  }
-}
-
-@media (max-width: 420px) and (prefers-reduced-motion: reduce) {
-  .timeline-toolbar-action-label > span {
-    display: none;
-  }
-
-  .timeline-toolbar-action-label::after {
-    margin-inline: auto;
-    content: attr(data-short-label);
   }
 }
 

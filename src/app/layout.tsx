@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 
 import { siteUrl } from "~/app/_lib/site";
 import { appearanceBootstrap } from "~/app/_lib/appearance";
+import { AppearanceProvider } from "~/app/_components/appearance-control";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
@@ -60,7 +61,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
       </head>
       <body>
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <AppearanceProvider>
+          <TRPCReactProvider>{children}</TRPCReactProvider>
+        </AppearanceProvider>
         <Analytics />
       </body>
     </html>

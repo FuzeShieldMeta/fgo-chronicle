@@ -1,7 +1,7 @@
 import {
-  TimelineMethodologyProvider,
-  TimelineMethodologyButton,
-} from "~/app/timeline/_components/timeline-methodology";
+  TimelineSettingsProvider,
+  TimelineSettingsButton,
+} from "~/app/timeline/_components/timeline-settings";
 
 import { TimelineSchedule } from "~/app/timeline/_components/timeline-schedule";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
@@ -31,7 +31,7 @@ export default async function TimelinePage({
   };
   const authError = Boolean((await searchParams)?.error);
   return (
-    <TimelineMethodologyProvider>
+    <TimelineSettingsProvider authError={authError}>
       <main id="main-content" className="timeline-page">
         <header className="timeline-app-bar">
           <span className="timeline-brand-mark" aria-hidden="true" />
@@ -39,14 +39,7 @@ export default async function TimelinePage({
             <h1>FGO Chronicle</h1>
             <p>Global schedule planner</p>
           </div>
-
-          <div className="timeline-intro">
-            <span>
-              Events, summoning campaigns, and dated rewards for the next two
-              years.
-            </span>
-            <TimelineMethodologyButton />
-          </div>
+          <TimelineSettingsButton />
         </header>
 
         <TimelineSchedule
@@ -65,6 +58,6 @@ export default async function TimelinePage({
           authError={authError}
         />
       </main>
-    </TimelineMethodologyProvider>
+    </TimelineSettingsProvider>
   );
 }

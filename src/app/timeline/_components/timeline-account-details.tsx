@@ -5,14 +5,18 @@ import { useState } from "react";
 
 type AccountAction = "SIGN_IN" | "SWITCH" | "SIGN_OUT" | null;
 
+export type TimelineAccountUser = { id: string };
+
 export function TimelineAccountDetails({
   signedIn,
   authError,
   onClose,
+  onBack,
 }: {
   signedIn: boolean;
   authError: boolean;
   onClose: () => void;
+  onBack?: () => void;
 }) {
   const [action, setAction] = useState<AccountAction>(null);
 
@@ -52,6 +56,15 @@ export function TimelineAccountDetails({
     <aside className="timeline-details timeline-sync-details" aria-label="Sync">
       <div className="timeline-details-header">
         <div>
+          {onBack ? (
+            <button
+              type="button"
+              className="timeline-search-back"
+              onClick={onBack}
+            >
+              Back to settings
+            </button>
+          ) : null}
           <span className="timeline-type-label">Optional account sync</span>
           <h3 id="timeline-account-heading">
             {signedIn ? "Account and sync" : "Keep your planner"}
