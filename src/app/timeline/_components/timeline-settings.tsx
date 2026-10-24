@@ -12,6 +12,7 @@ import {
   type SetStateAction,
 } from "react";
 import { AppearanceControl } from "~/app/_components/appearance-control";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 
 type SettingsPanel = "settings" | "account" | "help" | null;
 
@@ -79,16 +80,11 @@ export function TimelineSettingsDetails({
       className="timeline-details timeline-settings-details"
       aria-labelledby="timeline-settings-heading"
     >
-      <div className="timeline-details-header">
-        <h3 id="timeline-settings-heading">Settings</h3>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title="Settings"
+        headingId="timeline-settings-heading"
+        onClose={onClose}
+      />
       <section className="timeline-settings-section">
         <h4>Appearance</h4>
         <AppearanceControl />

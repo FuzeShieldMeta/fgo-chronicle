@@ -1,4 +1,5 @@
 "use client";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 
 import { useMemo, useState } from "react";
 import type { RewardPreferences } from "../_lib/reward-preferences";
@@ -151,19 +152,12 @@ export function PlannerChangesDetails({
       aria-labelledby="timeline-changes-heading"
     >
       <div className="timeline-details-handle" aria-hidden="true" />
-      <div className="timeline-details-header">
-        <div>
-          <span className="timeline-type-label">Planner</span>
-          <h3 id="timeline-changes-heading">Changes</h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title="Changes"
+        headingId="timeline-changes-heading"
+        eyebrow="Planner"
+        onClose={onClose}
+      />
       <p className="summon-helper-text">
         Your saved summon sessions and reward choices. Starting balances are
         under Balances.

@@ -1,6 +1,7 @@
 "use client";
 
 import { MethodologyContent } from "~/app/methodology/_components/methodology-content";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 
 export function TimelineMethodologyDetails({
   onClose,
@@ -14,27 +15,14 @@ export function TimelineMethodologyDetails({
       className="timeline-details timeline-methodology-details"
       aria-label="How the forecast works"
     >
-      <div className="timeline-details-header">
-        <div>
-          {onBack ? (
-            <button
-              type="button"
-              className="timeline-search-back"
-              onClick={onBack}
-            >
-              Back to settings
-            </button>
-          ) : null}
-          <h3 id="timeline-methodology-heading">How the forecast works</h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title="How the forecast works"
+        headingId="timeline-methodology-heading"
+        onClose={onClose}
+        back={
+          onBack ? { label: "Back to settings", onClick: onBack } : undefined
+        }
+      />
       <div className="timeline-methodology-content">
         <MethodologyContent />
       </div>

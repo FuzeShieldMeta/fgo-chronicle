@@ -1,4 +1,5 @@
 "use client";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
@@ -319,18 +320,11 @@ export function TimelineDayDetails({
         data-empty="false"
         aria-labelledby="timeline-day-heading"
       >
-        <div className="timeline-details-header">
-          <h3 id="timeline-day-heading" tabIndex={-1}>
-            Summon planning
-          </h3>
-          <button
-            type="button"
-            className="timeline-close-button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
+        <TimelinePanelHeader
+          title="Summon planning"
+          headingId="timeline-day-heading"
+          onClose={onClose}
+        />
         <div className="timeline-details-message" role="alert">
           <p>
             This plan is no longer available on this date. It may have been
@@ -348,22 +342,13 @@ export function TimelineDayDetails({
       aria-labelledby="timeline-day-heading"
     >
       <div className="timeline-details-handle" aria-hidden="true" />
-      <div className="timeline-details-header">
-        <div>
-          <span className="timeline-type-label">Summon planning</span>
-          <h3 id="timeline-day-heading" tabIndex={-1}>
-            {day}
-          </h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-          aria-label="Close day details"
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title={day}
+        headingId="timeline-day-heading"
+        eyebrow="Summon planning"
+        onClose={onClose}
+        closeLabel="Close day details"
+      />
 
       {banners.length > 0 ? (
         <label className="summon-field">

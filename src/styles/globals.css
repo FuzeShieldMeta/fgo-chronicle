@@ -2194,9 +2194,50 @@ button {
   flex: 1;
 }
 
-.timeline-entry-header > :first-child {
+.timeline-entry-header .timeline-panel-title {
   padding-inline-start: 12px;
   border-inline-start: 3px solid var(--md-primary);
+}
+
+.timeline-panel-header {
+  position: sticky;
+  z-index: 6;
+  top: calc(-1 * var(--timeline-details-padding));
+  margin: calc(-1 * var(--timeline-details-padding)) calc(-1 * var(--timeline-details-padding)) 18px;
+  padding: 12px var(--timeline-details-padding) 16px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface);
+}
+
+.timeline-panel-title {
+  min-width: 0;
+}
+
+.timeline-panel-header:not([data-has-back]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.timeline-panel-header:not([data-has-back]) > .timeline-panel-title {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.timeline-panel-header:not([data-has-back]) > .timeline-entry-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  margin: 0;
+}
+
+.timeline-day-details > .timeline-panel-header {
+  margin-bottom: 0;
+}
+
+.timeline-search-controls > .timeline-panel-header {
+  position: static;
 }
 
 .timeline-entry-actions {

@@ -17,6 +17,7 @@ import {
   type TimelineSearchEntry,
 } from "~/shared/timeline-search";
 import { ServantThumbnail } from "./servant-thumbnail";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 import { timelineLayout } from "../_lib/timeline-layout-config";
 import { formatSearchAvailability } from "../_lib/schedule-date";
 
@@ -238,16 +239,11 @@ export function TimelineSearchDetails({
       aria-label="Search timeline"
     >
       <div className="timeline-search-controls">
-        <div className="timeline-details-header">
-          <h3 id="timeline-search-heading">Search</h3>
-          <button
-            type="button"
-            className="timeline-close-button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
+        <TimelinePanelHeader
+          title="Search"
+          headingId="timeline-search-heading"
+          onClose={onClose}
+        />
         <label
           className="timeline-search-field"
           htmlFor="timeline-search-input"

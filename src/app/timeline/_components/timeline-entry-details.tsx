@@ -3,6 +3,7 @@ import { useStoryCatalogue } from "./story-catalogue-provider";
 
 import Image from "next/image";
 import { FeaturedServantList } from "./featured-servant-list";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 import { EventRewardSummary } from "./event-reward-summary";
 import { englishRewardLabel } from "~/app/timeline/_lib/reward-labels";
 import { useState } from "react";
@@ -121,20 +122,13 @@ export function TimelineProfileDetails({
       aria-labelledby="timeline-profile-heading"
     >
       <div className="timeline-details-handle" aria-hidden="true" />
-      <div className="timeline-details-header">
-        <div>
-          <span className="timeline-type-label">Player forecast</span>
-          <h3 id="timeline-profile-heading">Starting balances</h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-          aria-label="Close starting balances"
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title="Starting balances"
+        headingId="timeline-profile-heading"
+        eyebrow="Player forecast"
+        onClose={onClose}
+        closeLabel="Close starting balances"
+      />
       <PlayerForecastPanel
         profile={profile}
         today={today}
@@ -458,48 +452,29 @@ export function TimelineEntryDetails({
     failedArtworkUrl,
   );
   const hasPlanningAction = data?.kind === "BANNER" && Boolean(onPlanSummons);
-  const closeButton = (
-    <button
-      type="button"
-      className="timeline-close-button"
-      onClick={onClose}
-      aria-label="Close schedule details"
-    >
-      Close
-    </button>
-  );
 
   const content = (
     <>
       <div className="timeline-details-handle" aria-hidden="true" />
-      {onBackToSearch ? (
-        <div className="timeline-entry-actions">
-          <button
-            type="button"
-            className="timeline-search-back"
-            onClick={onBackToSearch}
-          >
-            Back to results
-          </button>
-          {closeButton}
-        </div>
-      ) : null}
-      <div className="timeline-details-header timeline-entry-header">
-        <div>
-          <span className="timeline-type-label">
-            {entry.category === "INCOME_SOURCE"
-              ? "Income source"
-              : entry.category === "EVENT"
-                ? "Event"
-                : "Summoning campaign"}
-          </span>
-          <h3 id="timeline-details-heading" tabIndex={-1}>
-            {entry.name}
-          </h3>
-        </div>
-
-        {onBackToSearch ? null : closeButton}
-      </div>
+      <TimelinePanelHeader
+        title={entry.name}
+        headingId="timeline-details-heading"
+        eyebrow={
+          entry.category === "INCOME_SOURCE"
+            ? "Income source"
+            : entry.category === "EVENT"
+              ? "Event"
+              : "Summoning campaign"
+        }
+        className="timeline-entry-header"
+        onClose={onClose}
+        closeLabel="Close schedule details"
+        back={
+          onBackToSearch
+            ? { label: "Back to results", onClick: onBackToSearch }
+            : undefined
+        }
+      />
 
       <dl className="timeline-detail-facts timeline-entry-facts">
         <div>

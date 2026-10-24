@@ -2,6 +2,7 @@
 
 import { signIn, signOut } from "next-auth/react";
 import { useState } from "react";
+import { TimelinePanelHeader } from "./timeline-panel-header";
 
 type AccountAction = "SIGN_IN" | "SWITCH" | "SIGN_OUT" | null;
 
@@ -54,30 +55,15 @@ export function TimelineAccountDetails({
 
   return (
     <aside className="timeline-details timeline-sync-details" aria-label="Sync">
-      <div className="timeline-details-header">
-        <div>
-          {onBack ? (
-            <button
-              type="button"
-              className="timeline-search-back"
-              onClick={onBack}
-            >
-              Back to settings
-            </button>
-          ) : null}
-          <span className="timeline-type-label">Optional account sync</span>
-          <h3 id="timeline-account-heading">
-            {signedIn ? "Account and sync" : "Keep your planner"}
-          </h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title={signedIn ? "Account and sync" : "Keep your planner"}
+        headingId="timeline-account-heading"
+        eyebrow="Optional account sync"
+        onClose={onClose}
+        back={
+          onBack ? { label: "Back to settings", onClick: onBack } : undefined
+        }
+      />
 
       {signedIn ? (
         <p className="timeline-sync-lead">
@@ -87,15 +73,12 @@ export function TimelineAccountDetails({
       ) : (
         <>
           <p className="timeline-sync-lead">
-            A two-year FGO schedule has a lot to keep track of: events, rewards,
-            and summon plans. Sync keeps your planner available on another
-            browser or device.
+            Sign in to use your balances, reward choices and summon plans on
+            another browser or device.
           </p>
           <p className="timeline-sync-storage-note">
-            Without an account, the planner uses storage in this browser. That
-            copy can be lost if you clear site data, reset the browser, or use a
-            cleanup tool that removes browser data. Setting it up again means
-            re-entering your balances, reward choices, and summon plans.
+            Without an account, your planner is saved only in this browser.
+            Clearing site data or resetting the browser can remove it.
           </p>
         </>
       )}
@@ -108,32 +91,42 @@ export function TimelineAccountDetails({
       ) : null}
 
       {!signedIn ? (
-        <div className="timeline-sync-privacy">
-          <section>
-            <h4>What Google shares</h4>
-            <p>
-              Google sends an account-specific identifier and your primary email
-              address during sign-in. FGO Chronicle keeps the identifier but
-              does not save your email address.
-            </p>
-          </section>
-          <section>
-            <h4>What the app can access</h4>
-            <p>
-              FGO Chronicle does not request access to Google Drive, Gmail,
-              contacts, calendars, or other Google services.
-            </p>
-          </section>
-          <section>
-            <h4>What is stored</h4>
-            <p>
-              When you sign in, FGO Chronicle stores your planner data, an
-              internal user ID, Google&apos;s account-specific identifier, and a
-              login session. It does not store your Google name, email address,
-              profile photo, or Google access tokens.
-            </p>
-          </section>
-        </div>
+        <>
+          <button
+            type="button"
+            className="timeline-primary-button timeline-sync-sign-in"
+            disabled={action !== null}
+            onClick={() => void beginSignIn()}
+          >
+            {action === "SIGN_IN" ? "Opening Google…" : "Continue with Google"}
+          </button>
+          <div className="timeline-sync-privacy">
+            <section>
+              <h4>What Google shares</h4>
+              <p>
+                Google sends an account-specific identifier and your primary
+                email address during sign-in. FGO Chronicle keeps the identifier
+                but does not save your email address.
+              </p>
+            </section>
+            <section>
+              <h4>What the app can access</h4>
+              <p>
+                FGO Chronicle does not request access to Google Drive, Gmail,
+                contacts, calendars, or other Google services.
+              </p>
+            </section>
+            <section>
+              <h4>What is stored</h4>
+              <p>
+                When you sign in, FGO Chronicle stores your planner data, an
+                internal user ID, Google&apos;s account-specific identifier, and
+                a login session. It does not store your Google name, email
+                address, profile photo, or Google access tokens.
+              </p>
+            </section>
+          </div>
+        </>
       ) : null}
 
       {signedIn ? (
@@ -155,16 +148,7 @@ export function TimelineAccountDetails({
             {action === "SIGN_OUT" ? "Signing out…" : "Sign out"}
           </button>
         </div>
-      ) : (
-        <button
-          type="button"
-          className="timeline-primary-button timeline-sync-sign-in"
-          disabled={action !== null}
-          onClick={() => void beginSignIn()}
-        >
-          {action === "SIGN_IN" ? "Opening Google…" : "Continue with Google"}
-        </button>
-      )}
+      ) : null}
     </aside>
   );
 }
