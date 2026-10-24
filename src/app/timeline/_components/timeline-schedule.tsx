@@ -255,7 +255,7 @@ function Rail({
       <button
         type="button"
         className="timeline-rail-action"
-        aria-label={`${intervalLabel(entry, timeZone)}${marker ? `. ${personalChangeDescription(marker)}. See Changes for saved choices.` : ""}`}
+        aria-label={`${intervalLabel(entry, timeZone)}${marker ? `. ${personalChangeDescription(marker)}. See Saved plans for saved choices.` : ""}`}
         aria-pressed={selected}
         onClick={() => {
           onHideTooltip(entry.key);
@@ -1345,7 +1345,7 @@ function TimelineScheduleContent({
             id="timeline-changes-button"
             type="button"
             className="timeline-tonal-button timeline-toolbar-action"
-            aria-label="View saved planner changes"
+            aria-label="Saved plans"
             aria-expanded={changesPanelOpen}
             onClick={() => {
               setIsChoosingSummonDate(false);
@@ -1360,10 +1360,10 @@ function TimelineScheduleContent({
           >
             <span
               className="timeline-toolbar-action-label"
-              data-short-label="Changes"
+              data-short-label="Saved plans"
               aria-hidden="true"
             >
-              <span>Changes</span>
+              <span>Saved plans</span>
             </span>
           </button>
 
@@ -1554,7 +1554,7 @@ function TimelineScheduleContent({
                               : undefined
                         }
                         title={`Plan summons for ${label.weekday}, ${label.month} ${label.day}`}
-                        aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel}${marker?.reward ? " Has saved reward choices. See Changes for details." : ""} Select this date to plan summons.`}
+                        aria-label={`${label.weekday}, ${label.month} ${label.day}.${sessionLabel}${marker?.reward ? " Has saved reward choices. See Saved plans for details." : ""} Select this date to plan summons.`}
                         aria-pressed={selectedDay === day}
                         onClick={() => {
                           setIsChoosingSummonDate(false);

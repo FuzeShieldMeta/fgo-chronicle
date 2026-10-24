@@ -92,7 +92,7 @@ export function TimelineIncomeLedger({
                 : "";
               const marker = markers?.get(cell.key);
               const changeDescription = marker
-                ? ` ${personalChangeDescription(marker)}. See Changes for saved choices.`
+                ? ` ${personalChangeDescription(marker)}. See Saved plans for saved choices.`
                 : "";
 
               const style = {

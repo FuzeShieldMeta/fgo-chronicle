@@ -3518,6 +3518,11 @@ button {
     display: none;
   }
 
+  .timeline-toolbar-action-label[data-short-label="Saved plans"] {
+    min-width: 0;
+    white-space: normal;
+  }
+
   .timeline-toolbar-action-label::after {
     content: attr(data-short-label);
   }

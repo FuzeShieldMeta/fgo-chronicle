@@ -145,7 +145,7 @@ export function PlannerChangesDetails({
     >
       <div className="timeline-details-handle" aria-hidden="true" />
       <TimelinePanelHeader
-        title="Changes"
+        title="Saved plans"
         headingId="timeline-changes-heading"
         eyebrow="Planner"
         onClose={onClose}
