@@ -350,6 +350,7 @@ export function TimelineDayDetails({
         closeLabel="Close day details"
       />
 
+      <h4 className="summon-section-title">Campaign and target</h4>
       {banners.length > 0 ? (
         <label className="summon-field">
           Summoning campaign
@@ -562,7 +563,6 @@ export function TimelineDayDetails({
           </label>
         ) : null}
       </div>
-
       <div className="summon-tabs" role="tablist" aria-label="Summon tools">
         <button
           ref={(element) => {

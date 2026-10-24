@@ -203,8 +203,8 @@ export function SummonPlanPanel({
         </div>
       </fieldset>
 
-      <fieldset className="summon-preset-fieldset">
-        <legend>Multi presets</legend>
+      <details className="summon-preset-fieldset">
+        <summary>Multi presets</summary>
         <div className="summon-preset-actions">
           {multiPresets.map((value) => (
             <button
@@ -217,7 +217,7 @@ export function SummonPlanPanel({
             </button>
           ))}
         </div>
-      </fieldset>
+      </details>
 
       <div className="summon-field-grid summon-spend-fields">
         <label className="summon-field">

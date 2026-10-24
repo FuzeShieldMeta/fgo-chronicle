@@ -2821,6 +2821,45 @@ button {
   gap: 12px;
 }
 
+.timeline-form-group {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.timeline-form-group legend {
+  padding-inline-end: 8px;
+  color: var(--md-on-surface);
+  font-weight: 600;
+}
+
+.timeline-field-error {
+  color: var(--md-error);
+  font-size: var(--timeline-type-label);
+  font-weight: 400;
+}
+
+.timeline-details [aria-invalid="true"] {
+  border-color: var(--md-error);
+}
+
+.summon-preset-fieldset > summary {
+  min-height: var(--md-control-height);
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  color: var(--md-primary);
+}
+
+.summon-preset-fieldset > summary:focus-visible {
+  outline: var(--md-focus-ring);
+  outline-offset: 2px;
+}
+
 .timeline-form-error {
   color: var(--md-error) !important;
   font-weight: 650;
@@ -2949,6 +2988,7 @@ button {
 }
 
 .summon-section-heading h4,
+.summon-section-title,
 .summon-saved-sessions h4 {
   margin: 0;
   color: var(--md-on-surface);
