@@ -2135,6 +2135,7 @@ button {
   --timeline-control-height: var(--md-control-height);
   --timeline-control-radius: var(--md-control-radius);
   --timeline-section-gap: 24px;
+  position: relative;
   height: 100%;
   min-height: calc(
     var(--timeline-date-axis-height) + var(--timeline-min-category-stack-height)
