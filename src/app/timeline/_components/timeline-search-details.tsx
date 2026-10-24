@@ -315,7 +315,7 @@ export function TimelineSearchDetails({
                   className="timeline-search-group"
                   aria-label={kind === "BANNER" ? "Banners" : "Events"}
                 >
-                  <h4>{kind === "BANNER" ? "Banners" : "Events"}</h4>
+                  <h3>{kind === "BANNER" ? "Banners" : "Events"}</h3>
                   <ul>
                     {entries.map((entry) => (
                       <TimelineSearchResult

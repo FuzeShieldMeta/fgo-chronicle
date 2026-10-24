@@ -168,7 +168,7 @@ export function SummonPlanPanel({
   return (
     <form className="summon-plan-panel" onSubmit={submit}>
       <div className="summon-section-heading">
-        <h4>Resource plan</h4>
+        <h3>Resource plan</h3>
         <p>Set the resources to use on this date.</p>
       </div>
 
@@ -295,7 +295,7 @@ export function SummonPlanPanel({
 
       {cost && remaining ? (
         <section className="summon-cost-summary" aria-live="polite">
-          <h5>Plan summary</h5>
+          <h4>Plan summary</h4>
           <dl>
             <div>
               <dt>Cost</dt>

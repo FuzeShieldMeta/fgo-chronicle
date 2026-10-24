@@ -106,7 +106,7 @@ export function SummonProbabilityPanel({
       aria-labelledby="probability-heading"
     >
       <div className="summon-section-heading">
-        <h4 id="probability-heading">Summon probability</h4>
+        <h3 id="probability-heading">Summon probability</h3>
         <p>Probabilities show the chance of reaching at least each NP level.</p>
       </div>
 

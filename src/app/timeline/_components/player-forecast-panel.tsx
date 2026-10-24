@@ -55,7 +55,7 @@ export function PlayerForecastPanel({
   if (profile && !editing) {
     return (
       <section className="timeline-profile-summary">
-        <h4>Forecast starting point</h4>
+        <h3>Forecast starting point</h3>
         <p>
           Balances are counted from{" "}
           <time dateTime={profile.snapshot.effectiveDate}>

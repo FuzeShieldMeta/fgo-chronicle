@@ -18,7 +18,10 @@ import {
   type RewardPreferences,
 } from "~/app/timeline/_lib/reward-preferences";
 import type { PlayerForecastProfile } from "~/app/timeline/_lib/player-forecast";
-import { formatScheduleDate } from "~/app/timeline/_lib/schedule-date";
+import {
+  formatCalendarDay,
+  formatScheduleDate,
+} from "~/app/timeline/_lib/schedule-date";
 import {
   timelineLayout,
   timelineSchedule,
@@ -64,7 +67,7 @@ export function TimelineDetailsPlaceholder({
     >
       <div className="timeline-details-empty-content">
         <span className="timeline-type-label">Schedule details</span>
-        <h3>Select a timeline entry</h3>
+        <h2>Select a timeline entry</h2>
         <p>
           Select an event, summoning campaign, or dated resource change to see
           its source and details.
@@ -77,7 +80,7 @@ export function TimelineDetailsPlaceholder({
           />
         ) : (
           <section className="timeline-default-assumption">
-            <h4>Enter your balances</h4>
+            <h3>Enter your balances</h3>
             <p>
               Add your current Quartz, fragments, tickets, and login count to
               calculate your resource forecast.
@@ -202,27 +205,20 @@ export function TimelineIncomeDetails({
       aria-labelledby="timeline-details-heading"
     >
       <div className="timeline-details-handle" aria-hidden="true" />
-      <div className="timeline-details-header">
-        <div>
-          <span className="timeline-type-label">Resource changes</span>
-          <h3 id="timeline-details-heading">
-            {incomeResourceLabels[cell.itemType]} {signedAmount(cell.delta)}
-          </h3>
-        </div>
-        <button
-          type="button"
-          className="timeline-close-button"
-          onClick={onClose}
-          aria-label="Close income details"
-        >
-          Close
-        </button>
-      </div>
+      <TimelinePanelHeader
+        title={`${incomeResourceLabels[cell.itemType]} ${signedAmount(cell.delta)}`}
+        headingId="timeline-details-heading"
+        eyebrow="Resource changes"
+        onClose={onClose}
+        closeLabel="Close income details"
+      />
 
       <dl className="timeline-detail-facts timeline-resource-facts">
         <div>
           <dt>Date</dt>
-          <dd>{cell.day}</dd>
+          <dd>
+            <time dateTime={cell.day}>{formatCalendarDay(cell.day)}</time>
+          </dd>
         </div>
         <div>
           <dt>Income</dt>
@@ -251,7 +247,7 @@ export function TimelineIncomeDetails({
       </dl>
 
       <section className="timeline-detail-section">
-        <h4>Change breakdown</h4>
+        <h3>Change breakdown</h3>
         <p>
           {excludedCount === 0
             ? pendingCount === 0
@@ -555,7 +551,7 @@ export function TimelineEntryDetails({
 
       {data?.kind === "BANNER" ? (
         <section className="timeline-detail-section">
-          <h4>Featured Servants</h4>
+          <h3>Featured Servants</h3>
           {data.featured.length > 0 ? (
             <FeaturedServantList
               featured={data.featured}
@@ -570,7 +566,7 @@ export function TimelineEntryDetails({
 
       {data?.kind === "EVENT" ? (
         <section className="timeline-detail-section">
-          <h4>Rewards</h4>
+          <h3>Rewards</h3>
           <EventRewardSummary
             sources={data.rewardSources}
             preferences={rewardPreferences}
@@ -667,7 +663,7 @@ export function TimelineEntryDetails({
 
       {data && data.relatedEntries.length > 0 ? (
         <section className="timeline-detail-section">
-          <h4>Related schedule</h4>
+          <h3>Related schedule</h3>
           {openingRelated ? <p role="status">Loading the timeline…</p> : null}
           {relatedError ? (
             <p role="alert">

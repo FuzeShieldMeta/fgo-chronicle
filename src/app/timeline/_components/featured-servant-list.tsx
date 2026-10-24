@@ -31,7 +31,7 @@ export function FeaturedServantList({
     <div className="timeline-featured-servants">
       {rarities.map((rarity) => (
         <div key={rarity ?? "unknown"} className="timeline-servant-group">
-          <h5>{rarity === null ? "Other Servants" : `${rarity}★ Servants`}</h5>
+          <h4>{rarity === null ? "Other Servants" : `${rarity}★ Servants`}</h4>
           <ul>
             {servants
               .filter((servant) => servant.rarity === rarity)

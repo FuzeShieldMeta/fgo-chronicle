@@ -54,7 +54,11 @@ export function TimelineAccountDetails({
   }
 
   return (
-    <aside className="timeline-details timeline-sync-details" aria-label="Sync">
+    <aside
+      className="timeline-details timeline-sync-details"
+      data-empty="false"
+      aria-label="Sync"
+    >
       <TimelinePanelHeader
         title={signedIn ? "Account and sync" : "Keep your planner"}
         headingId="timeline-account-heading"
@@ -102,7 +106,7 @@ export function TimelineAccountDetails({
           </button>
           <div className="timeline-sync-privacy">
             <section>
-              <h4>What Google shares</h4>
+              <h3>What Google shares</h3>
               <p>
                 Google sends an account-specific identifier and your primary
                 email address during sign-in. FGO Chronicle keeps the identifier
@@ -110,14 +114,14 @@ export function TimelineAccountDetails({
               </p>
             </section>
             <section>
-              <h4>What the app can access</h4>
+              <h3>What the app can access</h3>
               <p>
                 FGO Chronicle does not request access to Google Drive, Gmail,
                 contacts, calendars, or other Google services.
               </p>
             </section>
             <section>
-              <h4>What is stored</h4>
+              <h3>What is stored</h3>
               <p>
                 When you sign in, FGO Chronicle stores your planner data, an
                 internal user ID, Google&apos;s account-specific identifier, and

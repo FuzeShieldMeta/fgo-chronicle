@@ -78,6 +78,7 @@ export function TimelineSettingsDetails({
   return (
     <aside
       className="timeline-details timeline-settings-details"
+      data-empty="false"
       aria-labelledby="timeline-settings-heading"
     >
       <TimelinePanelHeader
@@ -86,11 +87,11 @@ export function TimelineSettingsDetails({
         onClose={onClose}
       />
       <section className="timeline-settings-section">
-        <h4>Appearance</h4>
+        <h3>Appearance</h3>
         <AppearanceControl />
       </section>
       <section className="timeline-settings-section">
-        <h4>Account and sync</h4>
+        <h3>Account and sync</h3>
         <p>
           {signedIn
             ? "Your planner syncs to your account."
@@ -106,7 +107,7 @@ export function TimelineSettingsDetails({
         </button>
       </section>
       <section className="timeline-settings-section">
-        <h4>Help</h4>
+        <h3>Help</h3>
         <button
           id="timeline-methodology-button"
           type="button"

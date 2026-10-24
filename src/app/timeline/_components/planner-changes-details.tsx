@@ -157,7 +157,7 @@ export function PlannerChangesDetails({
       {opening ? <p role="status">Opening the timeline…</p> : null}
       {error ? <p role="alert">This entry could not open. Try again.</p> : null}
       <section className="timeline-detail-section">
-        <h4>Summons ({sessions.length})</h4>
+        <h3>Summons ({sessions.length})</h3>
         {servantLookupFailed ? (
           <div className="timeline-details-message" role="alert">
             <p>
@@ -353,7 +353,7 @@ export function PlannerChangesDetails({
         )}
       </section>
       <section className="timeline-detail-section">
-        <h4>Reward choices ({choices.length})</h4>
+        <h3>Reward choices ({choices.length})</h3>
         {choices.length && status === "loading" ? (
           <p role="status">Loading reward details…</p>
         ) : null}

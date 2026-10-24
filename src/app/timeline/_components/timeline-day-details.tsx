@@ -351,7 +351,7 @@ export function TimelineDayDetails({
         closeLabel="Close day details"
       />
 
-      <h4 className="summon-section-title">Campaign and target</h4>
+      <h3 className="summon-section-title">Campaign and target</h3>
       {banners.length > 0 ? (
         <label className="summon-field">
           Summoning campaign
@@ -668,7 +668,7 @@ export function TimelineDayDetails({
           className="summon-saved-sessions"
           aria-labelledby="saved-sessions-heading"
         >
-          <h4 id="saved-sessions-heading">Sessions on this day</h4>
+          <h3 id="saved-sessions-heading">Sessions on this day</h3>
           <ul>
             {sortedSessions.map((session) => (
               <li key={session.id}>

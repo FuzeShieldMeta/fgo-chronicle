@@ -13,6 +13,7 @@ export function TimelineMethodologyDetails({
   return (
     <aside
       className="timeline-details timeline-methodology-details"
+      data-empty="false"
       aria-label="How the forecast works"
     >
       <TimelinePanelHeader
@@ -24,7 +25,7 @@ export function TimelineMethodologyDetails({
         }
       />
       <div className="timeline-methodology-content">
-        <MethodologyContent />
+        <MethodologyContent headingLevel={3} />
       </div>
     </aside>
   );

@@ -43,6 +43,8 @@ import { TimelineDetailsLayer } from "~/app/timeline/_components/timeline-detail
 import type { TimelineAccountUser } from "~/app/timeline/_components/timeline-account-details";
 import { TimelineAccountDetails } from "~/app/timeline/_components/timeline-account-details";
 import { TimelineMethodologyDetails } from "./timeline-methodology";
+import { TimelinePanelHeader } from "./timeline-panel-header";
+import { formatCalendarDay } from "../_lib/schedule-date";
 import {
   TimelineSettingsDetails,
   useTimelineSettings,
@@ -1722,16 +1724,12 @@ function TimelineScheduleContent({
               data-empty="false"
               aria-labelledby="timeline-day-heading"
             >
-              <div className="timeline-details-header">
-                <h3 id="timeline-day-heading">{selectedDay}</h3>
-                <button
-                  type="button"
-                  className="timeline-close-button"
-                  onClick={closeSelectedDay}
-                >
-                  Close
-                </button>
-              </div>
+              <TimelinePanelHeader
+                title={formatCalendarDay(selectedDay)}
+                headingId="timeline-day-heading"
+                eyebrow="Summon planning"
+                onClose={closeSelectedDay}
+              />
               {forecastHistoryMessage}
               {forecastHistory.failed ? (
                 <button

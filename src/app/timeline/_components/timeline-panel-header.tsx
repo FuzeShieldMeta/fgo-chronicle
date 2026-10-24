@@ -1,3 +1,7 @@
+"use client";
+
+import { useLayoutEffect, useRef } from "react";
+
 export function TimelinePanelHeader({
   title,
   headingId,
@@ -15,8 +19,32 @@ export function TimelinePanelHeader({
   back?: { label: string; onClick: () => void };
   className?: string;
 }) {
+  const headerRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const scroller = header?.closest<HTMLElement>(
+      ".timeline-entry-details-content, .timeline-details",
+    );
+    if (!header || !scroller) return;
+    const property = "--timeline-panel-header-height";
+    const previous = scroller.style.getPropertyValue(property);
+    const update = () =>
+      scroller.style.setProperty(
+        property,
+        `${header.getBoundingClientRect().height + 12}px`,
+      );
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      if (previous) scroller.style.setProperty(property, previous);
+      else scroller.style.removeProperty(property);
+    };
+  }, []);
   return (
     <header
+      ref={headerRef}
       className={`timeline-panel-header ${className}`}
       data-has-back={back ? "true" : undefined}
     >
@@ -43,9 +71,9 @@ export function TimelinePanelHeader({
         {eyebrow ? (
           <span className="timeline-type-label">{eyebrow}</span>
         ) : null}
-        <h3 id={headingId} tabIndex={-1}>
+        <h2 id={headingId} tabIndex={-1}>
           {title}
-        </h3>
+        </h2>
       </div>
     </header>
   );

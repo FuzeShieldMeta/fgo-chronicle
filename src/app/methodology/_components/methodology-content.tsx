@@ -1,4 +1,9 @@
-export function MethodologyContent() {
+export function MethodologyContent({
+  headingLevel = 2,
+}: {
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <>
       <p className="content-lead">
@@ -8,7 +13,7 @@ export function MethodologyContent() {
       </p>
 
       <section>
-        <h2>Schedule dates</h2>
+        <Heading>Schedule dates</Heading>
         <p>
           Most estimated dates are the Japanese release date plus two years. If
           a source already gives a Global estimate, we use that date without
@@ -34,7 +39,7 @@ export function MethodologyContent() {
       </section>
 
       <section>
-        <h2>Rewards</h2>
+        <Heading>Rewards</Heading>
         <p>
           The forecast tracks Saint Quartz, fragments, Summon Tickets, Holy
           Grails and Crystallised Lores. Event and mission data can be
@@ -48,7 +53,7 @@ export function MethodologyContent() {
       </section>
 
       <section>
-        <h2>Your balance</h2>
+        <Heading>Your balance</Heading>
         <p>
           Enter your current resources and login progress in Balances. Select a
           date to plan summons. The forecast adds income and subtracts your
@@ -63,7 +68,7 @@ export function MethodologyContent() {
       </section>
 
       <section>
-        <h2>Data sources</h2>
+        <Heading>Data sources</Heading>
         <ul className="content-source-list">
           <li>
             <a href="https://atlasacademy.io/" rel="noreferrer">
