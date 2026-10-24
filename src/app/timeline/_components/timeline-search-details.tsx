@@ -116,7 +116,7 @@ export function TimelineSearchResult({
             ? ` – ${formatCalendarDay(calendarDayKey(entry.endsAt, entry.endsAtPrecision ?? "EXACT", timeZone))}`
             : ""}
           <span
-            className="timeline-search-result-status"
+            className="timeline-status-chip timeline-search-result-status"
             data-status={entry.status}
           >
             {statuses[entry.status]}

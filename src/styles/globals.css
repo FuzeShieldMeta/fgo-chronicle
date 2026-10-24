@@ -61,6 +61,10 @@
   --md-control-label-size: 0.8125rem;
   --md-field-text-size: 1rem;
   --md-focus-ring: 3px solid var(--md-primary);
+  --md-state-hover: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  --md-state-pressed: color-mix(in srgb, var(--md-primary) 16%, transparent);
+  --md-elevation-control: 0 1px 3px var(--md-shadow);
+  --md-elevation-panel: 0 2px 8px var(--md-shadow);
   --app-bar-height: 72px;
   --timeline-date-axis-height: 56px;
   --timeline-grid-line-width: 1px;
@@ -477,10 +481,7 @@ button {
   border: 0;
   border-radius: var(--md-control-radius);
   background: var(--md-primary);
-  box-shadow:
-    0 2px 2px rgb(0 0 0 / 14%),
-    0 3px 1px -2px rgb(0 0 0 / 20%),
-    0 1px 5px rgb(0 0 0 / 12%);
+  box-shadow: var(--md-elevation-control);
   color: var(--md-on-primary);
   font-size: var(--md-control-label-size);
   font-weight: 600;
@@ -497,23 +498,24 @@ button {
     var(--timeline-balance-attention-duration) ease-in-out infinite;
 }
 
-.timeline-toolbar-action[aria-pressed="true"] {
-  background: var(--md-primary-container);
-  box-shadow:
-    inset 0 0 0 2px var(--md-primary),
-    0 2px 2px rgb(0 0 0 / 14%),
-    0 3px 1px -2px rgb(0 0 0 / 20%);
-  color: var(--md-on-primary-container);
-}
-
 .timeline-tonal-button {
   background: var(--md-primary-container);
   color: var(--md-on-primary-container);
+  box-shadow: none;
 }
 
 .timeline-toolbar-action[data-primary-action] {
   background: var(--md-primary);
   color: var(--md-on-primary);
+  box-shadow: var(--md-elevation-control);
+}
+
+.timeline-toolbar-action[aria-expanded="true"],
+.timeline-toolbar-action[data-primary-action][aria-pressed="true"] {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
 }
 
 @keyframes timeline-balance-attention {
@@ -541,11 +543,14 @@ button {
 .timeline-search-back:hover,
 .timeline-primary-button:hover,
 .timeline-details-message button:hover {
-  box-shadow:
-    inset 0 0 0 999px rgb(255 255 255 / 8%),
-    0 3px 5px -1px rgb(0 0 0 / 20%),
-    0 6px 10px rgb(0 0 0 / 14%),
-    0 1px 18px rgb(0 0 0 / 12%);
+  box-shadow: inset 0 0 0 999px var(--md-state-hover);
+}
+
+.timeline-primary-button:hover:not(:disabled),
+.timeline-toolbar-action[data-primary-action]:not([aria-pressed="true"]):hover:not(:disabled),
+.timeline-retry:hover:not(:disabled) {
+  background: var(--md-primary-hover);
+  box-shadow: var(--md-elevation-control);
 }
 
 .timeline-retry:focus-visible,
@@ -671,9 +676,6 @@ button {
 }
 .timeline-search-result-status {
   white-space: nowrap;
-}
-.timeline-search-result-status[data-status="PROJECTED"] {
-  color: var(--md-summon);
 }
 .timeline-search-servants {
   display: grid;
@@ -938,10 +940,7 @@ button {
   border: 1px solid var(--md-outline-variant);
   border-radius: 4px;
   background: var(--md-surface);
-  box-shadow:
-    0 2px 4px -1px rgb(0 0 0 / 20%),
-    0 4px 5px rgb(0 0 0 / 14%),
-    0 1px 10px rgb(0 0 0 / 12%);
+  box-shadow: var(--md-elevation-panel);
 }
 
 .timeline-scroll {
@@ -2137,10 +2136,7 @@ button {
   border: 1px solid var(--md-outline-variant);
   border-radius: 4px;
   background: var(--md-surface);
-  box-shadow:
-    0 3px 5px -1px rgb(0 0 0 / 20%),
-    0 6px 10px rgb(0 0 0 / 14%),
-    0 1px 18px rgb(0 0 0 / 12%);
+  box-shadow: var(--md-elevation-panel);
 }
 
 .timeline-details[data-has-planning-action="true"] {
@@ -2516,6 +2512,7 @@ button {
 }
 
 .timeline-status-chip[data-status="CURATED"] {
+  border: 3px double var(--md-secondary);
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
 }
@@ -3112,13 +3109,11 @@ button {
 .summon-result-summary button:hover:not(:disabled),
 .summon-session-actions button:hover:not(:disabled),
 .summon-probability-table button:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 999px
-    color-mix(in srgb, var(--md-primary) 8%, transparent);
+  box-shadow: inset 0 0 0 999px var(--md-state-hover);
 }
 
 .timeline-details button:active:not(:disabled) {
-  box-shadow: inset 0 0 0 999px
-    color-mix(in srgb, var(--md-primary) 16%, transparent);
+  box-shadow: inset 0 0 0 999px var(--md-state-pressed);
 }
 
 .timeline-details button:disabled:not([aria-current="true"]),

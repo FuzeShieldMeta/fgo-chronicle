@@ -1369,6 +1369,7 @@ function TimelineScheduleContent({
             type="button"
             className="timeline-tonal-button timeline-toolbar-action"
             aria-label="Balances"
+            aria-expanded={profilePanelOpen}
             data-attention={playerProfile ? undefined : "true"}
             onClick={() => {
               setIsChoosingSummonDate(false);
