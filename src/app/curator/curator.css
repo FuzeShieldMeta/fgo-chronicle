@@ -39,9 +39,9 @@
 .curator-page select,
 .curator-page textarea {
   font: inherit;
-  min-height: 44px;
+  min-height: var(--md-control-height);
   border: 1px solid var(--md-outline);
-  border-radius: 6px;
+  border-radius: var(--md-control-radius);
   padding: 8px 12px;
   background: var(--md-surface);
   color: var(--md-on-surface);
@@ -49,16 +49,21 @@
 }
 .curator-page button {
   cursor: pointer;
+  font-size: var(--md-control-label-size);
+  font-weight: 600;
+}
+.curator-page :is(input, select, textarea) {
+  font-size: var(--md-field-text-size);
 }
 .curator-page button:hover:not(:disabled) {
   background: var(--md-surface-high);
 }
 .curator-page button:disabled {
-  opacity: 0.55;
-  cursor: default;
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 .curator-page :is(button, input, select, textarea, a, summary):focus-visible {
-  outline: 3px solid var(--md-primary);
+  outline: var(--md-focus-ring);
   outline-offset: 3px;
 }
 .curator-page label {
@@ -145,7 +150,7 @@
   padding: 16px;
   border: 1px solid var(--md-outline-variant);
   margin: 16px 0 24px;
-  border-radius: 6px;
+  border-radius: var(--md-control-radius);
 }
 .curator-page summary {
   cursor: pointer;
