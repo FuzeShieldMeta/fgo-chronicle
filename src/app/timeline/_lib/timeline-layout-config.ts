@@ -20,7 +20,7 @@ export const timelineLayout = {
   servantSummaryMaximum: 3,
   servantThumbnailSize: 28,
   servantThumbnailVerticalPadding: 2,
-  servantThumbnailMinimumSize: 18,
+  servantThumbnailMinimumSize: 12,
   servantThumbnailGap: 4,
   servantThumbnailOverflowWidth: 28,
   servantThumbnailLabelPadding: 20,
