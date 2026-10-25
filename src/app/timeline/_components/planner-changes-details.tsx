@@ -333,16 +333,6 @@ export function PlannerChangesDetails({
                             : "Before/after balances will appear when forecast income has loaded."}
                       </p>
                     )}
-                    {balances &&
-                    [
-                      balances.after.SAINT_QUARTZ,
-                      balances.after.SUMMON_TICKET,
-                      balances.after.SAINT_QUARTZ_FRAGMENT,
-                    ].some((value) => value < 0) ? (
-                      <p className="summon-affordability-note">
-                        Resource shortfall after this plan.
-                      </p>
-                    ) : null}
                   </div>
                 </li>
               );
