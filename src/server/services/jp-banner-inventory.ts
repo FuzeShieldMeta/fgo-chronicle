@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { extractJpBannerSchedule } from "./jp-banner-schedule";
+import {
+  fetchJpBannerServantCatalogue,
+  resolveJpBannerServantMentions,
+  JP_BANNER_SERVANT_SOURCE,
+} from "./jp-banner-servants";
 
 const ORIGIN = "https://news.fate-go.jp";
 export const JP_BANNER_INVENTORY_LIMITS = {
@@ -419,6 +424,9 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     evidenceBlocks,
     imageReferences,
     linkedArticles: linkedArticles.slice(0, LIMITS.maxLinkedArticles),
+    servantIdentities: null as ReturnType<
+      typeof resolveJpBannerServantMentions
+    > | null,
     schedule: extractJpBannerSchedule({
       sourceUrl: url,
       title,
@@ -444,12 +452,23 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
 }
 
 export async function inventoryJpBannerAnnouncements(
-  options: { startPage?: number; pages?: number; inspect?: number } = {},
+  options: {
+    startPage?: number;
+    pages?: number;
+    inspect?: number;
+    resolveServants?: boolean;
+  } = {},
   dependencies: { fetchFn?: typeof fetch; now?: () => Date } = {},
 ) {
   const pages = options.pages ?? LIMITS.defaultPages,
     startPage = options.startPage ?? 1;
   const inspect = options.inspect ?? 0;
+  if (
+    (options.resolveServants !== undefined &&
+      typeof options.resolveServants !== "boolean") ||
+    (options.resolveServants && inspect === 0)
+  )
+    throw new Error("Servant resolution requires article inspection.");
   if (
     !Number.isSafeInteger(inspect) ||
     inspect < 0 ||
@@ -555,10 +574,54 @@ export async function inventoryJpBannerAnnouncements(
       });
     }
   }
+  const servantCatalogue: {
+    status: "NOT_REQUESTED" | "NO_NAME_MENTIONS" | "SUCCEEDED" | "FAILED";
+    sourceUrl: string;
+    contentHash: string | null;
+    error: "SERVANT_CATALOGUE_FETCH_OR_PARSE_FAILED" | null;
+  } = {
+    status: "NOT_REQUESTED",
+    sourceUrl: JP_BANNER_SERVANT_SOURCE,
+    contentHash: null,
+    error: null,
+  };
+  if (options.resolveServants) {
+    const inspections = [...articles.values()].flatMap((entry) =>
+      entry.inspection?.schedule.servantMentions.length
+        ? [entry.inspection]
+        : [],
+    );
+    if (!inspections.length) servantCatalogue.status = "NO_NAME_MENTIONS";
+    else {
+      try {
+        const catalogue = await fetchJpBannerServantCatalogue(
+          dependencies.fetchFn,
+          signal,
+        );
+        const resolutions = inspections.map((inspection) => ({
+          inspection,
+          matches: resolveJpBannerServantMentions(
+            inspection.schedule.servantMentions,
+            catalogue.servants,
+          ),
+        }));
+        for (const { inspection, matches } of resolutions)
+          inspection.servantIdentities = matches;
+        servantCatalogue.status = "SUCCEEDED";
+        servantCatalogue.contentHash = catalogue.contentHash;
+      } catch {
+        servantCatalogue.status = "FAILED";
+        servantCatalogue.error = "SERVANT_CATALOGUE_FETCH_OR_PARSE_FAILED";
+      }
+    }
+  }
   return {
     scope: "BOUNDED_JP_NEWS_ARCHIVE" as const,
     status:
-      failure || articleFailures.length || inspectionDeadlineReached
+      failure ||
+      articleFailures.length ||
+      inspectionDeadlineReached ||
+      servantCatalogue.status === "FAILED"
         ? ("partial_failure" as const)
         : ("succeeded" as const),
     publicationAllowed: false as const,
@@ -570,6 +633,7 @@ export async function inventoryJpBannerAnnouncements(
     nextIndexUrl: nextUrl,
     failure,
     articleFailures,
+    servantCatalogue,
     requestedArticleInspections: inspect,
     inspectionStopReason:
       inspect === 0
@@ -618,6 +682,22 @@ export async function inventoryJpBannerAnnouncements(
         (entry) => entry.inspectionStatus === "NOT_RELEVANT",
       ).length,
       failedArticleInspections: articleFailures.length,
+      matchedServantNameMentions: [...articles.values()].reduce(
+        (count, entry) =>
+          count +
+          (entry.inspection?.servantIdentities?.filter(
+            (mention) => mention.status === "MATCHED",
+          ).length ?? 0),
+        0,
+      ),
+      unresolvedServantNameMentions: [...articles.values()].reduce(
+        (count, entry) =>
+          count +
+          (entry.inspection?.servantIdentities?.filter(
+            (mention) => mention.status !== "MATCHED",
+          ).length ?? 0),
+        0,
+      ),
       extractedPeriodCandidates: [...articles.values()].reduce(
         (count, entry) =>
           count + (entry.inspection?.schedule.periods.length ?? 0),
