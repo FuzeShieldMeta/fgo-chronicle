@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { extractJpBannerSchedule } from "./jp-banner-schedule";
+import { previewJpBannerProjection } from "./jp-banner-projection";
 import {
   fetchJpBannerServantCatalogue,
   resolveJpBannerServantMentions,
@@ -425,6 +426,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     evidenceBlocks,
     imageReferences,
     linkedArticles: linkedArticles.slice(0, LIMITS.maxLinkedArticles),
+    naProjection: null as ReturnType<typeof previewJpBannerProjection> | null,
     servantIdentities: null as ReturnType<
       typeof resolveJpBannerServantMentions
     > | null,
@@ -461,12 +463,19 @@ export async function inventoryJpBannerAnnouncements(
     pages?: number;
     inspect?: number;
     resolveServants?: boolean;
+    projectNa?: boolean;
   } = {},
   dependencies: { fetchFn?: typeof fetch; now?: () => Date } = {},
 ) {
   const pages = options.pages ?? LIMITS.defaultPages,
     startPage = options.startPage ?? 1;
   const inspect = options.inspect ?? 0;
+  if (
+    (options.projectNa !== undefined &&
+      typeof options.projectNa !== "boolean") ||
+    (options.projectNa && inspect === 0)
+  )
+    throw new Error("NA projection requires article inspection.");
   if (
     (options.resolveServants !== undefined &&
       typeof options.resolveServants !== "boolean") ||
@@ -563,6 +572,11 @@ export async function inventoryJpBannerAnnouncements(
     }
     try {
       const inspection = parseJpBannerArticle(body, entry.url);
+      if (options.projectNa)
+        inspection.naProjection = previewJpBannerProjection(
+          inspection.schedule,
+          inspection.kind,
+        );
       entry.inspection = inspection;
       entry.inspectionStatus =
         inspection.kind === "UNRESOLVED"
@@ -696,6 +710,14 @@ export async function inventoryJpBannerAnnouncements(
         (entry) => entry.inspectionStatus === "NOT_RELEVANT",
       ).length,
       failedArticleInspections: articleFailures.length,
+      projectedPeriodCandidates: [...articles.values()].reduce(
+        (count, entry) =>
+          count +
+          (entry.inspection?.naProjection?.windows.filter(
+            (window) => window.status === "PROJECTED",
+          ).length ?? 0),
+        0,
+      ),
       matchedServantNameMentions: [...articles.values()].reduce(
         (count, entry) =>
           count +

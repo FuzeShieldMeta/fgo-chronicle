@@ -3,7 +3,7 @@ import { inventoryJpBannerAnnouncements } from "../src/server/services/jp-banner
 try {
   if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") {
     console.log(
-      "Usage: npm run data:review-jp-banners -- [--pages=1..50] [--start-page=1..5000] [--inspect=0..20] [--resolve-servants]\nRead-only JP news inventory. Defaults to two pages and no article inspection. Optional inspection extracts labelled JP period candidates, raw servant-name mentions and image references. --resolve-servants requires inspection, matches explicit names against the Japanese Atlas catalogue and records exact named-pickup period associations. Neither name matches nor partial associations establish complete banner rosters. No image downloads, NA projection or publication.",
+      "Usage: npm run data:review-jp-banners -- [--pages=1..50] [--start-page=1..5000] [--inspect=0..20] [--resolve-servants] [--project-na]\nRead-only JP news inventory. Defaults to two pages and no article inspection. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift; it does not verify family identity or NA availability. Both flags require --inspect=1..20. Incomplete rosters and image schedules remain unresolved. No image downloads or publication.",
     );
   } else {
     const options: {
@@ -11,14 +11,16 @@ try {
       startPage?: number;
       inspect?: number;
       resolveServants?: boolean;
+      projectNa?: boolean;
     } = {};
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
-      if (argument === "--resolve-servants") {
+      if (argument === "--resolve-servants" || argument === "--project-na") {
         if (seen.has(argument))
           throw new Error("Duplicate servant resolution argument.");
         seen.add(argument);
-        options.resolveServants = true;
+        if (argument === "--resolve-servants") options.resolveServants = true;
+        else options.projectNa = true;
         continue;
       }
       const match = /^--(pages|start-page|inspect)=(0|[1-9]\d*)$/.exec(
@@ -41,7 +43,7 @@ try {
   }
 } catch {
   console.error(
-    "Could not inventory JP announcements. Use --pages=1..50, --start-page=1..5000 and --inspect=0..20. --resolve-servants requires --inspect=1..20. No data was published.",
+    "Could not inventory JP announcements. Use --pages=1..50, --start-page=1..5000 and --inspect=0..20. --resolve-servants and --project-na require --inspect=1..20. No data was published.",
   );
   process.exitCode = 1;
 }
