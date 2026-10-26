@@ -19,6 +19,7 @@ export const JP_BANNER_INVENTORY_LIMITS = {
   maxEntriesPerPage: 100,
   maxTitleCharacters: 1_000,
   maxArticleInspections: 20,
+  maxDiscoveredLinkedArticles: 200,
   maxEvidenceBlocks: 80,
   maxEvidenceCharacters: 4_000,
   maxImageReferences: 100,
@@ -457,19 +458,48 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
   };
 }
 
+export type JpBannerInventoryOptions = {
+  startPage?: number;
+  pages?: number;
+  inspect?: number;
+  resolveServants?: boolean;
+  projectNa?: boolean;
+  articleUrls?: string[];
+  followLinks?: number;
+};
+
 export async function inventoryJpBannerAnnouncements(
-  options: {
-    startPage?: number;
-    pages?: number;
-    inspect?: number;
-    resolveServants?: boolean;
-    projectNa?: boolean;
-  } = {},
+  options: JpBannerInventoryOptions = {},
   dependencies: { fetchFn?: typeof fetch; now?: () => Date } = {},
 ) {
   const pages = options.pages ?? LIMITS.defaultPages,
     startPage = options.startPage ?? 1;
-  const inspect = options.inspect ?? 0;
+  if (
+    options.articleUrls !== undefined &&
+    (!Array.isArray(options.articleUrls) ||
+      !options.articleUrls.length ||
+      options.articleUrls.length > LIMITS.maxArticleInspections ||
+      options.articleUrls.some((url) => typeof url !== "string"))
+  )
+    throw new Error("Invalid direct JP article selection.");
+  const directUrls = [...new Set((options.articleUrls ?? []).map(articleUrl))];
+  if (
+    directUrls.length &&
+    (options.pages !== undefined || options.startPage !== undefined)
+  )
+    throw new Error(
+      "Direct article selection cannot be combined with archive pages.",
+    );
+  const inspect = options.inspect ?? directUrls.length;
+  const followLinks = options.followLinks ?? 0;
+  if (
+    !Number.isSafeInteger(followLinks) ||
+    followLinks < 0 ||
+    followLinks > LIMITS.maxArticleInspections ||
+    (followLinks > 0 && inspect === 0) ||
+    inspect + followLinks > LIMITS.maxArticleInspections
+  )
+    throw new Error("Invalid linked article inspection budget.");
   if (
     (options.projectNa !== undefined &&
       typeof options.projectNa !== "boolean") ||
@@ -490,7 +520,9 @@ export async function inventoryJpBannerAnnouncements(
     throw new Error("Invalid JP article inspection limit.");
   if (!Number.isSafeInteger(pages) || pages < 1 || pages > LIMITS.maxPages)
     throw new Error("Invalid JP inventory page limit.");
-  let nextUrl: string | null = jpBannerIndexUrl(startPage);
+  let nextUrl: string | null = directUrls.length
+    ? null
+    : jpBannerIndexUrl(startPage);
   const retrievedAt = (dependencies.now ?? (() => new Date()))().toISOString();
   const signal = AbortSignal.timeout(LIMITS.collectionTimeoutMs);
   const indices: ReturnType<typeof parseJpBannerIndex>[] = [];
@@ -522,6 +554,8 @@ export async function inventoryJpBannerAnnouncements(
     string,
     ReturnType<typeof parseJpBannerIndex>["entries"][number] & {
       indexUrls: string[];
+      linkedFrom: string[];
+      discovery: "ARCHIVE_INDEX" | "DIRECT_LOOKUP" | "LINKED_NOTICE";
     }
   >();
   for (const index of indices)
@@ -539,8 +573,30 @@ export async function inventoryJpBannerAnnouncements(
           if (!existing.issues.includes("INDEX_METADATA_CONFLICT"))
             existing.issues.push("INDEX_METADATA_CONFLICT");
         }
-      } else articles.set(entry.url, { ...entry, indexUrls: [index.url] });
+      } else
+        articles.set(entry.url, {
+          ...entry,
+          indexUrls: [index.url],
+          linkedFrom: [],
+          discovery: "ARCHIVE_INDEX",
+        });
     }
+  function addUnlistedArticle(url: string, linkedFrom: string | null) {
+    articles.set(url, {
+      sourceRecordId: `publisher:JP:article:${new URL(url).pathname}`,
+      url,
+      title: null,
+      listedDay: null,
+      classification: "UNCLASSIFIED",
+      inspectionStatus: "NOT_INSPECTED",
+      inspection: null,
+      issues: [],
+      indexUrls: [],
+      linkedFrom: linkedFrom ? [linkedFrom] : [],
+      discovery: linkedFrom ? "LINKED_NOTICE" : "DIRECT_LOOKUP",
+    });
+  }
+  for (const url of directUrls) addUnlistedArticle(url, null);
   const articleFailures: {
     url: string;
     code: "ARTICLE_FETCH_FAILED" | "ARTICLE_PARSE_FAILED";
@@ -553,11 +609,20 @@ export async function inventoryJpBannerAnnouncements(
         Number(b.classification === "UNCLASSIFIED"),
     );
   let inspectionDeadlineReached = false;
-  for (const entry of inspectionCandidates.slice(0, inspect)) {
+  const inspectionQueue = inspectionCandidates
+    .slice(0, inspect)
+    .map((entry) => ({ entry, linked: false }));
+  const queued = new Set(inspectionQueue.map(({ entry }) => entry.url));
+  let queuedLinked = 0,
+    attemptedLinked = 0,
+    discoveredLinked = 0;
+  let linkedDiscoveryLimited = false;
+  for (const { entry, linked } of inspectionQueue) {
     if (signal.aborted) {
       inspectionDeadlineReached = true;
       break;
     }
+    if (linked) attemptedLinked++;
     let body: string;
     try {
       body = await fetchJpBannerArticle(
@@ -584,6 +649,30 @@ export async function inventoryJpBannerAnnouncements(
           : inspection.kind === "NOT_RELEVANT"
             ? "NOT_RELEVANT"
             : "INSPECTED";
+      if (followLinks > 0) {
+        for (const url of inspection.linkedArticles) {
+          if (!articles.has(url)) {
+            if (discoveredLinked >= LIMITS.maxDiscoveredLinkedArticles) {
+              linkedDiscoveryLimited = true;
+              continue;
+            }
+            addUnlistedArticle(url, entry.url);
+            discoveredLinked++;
+          }
+          const child = articles.get(url)!;
+          if (!child.linkedFrom.includes(entry.url))
+            child.linkedFrom.push(entry.url);
+          if (
+            !queued.has(url) &&
+            child.inspectionStatus === "NOT_INSPECTED" &&
+            queuedLinked < followLinks
+          ) {
+            queued.add(url);
+            inspectionQueue.push({ entry: child, linked: true });
+            queuedLinked++;
+          }
+        }
+      }
     } catch {
       entry.inspectionStatus = "UNRESOLVED";
       articleFailures.push({
@@ -643,8 +732,16 @@ export async function inventoryJpBannerAnnouncements(
       }
     }
   }
+  const uninspectedLinked = [...articles.values()].some(
+    (entry) =>
+      entry.linkedFrom.length > 0 && entry.inspectionStatus === "NOT_INSPECTED",
+  );
+  const linkedInspectionLimited =
+    followLinks > 0 && (linkedDiscoveryLimited || uninspectedLinked);
   return {
-    scope: "BOUNDED_JP_NEWS_ARCHIVE" as const,
+    scope: directUrls.length
+      ? ("DIRECT_JP_ARTICLE_SELECTION" as const)
+      : ("BOUNDED_JP_NEWS_ARCHIVE" as const),
     status:
       failure ||
       articleFailures.length ||
@@ -654,14 +751,38 @@ export async function inventoryJpBannerAnnouncements(
         : ("succeeded" as const),
     publicationAllowed: false as const,
     retrievedAt,
-    startPage,
-    requestedPages: pages,
-    coverageLimited: startPage !== 1 || nextUrl !== null || failure !== null,
-    stopReason: failure?.code ?? (nextUrl ? "PAGE_LIMIT" : "ARCHIVE_END"),
+    startPage: directUrls.length ? null : startPage,
+    requestedPages: directUrls.length ? 0 : pages,
+    coverageLimited:
+      directUrls.length > 0 ||
+      startPage !== 1 ||
+      nextUrl !== null ||
+      failure !== null ||
+      linkedInspectionLimited,
+    stopReason: directUrls.length
+      ? "EXPLICIT_ARTICLES"
+      : (failure?.code ?? (nextUrl ? "PAGE_LIMIT" : "ARCHIVE_END")),
     nextIndexUrl: nextUrl,
     failure,
     articleFailures,
     servantCatalogue,
+    linkedTraversal: {
+      requestedInspections: followLinks,
+      attemptedInspections: attemptedLinked,
+      discoveredArticles: discoveredLinked,
+      discoveryLimited: linkedDiscoveryLimited,
+      inspectionLimited: linkedInspectionLimited,
+      stopReason:
+        followLinks === 0
+          ? "NOT_REQUESTED"
+          : inspectionDeadlineReached
+            ? "DEADLINE"
+            : linkedDiscoveryLimited
+              ? "DISCOVERY_LIMIT"
+              : uninspectedLinked
+                ? "ARTICLE_LIMIT"
+                : "ELIGIBLE_LINKS_ATTEMPTED",
+    },
     requestedArticleInspections: inspect,
     inspectionStopReason:
       inspect === 0
