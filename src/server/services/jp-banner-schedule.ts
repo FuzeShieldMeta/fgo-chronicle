@@ -106,8 +106,51 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     context: string;
     evidenceHash: string;
   }[] = [];
+  const summonGroupEvidence: {
+    pickupCount: number;
+    declaredServantCount: number | null;
+    context: string;
+    evidenceHash: string;
+  }[] = [];
+  let explicitSeparatePeriods = false;
   for (const context of source.blocks) {
     const normalized = context.normalize("NFKC");
+    // Conditional instructions describe game rules, not this notice's actual schedule.
+    const declaration = normalized.replace(/\s+/gu, "");
+    if (!/場合|一例|例として|たとえば/u.test(declaration)) {
+      if (
+        /それぞれのピックアップ召喚は[、,]*開催期間が異なります|召喚内容ごとに個別の召喚として開催(?:される仕様|されます|いたします|します)/u.test(
+          declaration,
+        )
+      )
+        explicitSeparatePeriods = true;
+      const count = /(?<!\d)(\d{1,3})種類の召喚/u.exec(declaration);
+      if (
+        count &&
+        Number(count[1]) > 0 &&
+        /種類の召喚を?開催(?:いたします|します|[!。]|$)/u.test(declaration)
+      ) {
+        const evidenceHash = hash([
+          source.sourceUrl,
+          "SUMMON_GROUP",
+          normalized,
+        ]);
+        const servants = /(?<!\d)(\d{1,3})騎(?:と|のサーヴァント)/u.exec(
+          declaration.slice(0, count.index),
+        );
+        if (
+          !summonGroupEvidence.some(
+            (group) => group.evidenceHash === evidenceHash,
+          )
+        )
+          summonGroupEvidence.push({
+            pickupCount: Number(count[1]),
+            declaredServantCount: servants ? Number(servants[1]) : null,
+            context,
+            evidenceHash,
+          });
+      }
+    }
     const matches = [...normalized.matchAll(RANGE)];
     if (
       !matches.length &&
@@ -255,12 +298,8 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     if (scheduleImageCandidates.length)
       pendingEvidence.push("IMAGE_SCHEDULE_UNINTERPRETED");
     if (
-      source.blocks.some((block) =>
-        /\d+種類の召喚|召喚内容ごと|それぞれ.*(?:開催期間|召喚期間)/u.test(
-          block.normalize("NFKC"),
-        ),
-      ) &&
-      !periods.some((period) => period.scope === "LABELLED_SUMMON")
+      explicitSeparatePeriods ||
+      summonGroupEvidence.some((group) => group.pickupCount > 1)
     )
       pendingEvidence.push("INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED");
     pendingEvidence.push(
@@ -274,6 +313,7 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     periods,
     unparsedPeriods,
     servantMentions,
+    summonGroupEvidence,
     scheduleImageCandidates,
     pendingEvidence,
     publicationAllowed: false as const,

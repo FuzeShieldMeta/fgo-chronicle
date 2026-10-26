@@ -5,6 +5,7 @@ import {
   fetchJpBannerServantCatalogue,
   resolveJpBannerServantMentions,
   JP_BANNER_SERVANT_SOURCE,
+  associateJpBannerPickupEvidence,
 } from "./jp-banner-servants";
 
 const ORIGIN = "https://news.fate-go.jp";
@@ -427,6 +428,9 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     servantIdentities: null as ReturnType<
       typeof resolveJpBannerServantMentions
     > | null,
+    pickupEvidence: null as ReturnType<
+      typeof associateJpBannerPickupEvidence
+    > | null,
     schedule: extractJpBannerSchedule({
       sourceUrl: url,
       title,
@@ -598,15 +602,25 @@ export async function inventoryJpBannerAnnouncements(
           dependencies.fetchFn,
           signal,
         );
-        const resolutions = inspections.map((inspection) => ({
-          inspection,
-          matches: resolveJpBannerServantMentions(
+        const resolutions = inspections.map((inspection) => {
+          const matches = resolveJpBannerServantMentions(
             inspection.schedule.servantMentions,
             catalogue.servants,
-          ),
-        }));
-        for (const { inspection, matches } of resolutions)
+          );
+          return {
+            inspection,
+            matches,
+            pickupEvidence: associateJpBannerPickupEvidence(
+              inspection.schedule,
+              matches,
+              inspection.kind,
+            ),
+          };
+        });
+        for (const { inspection, matches, pickupEvidence } of resolutions) {
           inspection.servantIdentities = matches;
+          inspection.pickupEvidence = pickupEvidence;
+        }
         servantCatalogue.status = "SUCCEEDED";
         servantCatalogue.contentHash = catalogue.contentHash;
       } catch {
@@ -687,6 +701,14 @@ export async function inventoryJpBannerAnnouncements(
           count +
           (entry.inspection?.servantIdentities?.filter(
             (mention) => mention.status === "MATCHED",
+          ).length ?? 0),
+        0,
+      ),
+      pickupPeriodsWithNameAssociations: [...articles.values()].reduce(
+        (count, entry) =>
+          count +
+          (entry.inspection?.pickupEvidence?.windows.filter(
+            (window) => window.associations.length > 0,
           ).length ?? 0),
         0,
       ),

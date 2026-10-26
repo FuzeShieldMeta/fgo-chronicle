@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { extractJpBannerSchedule } from "./jp-banner-schedule";
 
 export const JP_BANNER_SERVANT_SOURCE =
   "https://api.atlasacademy.io/export/JP/basic_servant.json";
@@ -205,4 +206,158 @@ export function resolveJpBannerServantMentions(
       pickupMembershipConfirmed: false as const,
     };
   });
+}
+
+/** Partial source associations only: neither a complete roster nor a publishable banner. */
+export function associateJpBannerPickupEvidence(
+  schedule: ReturnType<typeof extractJpBannerSchedule>,
+  identities: ReturnType<typeof resolveJpBannerServantMentions>,
+  kind:
+    | "SUMMON_CONTENT"
+    | "RESTRICTED_SUMMON_CONTENT"
+    | "NOT_RELEVANT"
+    | "UNRESOLVED",
+) {
+  const linkedMentions = new Set<string>();
+  const summonPeriods = schedule.periods.filter(
+    (period) =>
+      period.scope === "LABELLED_SUMMON" || period.scope === "ARTICLE_ENVELOPE",
+  );
+  const canShareStatement =
+    summonPeriods.length === 1 &&
+    !schedule.pendingEvidence.includes(
+      "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED",
+    ) &&
+    !schedule.pendingEvidence.includes("IMAGE_SCHEDULE_UNINTERPRETED");
+  const windows = summonPeriods.map((period) => {
+    // Accept an exact named pickup, optionally prefixed by one quoted campaign label.
+    // Do not strip arbitrary text or split names on punctuation used by real variants.
+    const label = period.subject?.normalize("NFKC").trim() ?? "";
+    const match = /^(?:「[^「」]+」\s*)?([^「」『』]+)ピックアップ召喚$/u.exec(
+      label,
+    );
+    const quotedName =
+      /^[◆◇\s]*[「『]([^「」『』]+)[」』]\s*ピックアップ召喚(?:の)?(?:開催)?期間[◆◇\s]*$/u.exec(
+        period.label.normalize("NFKC"),
+      );
+    const prefixedName =
+      /^.+(?:イベント|キャンペーン)\s+([^「」『』]+)ピックアップ召喚$/u.exec(
+        label,
+      );
+    const names = new Set(
+      [match?.[1], quotedName?.[1], prefixedName?.[1]].flatMap((name) =>
+        name ? [normalize(name)] : [],
+      ),
+    );
+    const mentioned = names.size
+      ? identities.filter(
+          (identity) =>
+            names.has(normalize(identity.name)) ||
+            (identity.status === "MATCHED" &&
+              identity.candidates.some((candidate) =>
+                names.has(normalize(candidate.name)),
+              )),
+        )
+      : [];
+    const ids = [
+      ...new Set(
+        mentioned.flatMap((identity) =>
+          identity.servantId === null ? [] : [identity.servantId],
+        ),
+      ),
+    ];
+    const issues = [...period.issues];
+    if (!names.size) issues.push("INDIVIDUAL_PICKUP_LABEL_UNRESOLVED");
+    else if (!mentioned.length)
+      issues.push("PICKUP_SUBJECT_WITHOUT_NAME_EVIDENCE");
+    else if (
+      ids.length !== 1 ||
+      mentioned.some((identity) => identity.status !== "MATCHED")
+    )
+      issues.push("PICKUP_SUBJECT_IDENTITY_UNRESOLVED");
+    if (!period.startsAt || !period.endsAt)
+      issues.push("PICKUP_TIME_UNRESOLVED");
+    if (kind === "RESTRICTED_SUMMON_CONTENT")
+      issues.push("RESTRICTED_SUMMON_NOTICE");
+    else if (kind !== "SUMMON_CONTENT")
+      issues.push("NOTICE_EVIDENCE_UNRESOLVED");
+    if (schedule.pendingEvidence.includes("INCOMPLETE_ARTICLE_EVIDENCE"))
+      issues.push("INCOMPLETE_ARTICLE_EVIDENCE");
+    const associations: {
+      servantId: number;
+      mentionEvidenceHashes: string[];
+      basis:
+        | "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY"
+        | "EXPLICIT_SHARED_PICKUP_STATEMENT";
+    }[] = issues.length
+      ? []
+      : [
+          {
+            servantId: ids[0]!,
+            mentionEvidenceHashes: [
+              ...new Set(mentioned.map((identity) => identity.evidenceHash)),
+            ],
+            basis: "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY" as const,
+          },
+        ];
+    if (associations.length && canShareStatement) {
+      const contexts = new Set(
+        mentioned
+          .map((identity) => identity.context)
+          .filter((context) => {
+            const statement = context.normalize("NFKC").replace(/\s+/gu, "");
+            // Names and quoted campaign titles are data, not role/negation wording.
+            const prose = statement.replace(/[「『][^「」『』]*[」』]/gu, "");
+            return (
+              /をピックアップ[!。]?$/u.test(prose) &&
+              [...prose.matchAll(/サーヴァント/gu)].length === 1 &&
+              [...prose.matchAll(/ピックアップ/gu)].length === 1 &&
+              !/場合|一例|例として|たとえば|など|含む|ほか|別の|対象外|除く|以外|ません|ボーナス|特攻|強化|クエスト|確定/u.test(
+                prose,
+              )
+            );
+          }),
+      );
+      for (const identity of identities) {
+        if (
+          identity.status !== "MATCHED" ||
+          identity.servantId === null ||
+          !contexts.has(identity.context)
+        )
+          continue;
+        const existing = associations.find(
+          (association) => association.servantId === identity.servantId,
+        );
+        if (existing) {
+          if (!existing.mentionEvidenceHashes.includes(identity.evidenceHash))
+            existing.mentionEvidenceHashes.push(identity.evidenceHash);
+        } else
+          associations.push({
+            servantId: identity.servantId,
+            mentionEvidenceHashes: [identity.evidenceHash],
+            basis: "EXPLICIT_SHARED_PICKUP_STATEMENT",
+          });
+      }
+    }
+    for (const association of associations)
+      for (const evidenceHash of association.mentionEvidenceHashes)
+        linkedMentions.add(evidenceHash);
+    return {
+      periodEvidenceHash: period.evidenceHash,
+      subject: period.subject,
+      startsAt: period.startsAt,
+      endsAt: period.endsAt,
+      associations,
+      issues: [...new Set(issues)],
+      rosterComplete: false as const,
+      publicationAllowed: false as const,
+    };
+  });
+  return {
+    windows,
+    unassociatedMentionHashes: identities
+      .filter((identity) => !linkedMentions.has(identity.evidenceHash))
+      .map((identity) => identity.evidenceHash),
+    publicationAllowed: false as const,
+  };
 }

@@ -3,7 +3,7 @@ import { inventoryJpBannerAnnouncements } from "../src/server/services/jp-banner
 try {
   if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") {
     console.log(
-      "Usage: npm run data:review-jp-banners -- [--pages=1..50] [--start-page=1..5000] [--inspect=0..20] [--resolve-servants]\nRead-only JP news inventory. Defaults to two pages and no article inspection. Optional inspection extracts labelled JP period candidates, raw servant-name mentions and image references. --resolve-servants requires inspection and matches explicit names against the Japanese Atlas catalogue. Name matches do not confirm pickup membership. No image downloads, complete roster resolution, NA projection or publication.",
+      "Usage: npm run data:review-jp-banners -- [--pages=1..50] [--start-page=1..5000] [--inspect=0..20] [--resolve-servants]\nRead-only JP news inventory. Defaults to two pages and no article inspection. Optional inspection extracts labelled JP period candidates, raw servant-name mentions and image references. --resolve-servants requires inspection, matches explicit names against the Japanese Atlas catalogue and records exact named-pickup period associations. Neither name matches nor partial associations establish complete banner rosters. No image downloads, NA projection or publication.",
     );
   } else {
     const options: {
