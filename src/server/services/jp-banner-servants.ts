@@ -223,7 +223,7 @@ export function associateJpBannerPickupEvidence(
     (period) =>
       period.scope === "LABELLED_SUMMON" || period.scope === "ARTICLE_ENVELOPE",
   );
-  const canShareStatement =
+  const canShareNoticeEvidence =
     summonPeriods.length === 1 &&
     !schedule.pendingEvidence.includes(
       "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED",
@@ -286,9 +286,11 @@ export function associateJpBannerPickupEvidence(
     const associations: {
       servantId: number;
       mentionEvidenceHashes: string[];
+      rosterListEvidenceHashes: string[];
       basis:
         | "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY"
-        | "EXPLICIT_SHARED_PICKUP_STATEMENT";
+        | "EXPLICIT_SHARED_PICKUP_STATEMENT"
+        | "EXPLICIT_PICKUP_SERVANT_LIST";
     }[] = issues.length
       ? []
       : [
@@ -297,10 +299,11 @@ export function associateJpBannerPickupEvidence(
             mentionEvidenceHashes: [
               ...new Set(mentioned.map((identity) => identity.evidenceHash)),
             ],
+            rosterListEvidenceHashes: [],
             basis: "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY" as const,
           },
         ];
-    if (associations.length && canShareStatement) {
+    if (associations.length && canShareNoticeEvidence) {
       const contexts = new Set(
         mentioned
           .map((identity) => identity.context)
@@ -335,8 +338,54 @@ export function associateJpBannerPickupEvidence(
           associations.push({
             servantId: identity.servantId,
             mentionEvidenceHashes: [identity.evidenceHash],
+            rosterListEvidenceHashes: [],
             basis: "EXPLICIT_SHARED_PICKUP_STATEMENT",
           });
+      }
+    }
+    if (
+      associations.length &&
+      canShareNoticeEvidence &&
+      schedule.pickupRosterLists.length === 1
+    ) {
+      const roster = schedule.pickupRosterLists[0]!;
+      const members = roster.members.flatMap((member) => {
+        const identity = identities.find(
+          (identity) => identity.evidenceHash === member.evidenceHash,
+        );
+        return identity?.status === "MATCHED" && identity.servantId !== null
+          ? [{ ...identity, servantId: identity.servantId }]
+          : [];
+      });
+      if (
+        !roster.issues.length &&
+        members.length &&
+        members.length === roster.members.length &&
+        members.some((member) =>
+          mentioned.some(
+            (identity) => identity.evidenceHash === member.evidenceHash,
+          ),
+        )
+      ) {
+        for (const member of members) {
+          const existing = associations.find(
+            (association) => association.servantId === member.servantId,
+          );
+          if (existing) {
+            if (!existing.mentionEvidenceHashes.includes(member.evidenceHash))
+              existing.mentionEvidenceHashes.push(member.evidenceHash);
+            if (
+              !existing.rosterListEvidenceHashes.includes(roster.evidenceHash)
+            )
+              existing.rosterListEvidenceHashes.push(roster.evidenceHash);
+          } else
+            associations.push({
+              servantId: member.servantId,
+              mentionEvidenceHashes: [member.evidenceHash],
+              rosterListEvidenceHashes: [roster.evidenceHash],
+              basis: "EXPLICIT_PICKUP_SERVANT_LIST",
+            });
+        }
       }
     }
     for (const association of associations)

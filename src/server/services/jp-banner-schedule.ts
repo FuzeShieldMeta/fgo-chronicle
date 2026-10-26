@@ -92,6 +92,70 @@ function jst(
   ).toISOString();
 }
 
+function pickupRosterList(context: string, sourceUrl: string) {
+  const normalized = context.normalize("NFKC").trim();
+  const header =
+    /^【ピックアップ対象】\s*▼(期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.exec(
+      normalized,
+    );
+  if (!header) return null;
+  const issues: string[] = [];
+  const evidenceHash = hash([sourceUrl, "PICKUP_ROSTER_LIST", normalized]);
+  const members: { name: string; rarity: number; evidenceHash: string }[] = [];
+  const labels: Record<string, number> = { SSR: 5, SR: 4, R: 3, UC: 2, C: 1 };
+  const pieces = normalized
+    .slice(header[0].length)
+    .split(/(?=・\s*[★☆])/u)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+  if (!pieces.length) issues.push("EMPTY_PICKUP_ROSTER_LIST");
+  for (const piece of pieces) {
+    const item =
+      /^・\s*[★☆]\s*([0-5])\s*(?:\((SSR|SR|R|UC|C)\))?\s*([^。※▼◆◇「」『』]{1,120})$/u.exec(
+        piece,
+      );
+    if (!item) {
+      issues.push("UNSUPPORTED_PICKUP_ROSTER_ITEM");
+      continue;
+    }
+    const rarity = Number(item[1]),
+      name = item[3]!.trim();
+    if (item[2] && labels[item[2]] !== rarity)
+      issues.push("ROSTER_RARITY_LABEL_MISMATCH");
+    if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
+      issues.push("EMPTY_PICKUP_ROSTER_NAME");
+    if (
+      members.some((member) => member.rarity === rarity && member.name === name)
+    )
+      issues.push("DUPLICATE_PICKUP_ROSTER_ITEM");
+    members.push({
+      name,
+      rarity,
+      evidenceHash: hash([
+        sourceUrl,
+        "PICKUP_LIST_MEMBER",
+        evidenceHash,
+        name,
+        rarity,
+      ]),
+    });
+  }
+  return {
+    evidenceHash,
+    context,
+    members,
+    issues: [...new Set(issues)],
+    subset:
+      header[1] === "期間限定"
+        ? ("LIMITED" as const)
+        : header[1] === "ストーリー召喚"
+          ? ("STORY" as const)
+          : header[1] === "恒常"
+            ? ("PERMANENT" as const)
+            : ("UNQUALIFIED" as const),
+  };
+}
+
 export function extractJpBannerSchedule(source: ScheduleSource) {
   if (
     source.blocks.length > 80 ||
@@ -112,9 +176,23 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     context: string;
     evidenceHash: string;
   }[] = [];
+  const pickupRosterLists: NonNullable<ReturnType<typeof pickupRosterList>>[] =
+    [];
   let explicitSeparatePeriods = false;
   for (const context of source.blocks) {
     const normalized = context.normalize("NFKC");
+    const roster = pickupRosterList(context, source.sourceUrl);
+    if (
+      roster &&
+      !pickupRosterLists.some(
+        (list) => list.evidenceHash === roster.evidenceHash,
+      )
+    ) {
+      pickupRosterLists.push(roster);
+      if (!roster.issues.length)
+        for (const member of roster.members)
+          servantMentions.push({ ...member, context });
+    }
     // Conditional instructions describe game rules, not this notice's actual schedule.
     const declaration = normalized.replace(/\s+/gu, "");
     if (!/場合|一例|例として|たとえば/u.test(declaration)) {
@@ -238,6 +316,7 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
         });
     }
     if (
+      !normalized.trimStart().startsWith("【ピックアップ対象】") &&
       normalized.includes("サーヴァント") &&
       normalized.includes("ピックアップ")
     ) {
@@ -286,6 +365,8 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     /スケジュール|日程|schedule/iu.test(`${image.alt} ${image.context}`),
   );
   const pendingEvidence: string[] = [];
+  if (pickupRosterLists.some((list) => list.issues.length))
+    pendingEvidence.push("PICKUP_ROSTER_LIST_UNRESOLVED");
   if (source.summonContent) {
     if (
       !periods.some(
@@ -313,6 +394,7 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     periods,
     unparsedPeriods,
     servantMentions,
+    pickupRosterLists,
     summonGroupEvidence,
     scheduleImageCandidates,
     pendingEvidence,
