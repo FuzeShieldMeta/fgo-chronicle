@@ -8,7 +8,20 @@
 
 # testing
 /coverage
-/tests/
+/tests/*
+!/tests/README.md
+!/tests/event-import/
+/tests/event-import/*
+!/tests/event-import/banner-import-database.test.ts
+!/tests/timeline/
+/tests/timeline/*
+!/tests/timeline/appearance-control.test.tsx
+!/tests/timeline/forecast-history.test.ts
+!/tests/timeline/rail-thumbnail-lifecycle.test.tsx
+!/tests/timeline/reward-choice-details.test.ts
+!/tests/timeline/servant-details-loading.test.ts
+!/tests/timeline/summon-plan-submission.test.tsx
+!/tests/timeline/planner-state-database.test.ts
 
 # database
 /prisma/db.sqlite
