@@ -9,15 +9,18 @@ import {
   compareJpBannerEvidence,
   JP_BANNER_COMPARISON_LIMITS,
 } from "../src/server/services/jp-banner-comparison";
+import {
+  jpBannerImageDraftSchema,
+  validateJpBannerImageDrafts,
+  JP_BANNER_IMAGE_DRAFT_LIMITS,
+} from "../src/server/services/jp-banner-image-drafts";
 
-async function comparisonBaseline(file: string) {
+async function localJson(file: string, maxBytes: number) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     if (!(await handle.stat()).isFile())
-      throw new Error("Baseline must be a file.");
-    const buffer = Buffer.alloc(
-      JP_BANNER_COMPARISON_LIMITS.maxBaselineBytes + 1,
-    );
+      throw new Error("Input must be a regular file.");
+    const buffer = Buffer.alloc(maxBytes + 1);
     let length = 0;
     while (length < buffer.length) {
       const { bytesRead } = await handle.read(
@@ -29,15 +32,12 @@ async function comparisonBaseline(file: string) {
       if (!bytesRead) break;
       length += bytesRead;
     }
-    if (length > JP_BANNER_COMPARISON_LIMITS.maxBaselineBytes)
-      throw new Error("Baseline size limit exceeded.");
-    return bannerDatasetSchema.parse(
-      JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(
-          buffer.subarray(0, length),
-        ),
-      ) as unknown,
-    );
+    if (length > maxBytes) throw new Error("Input file size limit exceeded.");
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        buffer.subarray(0, length),
+      ),
+    ) as unknown;
   } finally {
     await handle.close();
   }
@@ -46,13 +46,23 @@ async function comparisonBaseline(file: string) {
 try {
   if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") {
     console.log(
-      "Usage: npm run data:review-jp-banners -- [--pages=1..50 --start-page=1..5000 | --article=OFFICIAL_URL ...] [--inspect=0..20] [--follow-links=0..20] [--resolve-servants] [--project-na] [--inspect-images=0..10] [--compare=LOCAL_DATASET.json]\nRead-only JP announcement inspection. Defaults to two archive pages and no article requests. --article selects official JP articles directly (up to 20, inspected by default) instead of reading an index. --follow-links adds bounded official linked-notice requests; inspect plus follow-links must not exceed 20. Links do not establish family identity. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift, not confirmed NA availability. --inspect-images downloads bounded labelled schedule-image candidates for original-content hashes and dimensions; it does not interpret them or call a model. --compare requires servant resolution and projection and compares partial evidence with a bounded local banner dataset; servant overlap suggests possible matches, never confirmed identity. Date-only baselines have no inferred clock or instant difference. No publication or model uploads.",
+      "Usage: npm run data:review-jp-banners -- [--pages=1..50 --start-page=1..5000 | --article=OFFICIAL_URL ...] [--inspect=0..20] [--follow-links=0..20] [--resolve-servants] [--project-na] [--inspect-images=0..10] [--image-drafts=LOCAL_DRAFT.json] [--compare=LOCAL_DATASET.json]\nRead-only JP announcement inspection. Defaults to two archive pages and no article requests. --article selects official JP articles directly (up to 20, inspected by default) instead of reading an index. --follow-links adds bounded official linked-notice requests; inspect plus follow-links must not exceed 20. Links do not establish family identity. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift, not confirmed NA availability. --inspect-images downloads bounded labelled schedule-image candidates for original-content hashes and dimensions; it does not interpret them or call a model. --image-drafts requires image inspection and projection; it checks a bounded manual draft against current hashes, coordinates and source bounds. Consistency is not approval or verified portrait identity. --compare requires servant resolution and projection and compares partial evidence with a bounded local banner dataset; servant overlap suggests possible matches, never confirmed identity. Date-only baselines have no inferred clock or instant difference. No publication or model uploads.",
     );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
+    let imageDraftFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      if (argument.startsWith("--image-drafts=")) {
+        if (
+          imageDraftFile !== null ||
+          !argument.slice("--image-drafts=".length)
+        )
+          throw new Error("Invalid image draft file.");
+        imageDraftFile = argument.slice("--image-drafts=".length);
+        continue;
+      }
       if (argument.startsWith("--compare=")) {
         if (baselineFile !== null || !argument.slice("--compare=".length))
           throw new Error("Invalid comparison file.");
@@ -93,20 +103,52 @@ try {
     }
     if (baselineFile && (!options.resolveServants || !options.projectNa))
       throw new Error("Comparison requires identity and projection evidence.");
+    if (
+      imageDraftFile &&
+      (!(options.inspectImages && options.inspectImages > 0) ||
+        !options.projectNa)
+    )
+      throw new Error(
+        "Image drafts require current image evidence and projection.",
+      );
     const baseline = baselineFile
-      ? await comparisonBaseline(baselineFile)
+      ? bannerDatasetSchema.parse(
+          await localJson(
+            baselineFile,
+            JP_BANNER_COMPARISON_LIMITS.maxBaselineBytes,
+          ),
+        )
+      : null;
+    const imageDrafts = imageDraftFile
+      ? jpBannerImageDraftSchema.parse(
+          await localJson(
+            imageDraftFile,
+            JP_BANNER_IMAGE_DRAFT_LIMITS.maxFileBytes,
+          ),
+        )
       : null;
     const report = await inventoryJpBannerAnnouncements(options);
+    const draftValidation = imageDrafts
+      ? validateJpBannerImageDrafts(report, imageDrafts)
+      : null;
+    const status = draftValidation?.heldRows
+      ? "partial_failure"
+      : report.status;
     console.log(
       JSON.stringify(
-        baseline
-          ? { ...report, comparison: compareJpBannerEvidence(report, baseline) }
-          : report,
+        {
+          ...report,
+          status,
+          ...(baseline
+            ? { comparison: compareJpBannerEvidence(report, baseline) }
+            : {}),
+          ...(draftValidation ? { imageDrafts: draftValidation } : {}),
+        },
         null,
         2,
       ),
     );
-    if (report.status === "partial_failure") process.exitCode = 1;
+    if (status === "partial_failure") process.exitCode = 1;
   }
 } catch {
   console.error(
