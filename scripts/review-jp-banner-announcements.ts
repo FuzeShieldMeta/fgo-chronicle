@@ -51,6 +51,9 @@ try {
     console.log(
       "Archive range: --listed-from=YYYY-MM-DD --listed-through=YYYY-MM-DD selects inclusive JP listing dates, not banner dates or projected NA dates. Both flags are required together and cannot be used with --article. Undated/conflicting sources and linked notices remain eligible. Archive scanning still uses the page/deadline budgets; an old listing does not prove traversal is complete.",
     );
+    console.log(
+      "Coverage: discoveryCoverage reports observed page dates/hashes, archive traversal and article inspection separately. Date bounds do not prove coverage; even OBSERVED_ARCHIVE_TRAVERSED does not mean complete banner extraction. archiveContinuation continues discovery only: it is not an article retry, a stable snapshot or proof of combined coverage across runs. Rerun an older start page if archive pagination shifts; retain earlier reports when reviewing chunks.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;

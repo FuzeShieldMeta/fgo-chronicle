@@ -138,6 +138,17 @@ function calendarDate(value: string) {
     : null;
 }
 
+function listingDayBounds(entries: readonly { listedDay: string | null }[]) {
+  const days = entries
+    .flatMap((entry) => (entry.listedDay ? [entry.listedDay] : []))
+    .sort();
+  return {
+    oldest: days[0] ?? null,
+    newest: days.at(-1) ?? null,
+    undatedObservations: entries.filter((entry) => !entry.listedDay).length,
+  };
+}
+
 export function parseJpBannerIndex(body: string, sourceUrl: string) {
   const url = indexUrl(sourceUrl);
   if (Buffer.byteLength(body) > LIMITS.maxBodyBytes)
@@ -839,12 +850,50 @@ export async function inventoryJpBannerAnnouncements(
   );
   const linkedInspectionLimited =
     followLinks > 0 && (linkedDiscoveryLimited || uninspectedLinked);
+  const selectedArticles = [...articles.values()];
+  const nextPage = startPage + indices.length;
+  const contiguousPages =
+    indices.every(
+      (index, offset) =>
+        startPage + offset <= LIMITS.maxPageNumber &&
+        index.url === jpBannerIndexUrl(startPage + offset),
+    ) &&
+    (!nextUrl ||
+      (nextPage <= LIMITS.maxPageNumber &&
+        nextUrl === jpBannerIndexUrl(nextPage)));
+  const archiveTraversed =
+    !directUrls.length &&
+    indices.length > 0 &&
+    startPage === 1 &&
+    !failure &&
+    !nextUrl &&
+    contiguousPages;
+  const inspectionStates = {
+    NOT_INSPECTED: 0,
+    UNRESOLVED: 0,
+    INSPECTED: 0,
+    NOT_RELEVANT: 0,
+    FETCH_FAILED: 0,
+  };
+  const contentKinds = {
+    SUMMON_CONTENT: 0,
+    RESTRICTED_SUMMON_CONTENT: 0,
+    NOT_RELEVANT: 0,
+    UNRESOLVED: 0,
+  };
+  for (const entry of selectedArticles) {
+    inspectionStates[entry.inspectionStatus]++;
+    if (entry.inspection) contentKinds[entry.inspection.kind]++;
+  }
+  const continuationPage =
+    nextUrl && !failure && contiguousPages ? startPage + indices.length : null;
   return {
     scope: directUrls.length
       ? ("DIRECT_JP_ARTICLE_SELECTION" as const)
       : ("BOUNDED_JP_NEWS_ARCHIVE" as const),
     status:
       failure ||
+      !contiguousPages ||
       articleFailures.length ||
       inspectionDeadlineReached ||
       servantCatalogue.status === "FAILED" ||
@@ -874,15 +923,84 @@ export async function inventoryJpBannerAnnouncements(
       ).length,
       linkedNoticesDateFiltered: false as const,
     },
+    discoveryCoverage: {
+      requestedListingInterval: listingInterval,
+      dateBasis: "JP_ARCHIVE_LISTING_DAY" as const,
+      observedListingDays: listingDayBounds(
+        indices.flatMap((index) => index.entries),
+      ),
+      archiveTraversal: directUrls.length
+        ? "NOT_REQUESTED"
+        : archiveTraversed
+          ? "OBSERVED_ARCHIVE_TRAVERSED"
+          : "INCOMPLETE",
+      traversalReasons: [
+        ...(directUrls.length ? ["DIRECT_SELECTION"] : []),
+        ...(!directUrls.length && startPage !== 1
+          ? ["EARLIER_PAGES_NOT_READ"]
+          : []),
+        ...(failure ? [failure.code] : []),
+        ...(!contiguousPages ? ["NON_CONTIGUOUS_PAGINATION"] : []),
+        ...(nextUrl && !failure && contiguousPages
+          ? ["PAGE_BUDGET_REACHED"]
+          : []),
+      ],
+      pagesRead: indices.length,
+      archiveContinuation: continuationPage
+        ? {
+            startPage: continuationPage,
+            pages,
+            ...(listingInterval
+              ? {
+                  listedFrom: listingInterval.from,
+                  listedThrough: listingInterval.through,
+                }
+              : {}),
+          }
+        : null,
+      continuationScope:
+        "ARCHIVE_DISCOVERY_ONLY_NOT_ARTICLE_RETRY_OR_SNAPSHOT" as const,
+      snapshotConsistency: "NOT_VERIFIED" as const,
+      dateBoundsProveCoverage: false as const,
+      completeBannerCoverage: false as const,
+      selectedArticles: {
+        total: selectedArticles.length,
+        byInspectionStatus: inspectionStates,
+        byInspectedContentKind: contentKinds,
+        unknownContent:
+          selectedArticles.length -
+          selectedArticles.filter((entry) => entry.inspection).length,
+        pendingScheduleEvidence: selectedArticles.filter(
+          (entry) =>
+            (entry.inspection?.schedule.pendingEvidence.length ?? 0) > 0,
+        ).length,
+        linkedSourcesNotInspected: selectedArticles.filter(
+          (entry) =>
+            entry.linkedFrom.length > 0 &&
+            entry.inspectionStatus === "NOT_INSPECTED",
+        ).length,
+        sourcesWithUntraversedLinks: selectedArticles.filter((entry) =>
+          entry.inspection?.linkedArticles.some(
+            (url) => !articles.get(url)?.inspection,
+          ),
+        ).length,
+      },
+    },
     coverageLimited:
       directUrls.length > 0 ||
       startPage !== 1 ||
       nextUrl !== null ||
       failure !== null ||
+      !contiguousPages ||
       linkedInspectionLimited,
     stopReason: directUrls.length
       ? "EXPLICIT_ARTICLES"
-      : (failure?.code ?? (nextUrl ? "PAGE_LIMIT" : "ARCHIVE_END")),
+      : (failure?.code ??
+        (!contiguousPages
+          ? "NON_CONTIGUOUS_PAGINATION"
+          : nextUrl
+            ? "PAGE_LIMIT"
+            : "ARCHIVE_END")),
     nextIndexUrl: nextUrl,
     failure,
     articleFailures,
@@ -941,6 +1059,7 @@ export async function inventoryJpBannerAnnouncements(
       url,
       contentHash,
       entries: entries.length,
+      ...listingDayBounds(entries),
       nextUrl,
     })),
     counts: {
