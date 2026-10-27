@@ -14,6 +14,11 @@ import {
   validateJpBannerImageDrafts,
   JP_BANNER_IMAGE_DRAFT_LIMITS,
 } from "../src/server/services/jp-banner-image-drafts";
+import {
+  JP_BANNER_IDENTITY_LIMITS,
+  jpBannerIdentityMapSchema,
+  previewJpBannerIdentityMap,
+} from "../src/server/services/jp-banner-identity";
 
 async function localJson(file: string, maxBytes: number) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -54,12 +59,25 @@ try {
     console.log(
       "Coverage: discoveryCoverage reports observed page dates/hashes, archive traversal and article inspection separately. Date bounds do not prove coverage; even OBSERVED_ARCHIVE_TRAVERSED does not mean complete banner extraction. archiveContinuation continues discovery only: it is not an article retry, a stable snapshot or proof of combined coverage across runs. Rerun an older start page if archive pagination shifts; retain earlier reports when reviewing chunks.",
     );
+    console.log(
+      "Identity preview: --identity-map=LOCAL_MAP.json requires --compare, --resolve-servants and --project-na. Explicit reviewer-assigned pickup identities are checked against current article/period evidence and baseline target fingerprints. Draft URLs never select sources. Conflicts or stale evidence hold the proposal; consistency is not identity confirmation, full roster evidence, database-ID verification or publication approval. No rekeying or writes.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
     let imageDraftFile: string | null = null;
+    let identityMapFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      if (argument.startsWith("--identity-map=")) {
+        if (
+          identityMapFile !== null ||
+          !argument.slice("--identity-map=".length)
+        )
+          throw new Error("Invalid identity map file.");
+        identityMapFile = argument.slice("--identity-map=".length);
+        continue;
+      }
       const listingDate = /^--(listed-from|listed-through)=(.+)$/.exec(
         argument,
       );
@@ -121,6 +139,8 @@ try {
     }
     if (baselineFile && (!options.resolveServants || !options.projectNa))
       throw new Error("Comparison requires identity and projection evidence.");
+    if (identityMapFile && !baselineFile)
+      throw new Error("Identity preview requires a comparison baseline.");
     if (
       imageDraftFile &&
       (!(options.inspectImages && options.inspectImages > 0) ||
@@ -145,13 +165,26 @@ try {
           ),
         )
       : null;
+    const identityMap = identityMapFile
+      ? jpBannerIdentityMapSchema.parse(
+          await localJson(
+            identityMapFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
     const report = await inventoryJpBannerAnnouncements(options);
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
       : null;
-    const status = draftValidation?.heldRows
-      ? "partial_failure"
-      : report.status;
+    const identityPreview =
+      identityMap && baseline
+        ? previewJpBannerIdentityMap(report, baseline, identityMap)
+        : null;
+    const status =
+      draftValidation?.heldRows || identityPreview?.heldMappings
+        ? "partial_failure"
+        : report.status;
     console.log(
       JSON.stringify(
         {
@@ -161,6 +194,7 @@ try {
             ? { comparison: compareJpBannerEvidence(report, baseline) }
             : {}),
           ...(draftValidation ? { imageDrafts: draftValidation } : {}),
+          ...(identityPreview ? { identityMap: identityPreview } : {}),
         },
         null,
         2,

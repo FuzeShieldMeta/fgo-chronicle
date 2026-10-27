@@ -4,6 +4,7 @@ import {
   bannerPublicationTiming,
 } from "./banner-dataset";
 import type { inventoryJpBannerAnnouncements } from "./jp-banner-inventory";
+import { jpBannerIdentityTargetHash } from "./jp-banner-identity";
 
 export const JP_BANNER_COMPARISON_LIMITS = {
   maxBaselineBytes: 8 * 1_024 * 1_024,
@@ -21,6 +22,7 @@ export function compareJpBannerEvidence(
     .parse(baselineInput)
     .banners.map((banner) => ({
       sourceKey: bannerSourceKey(banner),
+      contentHash: jpBannerIdentityTargetHash(banner),
       name: banner.name,
       status: banner.status,
       sourceSchedule: banner.sourceSchedule,
@@ -78,6 +80,7 @@ export function compareJpBannerEvidence(
               return [
                 {
                   baselineSourceKey: banner.sourceKey,
+                  baselineContentHash: banner.contentHash,
                   baselineName: banner.name,
                   baselineStatus: banner.status,
                   baselineSourceSchedule: banner.sourceSchedule,
