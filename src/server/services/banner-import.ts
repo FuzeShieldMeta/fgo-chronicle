@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
-import { bannerDatasetSchema, bannerSourceKey } from "./banner-spreadsheet";
+import {
+  bannerDatasetSchema,
+  bannerSourceKey,
+  bannerPublicationTiming,
+} from "./banner-dataset";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 
 export async function importBannerDataset(
@@ -30,8 +34,7 @@ export async function importBannerDataset(
       id: randomUUID(),
       sourceKey: bannerSourceKey(banner),
       name: banner.name,
-      startsAt: `${banner.startDate}T00:00:00Z`,
-      endsAt: banner.endDate ? `${banner.endDate}T00:00:00Z` : null,
+      ...bannerPublicationTiming(banner),
       status: banner.status === "CONFIRMED_EN" ? "OFFICIAL" : banner.status,
       sourceRegion: banner.sourceSchedule === "NA" ? "NA" : "JP_PROJECTED",
     }))
@@ -47,12 +50,12 @@ export async function importBannerDataset(
       ON CONFLICT ("id") DO UPDATE SET "name"=EXCLUDED."name","className"=EXCLUDED."className","rarity"=EXCLUDED."rarity","faceId"=COALESCE(EXCLUDED."faceId","Servant"."faceId")
       WHERE ("Servant"."name","Servant"."className","Servant"."rarity","Servant"."faceId") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."className",EXCLUDED."rarity",COALESCE(EXCLUDED."faceId","Servant"."faceId"))`;
       const changedBanners =
-        await tx.$executeRaw`INSERT INTO "Banner" ("id","sourceKey","name","startsAt","endsAt","startsAtPrecision","endsAtPrecision","status","sourceRegion","updatedAt")
-      SELECT x."id",x."sourceKey",x."name",x."startsAt",x."endsAt",'DATE_ONLY'::"ScheduleTimePrecision",CASE WHEN x."endsAt" IS NULL THEN NULL ELSE 'DATE_ONLY'::"ScheduleTimePrecision" END,x."status"::"ScheduleStatus",x."sourceRegion",CURRENT_TIMESTAMP
-      FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS x("id" TEXT,"sourceKey" TEXT,"name" TEXT,"startsAt" TIMESTAMP,"endsAt" TIMESTAMP,"status" TEXT,"sourceRegion" TEXT)
+        await tx.$executeRaw`INSERT INTO "Banner" ("id","sourceKey","name","startsAt","endsAt","startsAtPrecision","endsAtPrecision","status","sourceRegion","sourceUrl","updatedAt")
+      SELECT x."id",x."sourceKey",x."name",x."startsAt",x."endsAt",x."startsAtPrecision"::"ScheduleTimePrecision",x."endsAtPrecision"::"ScheduleTimePrecision",x."status"::"ScheduleStatus",x."sourceRegion",x."sourceUrl",CURRENT_TIMESTAMP
+      FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS x("id" TEXT,"sourceKey" TEXT,"name" TEXT,"startsAt" TIMESTAMP,"endsAt" TIMESTAMP,"startsAtPrecision" TEXT,"endsAtPrecision" TEXT,"status" TEXT,"sourceRegion" TEXT,"sourceUrl" TEXT)
       ORDER BY x."sourceKey"
-      ON CONFLICT ("sourceKey") DO UPDATE SET "name"=EXCLUDED."name","startsAt"=EXCLUDED."startsAt","endsAt"=EXCLUDED."endsAt","startsAtPrecision"=EXCLUDED."startsAtPrecision","endsAtPrecision"=EXCLUDED."endsAtPrecision","status"=EXCLUDED."status","sourceRegion"=EXCLUDED."sourceRegion","updatedAt"=CURRENT_TIMESTAMP
-      WHERE ("Banner"."name","Banner"."startsAt","Banner"."endsAt","Banner"."startsAtPrecision","Banner"."endsAtPrecision","Banner"."status","Banner"."sourceRegion") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."startsAt",EXCLUDED."endsAt",EXCLUDED."startsAtPrecision",EXCLUDED."endsAtPrecision",EXCLUDED."status",EXCLUDED."sourceRegion")`;
+      ON CONFLICT ("sourceKey") DO UPDATE SET "name"=EXCLUDED."name","startsAt"=EXCLUDED."startsAt","endsAt"=EXCLUDED."endsAt","startsAtPrecision"=EXCLUDED."startsAtPrecision","endsAtPrecision"=EXCLUDED."endsAtPrecision","status"=EXCLUDED."status","sourceRegion"=EXCLUDED."sourceRegion","sourceUrl"=COALESCE(EXCLUDED."sourceUrl","Banner"."sourceUrl"),"updatedAt"=CURRENT_TIMESTAMP
+      WHERE ("Banner"."name","Banner"."startsAt","Banner"."endsAt","Banner"."startsAtPrecision","Banner"."endsAtPrecision","Banner"."status","Banner"."sourceRegion","Banner"."sourceUrl") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."startsAt",EXCLUDED."endsAt",EXCLUDED."startsAtPrecision",EXCLUDED."endsAtPrecision",EXCLUDED."status",EXCLUDED."sourceRegion",COALESCE(EXCLUDED."sourceUrl","Banner"."sourceUrl"))`;
       const saved = await tx.banner.findMany({
         where: { sourceKey: { in: records.map((record) => record.sourceKey) } },
         select: {
