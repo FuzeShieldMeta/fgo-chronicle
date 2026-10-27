@@ -46,7 +46,7 @@ async function comparisonBaseline(file: string) {
 try {
   if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") {
     console.log(
-      "Usage: npm run data:review-jp-banners -- [--pages=1..50 --start-page=1..5000 | --article=OFFICIAL_URL ...] [--inspect=0..20] [--follow-links=0..20] [--resolve-servants] [--project-na] [--compare=LOCAL_DATASET.json]\nRead-only JP announcement inspection. Defaults to two archive pages and no article requests. --article selects official JP articles directly (up to 20, inspected by default) instead of reading an index. --follow-links adds bounded official linked-notice requests; inspect plus follow-links must not exceed 20. Links do not establish family identity. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift, not confirmed NA availability. --compare requires both flags and compares partial evidence with a bounded local banner dataset; servant overlap suggests possible matches, never confirmed identity. Date-only baselines have no inferred clock or instant difference. No image downloads or publication.",
+      "Usage: npm run data:review-jp-banners -- [--pages=1..50 --start-page=1..5000 | --article=OFFICIAL_URL ...] [--inspect=0..20] [--follow-links=0..20] [--resolve-servants] [--project-na] [--inspect-images=0..10] [--compare=LOCAL_DATASET.json]\nRead-only JP announcement inspection. Defaults to two archive pages and no article requests. --article selects official JP articles directly (up to 20, inspected by default) instead of reading an index. --follow-links adds bounded official linked-notice requests; inspect plus follow-links must not exceed 20. Links do not establish family identity. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift, not confirmed NA availability. --inspect-images downloads bounded labelled schedule-image candidates for original-content hashes and dimensions; it does not interpret them or call a model. --compare requires servant resolution and projection and compares partial evidence with a bounded local banner dataset; servant overlap suggests possible matches, never confirmed identity. Date-only baselines have no inferred clock or instant difference. No publication or model uploads.",
     );
   } else {
     const options: JpBannerInventoryOptions = {};
@@ -73,7 +73,7 @@ try {
         continue;
       }
       const match =
-        /^--(pages|start-page|inspect|follow-links)=(0|[1-9]\d*)$/.exec(
+        /^--(pages|start-page|inspect|follow-links|inspect-images)=(0|[1-9]\d*)$/.exec(
           argument,
         );
       if (!match || seen.has(match[1]!))
@@ -86,7 +86,9 @@ try {
             ? "inspect"
             : match[1] === "follow-links"
               ? "followLinks"
-              : "startPage"
+              : match[1] === "inspect-images"
+                ? "inspectImages"
+                : "startPage"
       ] = Number(match[2]);
     }
     if (baselineFile && (!options.resolveServants || !options.projectNa))

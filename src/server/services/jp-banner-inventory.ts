@@ -3,6 +3,12 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { extractJpBannerSchedule } from "./jp-banner-schedule";
 import { previewJpBannerProjection } from "./jp-banner-projection";
 import {
+  jpBannerImageUrl,
+  inspectJpBannerImage,
+  jpBannerImageEvidence,
+  JP_BANNER_IMAGE_LIMITS,
+} from "./jp-banner-images";
+import {
   fetchJpBannerServantCatalogue,
   resolveJpBannerServantMentions,
   JP_BANNER_SERVANT_SOURCE,
@@ -332,12 +338,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     if (alt.length > LIMITS.maxTitleCharacters) reasons.push("IMAGE_ALT_LIMIT");
     try {
       if (!src) throw new Error("Missing image source.");
-      const imageUrl = officialUrl(new URL(src, url).href);
-      if (
-        !imageUrl.pathname.startsWith("/wp-content/uploads/") ||
-        !/\.(png|jpe?g|gif|webp)$/i.test(imageUrl.pathname)
-      )
-        throw new Error("Unsupported image source.");
+      const imageUrl = new URL(jpBannerImageUrl(new URL(src, url).href));
       if (
         !imageReferences.some(
           (reference) =>
@@ -440,6 +441,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     imageReferences,
     linkedArticles: linkedArticles.slice(0, LIMITS.maxLinkedArticles),
     naProjection: null as ReturnType<typeof previewJpBannerProjection> | null,
+    imageEvidence: null as ReturnType<typeof jpBannerImageEvidence> | null,
     servantIdentities: null as ReturnType<
       typeof resolveJpBannerServantMentions
     > | null,
@@ -476,6 +478,7 @@ export type JpBannerInventoryOptions = {
   inspect?: number;
   resolveServants?: boolean;
   projectNa?: boolean;
+  inspectImages?: number;
   articleUrls?: string[];
   followLinks?: number;
 };
@@ -503,6 +506,14 @@ export async function inventoryJpBannerAnnouncements(
       "Direct article selection cannot be combined with archive pages.",
     );
   const inspect = options.inspect ?? directUrls.length;
+  const inspectImages = options.inspectImages ?? 0;
+  if (
+    !Number.isSafeInteger(inspectImages) ||
+    inspectImages < 0 ||
+    inspectImages > JP_BANNER_IMAGE_LIMITS.maxInspections ||
+    (inspectImages > 0 && inspect === 0)
+  )
+    throw new Error("Invalid schedule image inspection budget.");
   const followLinks = options.followLinks ?? 0;
   if (
     !Number.isSafeInteger(followLinks) ||
@@ -744,6 +755,43 @@ export async function inventoryJpBannerAnnouncements(
       }
     }
   }
+  const imageCandidates = [
+    ...new Set(
+      [...articles.values()].flatMap(
+        (entry) =>
+          entry.inspection?.schedule.scheduleImageCandidates.map(
+            (image) => image.url,
+          ) ?? [],
+      ),
+    ),
+  ];
+  const imageResults = new Map<
+    string,
+    Awaited<ReturnType<typeof inspectJpBannerImage>> | null
+  >();
+  let imageFailures = 0;
+  if (inspectImages > 0) {
+    for (const url of imageCandidates.slice(0, inspectImages)) {
+      if (signal.aborted) break;
+      try {
+        imageResults.set(
+          url,
+          await inspectJpBannerImage(url, dependencies.fetchFn, signal),
+        );
+      } catch {
+        imageResults.set(url, null);
+        imageFailures++;
+      }
+    }
+    for (const entry of articles.values()) {
+      if (entry.inspection)
+        entry.inspection.imageEvidence = jpBannerImageEvidence(
+          entry.inspection.contentHash,
+          entry.inspection.schedule.scheduleImageCandidates,
+          imageResults,
+        );
+    }
+  }
   const uninspectedLinked = [...articles.values()].some(
     (entry) =>
       entry.linkedFrom.length > 0 && entry.inspectionStatus === "NOT_INSPECTED",
@@ -758,7 +806,11 @@ export async function inventoryJpBannerAnnouncements(
       failure ||
       articleFailures.length ||
       inspectionDeadlineReached ||
-      servantCatalogue.status === "FAILED"
+      servantCatalogue.status === "FAILED" ||
+      imageFailures > 0 ||
+      (inspectImages > 0 &&
+        signal.aborted &&
+        imageResults.size < Math.min(inspectImages, imageCandidates.length))
         ? ("partial_failure" as const)
         : ("succeeded" as const),
     publicationAllowed: false as const,
@@ -778,6 +830,25 @@ export async function inventoryJpBannerAnnouncements(
     failure,
     articleFailures,
     servantCatalogue,
+    scheduleImages: {
+      status:
+        inspectImages === 0
+          ? "NOT_REQUESTED"
+          : !imageCandidates.length
+            ? "NO_CANDIDATES"
+            : imageFailures
+              ? "PARTIAL_FAILURE"
+              : imageResults.size < imageCandidates.length
+                ? "LIMITED"
+                : "SUCCEEDED",
+      requestedInspections: inspectImages,
+      discoveredCandidates: imageCandidates.length,
+      attempted: imageResults.size,
+      failed: imageFailures,
+      notInspected: imageCandidates.length - imageResults.size,
+      deadlineReached: inspectImages > 0 && signal.aborted,
+      interpretation: "UNINTERPRETED" as const,
+    },
     linkedTraversal: {
       requestedInspections: followLinks,
       attemptedInspections: attemptedLinked,
