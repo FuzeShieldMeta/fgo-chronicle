@@ -240,15 +240,34 @@ export function associateJpBannerPickupEvidence(
       /^[◆◇\s]*[「『]([^「」『』]+)[」』]\s*ピックアップ召喚(?:の)?(?:開催)?期間[◆◇\s]*$/u.exec(
         period.label.normalize("NFKC"),
       );
-    const prefixedName =
-      /^.+(?:イベント|キャンペーン)\s+([^「」『』]+)ピックアップ召喚$/u.exec(
-        label,
-      );
     const names = new Set(
-      [match?.[1], quotedName?.[1], prefixedName?.[1]].flatMap((name) =>
+      [match?.[1], quotedName?.[1]].flatMap((name) =>
         name ? [normalize(name)] : [],
       ),
     );
+    // A campaign-qualified title may end in an exact evidenced name after whitespace.
+    // Keep every interpretation so overlapping full names remain ambiguous.
+    const qualified = label
+      .normalize("NFKC")
+      .replace(/\s+/gu, " ")
+      .toLowerCase();
+    for (const identity of identities) {
+      const evidencedNames = [
+        identity.name,
+        ...(identity.status === "MATCHED"
+          ? identity.candidates.map((candidate) => candidate.name)
+          : []),
+      ];
+      for (const name of evidencedNames) {
+        const suffix = name
+          .normalize("NFKC")
+          .trim()
+          .replace(/\s+/gu, " ")
+          .toLowerCase();
+        if (suffix && qualified.endsWith(` ${suffix}ピックアップ召喚`))
+          names.add(normalize(name));
+      }
+    }
     const mentioned = names.size
       ? identities.filter(
           (identity) =>
@@ -311,11 +330,17 @@ export function associateJpBannerPickupEvidence(
             const statement = context.normalize("NFKC").replace(/\s+/gu, "");
             // Names and quoted campaign titles are data, not role/negation wording.
             const prose = statement.replace(/[「『][^「」『』]*[」』]/gu, "");
+            const roleCount = [...prose.matchAll(/サーヴァント/gu)].length;
+            const joinedRoles = prose.slice(prose.indexOf("サーヴァント"));
             return (
               /をピックアップ[!。]?$/u.test(prose) &&
-              [...prose.matchAll(/サーヴァント/gu)].length === 1 &&
+              (roleCount === 1 ||
+                (roleCount > 1 &&
+                  /^サーヴァント(?:と、?(?:期間限定|ストーリー召喚|恒常)?サーヴァント)+をピックアップ[!。]?$/u.test(
+                    joinedRoles,
+                  ))) &&
               [...prose.matchAll(/ピックアップ/gu)].length === 1 &&
-              !/場合|一例|例として|たとえば|など|含む|ほか|別の|対象外|除く|以外|ません|ボーナス|特攻|強化|クエスト|確定/u.test(
+              !/場合|一例|例として|たとえば|など|含む|ほか|別の|対象外|除く|以外|ません|ボーナス|特攻|強化|クエスト|確定|より|ではなく|のみ|だけ|代わり/u.test(
                 prose,
               )
             );

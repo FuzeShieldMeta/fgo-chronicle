@@ -103,42 +103,61 @@ function pickupRosterList(context: string, sourceUrl: string) {
   const evidenceHash = hash([sourceUrl, "PICKUP_ROSTER_LIST", normalized]);
   const members: { name: string; rarity: number; evidenceHash: string }[] = [];
   const labels: Record<string, number> = { SSR: 5, SR: 4, R: 3, UC: 2, C: 1 };
-  const pieces = normalized
-    .slice(header[0].length)
-    .split(/(?=・\s*[★☆])/u)
-    .map((piece) => piece.trim())
-    .filter(Boolean);
-  if (!pieces.length) issues.push("EMPTY_PICKUP_ROSTER_LIST");
-  for (const piece of pieces) {
-    const item =
-      /^・\s*[★☆]\s*([0-5])\s*(?:\((SSR|SR|R|UC|C)\))?\s*([^。※▼◆◇「」『』]{1,120})$/u.exec(
-        piece,
+  const categories = new Set<string>();
+  for (const section of normalized
+    .slice("【ピックアップ対象】".length)
+    .trim()
+    .split(/(?=▼)/u)) {
+    if (!section.trim()) continue;
+    const role =
+      /^▼(期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.exec(
+        section.trim(),
       );
-    if (!item) {
+    if (!role) {
       issues.push("UNSUPPORTED_PICKUP_ROSTER_ITEM");
       continue;
     }
-    const rarity = Number(item[1]),
-      name = item[3]!.trim();
-    if (item[2] && labels[item[2]] !== rarity)
-      issues.push("ROSTER_RARITY_LABEL_MISMATCH");
-    if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
-      issues.push("EMPTY_PICKUP_ROSTER_NAME");
-    if (
-      members.some((member) => member.rarity === rarity && member.name === name)
-    )
-      issues.push("DUPLICATE_PICKUP_ROSTER_ITEM");
-    members.push({
-      name,
-      rarity,
-      evidenceHash: hash([
-        sourceUrl,
-        "PICKUP_LIST_MEMBER",
-        evidenceHash,
+    categories.add(role[1] ?? "");
+    const pieces = section
+      .trim()
+      .slice(role[0].length)
+      .split(/(?=・\s*[★☆])/u)
+      .map((piece) => piece.trim())
+      .filter(Boolean);
+    if (!pieces.length) issues.push("EMPTY_PICKUP_ROSTER_LIST");
+    for (const piece of pieces) {
+      const item =
+        /^・\s*[★☆]\s*([0-5])\s*(?:\((SSR|SR|R|UC|C)\))?\s*([^。※▼◆◇「」『』]{1,120})$/u.exec(
+          piece,
+        );
+      if (!item) {
+        issues.push("UNSUPPORTED_PICKUP_ROSTER_ITEM");
+        continue;
+      }
+      const rarity = Number(item[1]),
+        name = item[3]!.trim();
+      if (item[2] && labels[item[2]] !== rarity)
+        issues.push("ROSTER_RARITY_LABEL_MISMATCH");
+      if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
+        issues.push("EMPTY_PICKUP_ROSTER_NAME");
+      if (
+        members.some(
+          (member) => member.rarity === rarity && member.name === name,
+        )
+      )
+        issues.push("DUPLICATE_PICKUP_ROSTER_ITEM");
+      members.push({
         name,
         rarity,
-      ]),
-    });
+        evidenceHash: hash([
+          sourceUrl,
+          "PICKUP_LIST_MEMBER",
+          evidenceHash,
+          name,
+          rarity,
+        ]),
+      });
+    }
   }
   return {
     evidenceHash,
@@ -146,13 +165,15 @@ function pickupRosterList(context: string, sourceUrl: string) {
     members,
     issues: [...new Set(issues)],
     subset:
-      header[1] === "期間限定"
-        ? ("LIMITED" as const)
-        : header[1] === "ストーリー召喚"
-          ? ("STORY" as const)
-          : header[1] === "恒常"
-            ? ("PERMANENT" as const)
-            : ("UNQUALIFIED" as const),
+      categories.size > 1
+        ? ("MIXED" as const)
+        : header[1] === "期間限定"
+          ? ("LIMITED" as const)
+          : header[1] === "ストーリー召喚"
+            ? ("STORY" as const)
+            : header[1] === "恒常"
+              ? ("PERMANENT" as const)
+              : ("UNQUALIFIED" as const),
   };
 }
 
@@ -206,7 +227,9 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
       if (
         count &&
         Number(count[1]) > 0 &&
-        /種類の召喚を?開催(?:いたします|します|[!。]|$)/u.test(declaration)
+        /種類の召喚(?:を?(?:期間毎に切り替わりで)?開催(?:いたします|します|[!。]|$)|が期間毎に切り替わりで開催される(?:ほか|[!。]|$))/u.test(
+          declaration,
+        )
       ) {
         const evidenceHash = hash([
           source.sourceUrl,
