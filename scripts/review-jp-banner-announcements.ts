@@ -48,12 +48,27 @@ try {
     console.log(
       "Usage: npm run data:review-jp-banners -- [--pages=1..50 --start-page=1..5000 | --article=OFFICIAL_URL ...] [--inspect=0..20] [--follow-links=0..20] [--resolve-servants] [--project-na] [--inspect-images=0..10] [--image-drafts=LOCAL_DRAFT.json] [--compare=LOCAL_DATASET.json]\nRead-only JP announcement inspection. Defaults to two archive pages and no article requests. --article selects official JP articles directly (up to 20, inspected by default) instead of reading an index. --follow-links adds bounded official linked-notice requests; inspect plus follow-links must not exceed 20. Links do not establish family identity. --resolve-servants matches catalogue identities and explicit pickup statements. --project-na previews reset-relative NA times using one estimated notice anchor and a two-calendar-year shift, not confirmed NA availability. --inspect-images downloads bounded labelled schedule-image candidates for original-content hashes and dimensions; it does not interpret them or call a model. --image-drafts requires image inspection and projection; it checks a bounded manual draft against current hashes, coordinates and source bounds. Consistency is not approval or verified portrait identity. --compare requires servant resolution and projection and compares partial evidence with a bounded local banner dataset; servant overlap suggests possible matches, never confirmed identity. Date-only baselines have no inferred clock or instant difference. No publication or model uploads.",
     );
+    console.log(
+      "Archive range: --listed-from=YYYY-MM-DD --listed-through=YYYY-MM-DD selects inclusive JP listing dates, not banner dates or projected NA dates. Both flags are required together and cannot be used with --article. Undated/conflicting sources and linked notices remain eligible. Archive scanning still uses the page/deadline budgets; an old listing does not prove traversal is complete.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
     let imageDraftFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      const listingDate = /^--(listed-from|listed-through)=(.+)$/.exec(
+        argument,
+      );
+      if (listingDate) {
+        if (seen.has(listingDate[1]!))
+          throw new Error("Duplicate listing date argument.");
+        seen.add(listingDate[1]!);
+        options[
+          listingDate[1] === "listed-from" ? "listedFrom" : "listedThrough"
+        ] = listingDate[2]!;
+        continue;
+      }
       if (argument.startsWith("--image-drafts=")) {
         if (
           imageDraftFile !== null ||

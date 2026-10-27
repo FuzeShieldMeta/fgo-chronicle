@@ -475,6 +475,8 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
 export type JpBannerInventoryOptions = {
   startPage?: number;
   pages?: number;
+  listedFrom?: string;
+  listedThrough?: string;
   inspect?: number;
   resolveServants?: boolean;
   projectNa?: boolean;
@@ -489,6 +491,22 @@ export async function inventoryJpBannerAnnouncements(
 ) {
   const pages = options.pages ?? LIMITS.defaultPages,
     startPage = options.startPage ?? 1;
+  const hasInterval =
+    options.listedFrom !== undefined || options.listedThrough !== undefined;
+  if (
+    hasInterval &&
+    (typeof options.listedFrom !== "string" ||
+      typeof options.listedThrough !== "string" ||
+      calendarDate(options.listedFrom.replaceAll("-", ".")) !==
+        options.listedFrom ||
+      calendarDate(options.listedThrough.replaceAll("-", ".")) !==
+        options.listedThrough ||
+      options.listedFrom > options.listedThrough)
+  )
+    throw new Error("Invalid JP listing date interval.");
+  const listingInterval = hasInterval
+    ? { from: options.listedFrom!, through: options.listedThrough! }
+    : null;
   if (
     options.articleUrls !== undefined &&
     (!Array.isArray(options.articleUrls) ||
@@ -500,7 +518,9 @@ export async function inventoryJpBannerAnnouncements(
   const directUrls = [...new Set((options.articleUrls ?? []).map(articleUrl))];
   if (
     directUrls.length &&
-    (options.pages !== undefined || options.startPage !== undefined)
+    (options.pages !== undefined ||
+      options.startPage !== undefined ||
+      listingInterval !== null)
   )
     throw new Error(
       "Direct article selection cannot be combined with archive pages.",
@@ -604,7 +624,28 @@ export async function inventoryJpBannerAnnouncements(
           discovery: "ARCHIVE_INDEX",
         });
     }
+  // Filter only after merging observations: conflicting or missing dates cannot
+  // safely exclude an article. Linked notices are independent source evidence.
+  const outsideIntervalArticles: typeof articles = new Map();
+  if (listingInterval) {
+    for (const [url, entry] of articles) {
+      if (
+        entry.listedDay &&
+        !entry.issues.includes("INDEX_METADATA_CONFLICT") &&
+        (entry.listedDay < listingInterval.from ||
+          entry.listedDay > listingInterval.through)
+      ) {
+        outsideIntervalArticles.set(url, entry);
+        articles.delete(url);
+      }
+    }
+  }
   function addUnlistedArticle(url: string, linkedFrom: string | null) {
+    const archived = outsideIntervalArticles.get(url);
+    if (archived && linkedFrom) {
+      articles.set(url, { ...archived, linkedFrom: [linkedFrom] });
+      return;
+    }
     articles.set(url, {
       sourceRecordId: `publisher:JP:article:${new URL(url).pathname}`,
       url,
@@ -817,6 +858,22 @@ export async function inventoryJpBannerAnnouncements(
     retrievedAt,
     startPage: directUrls.length ? null : startPage,
     requestedPages: directUrls.length ? 0 : pages,
+    listingSelection: {
+      interval: listingInterval,
+      basis: "JP_ARCHIVE_LISTING_DAY" as const,
+      inclusive: true as const,
+      outsideInterval: outsideIntervalArticles.size,
+      outsideIntervalLinkedExceptions: [
+        ...outsideIntervalArticles.keys(),
+      ].filter((url) => articles.has(url)).length,
+      unknownOrConflictingDate: [...articles.values()].filter(
+        (entry) =>
+          entry.discovery === "ARCHIVE_INDEX" &&
+          (!entry.listedDay ||
+            entry.issues.includes("INDEX_METADATA_CONFLICT")),
+      ).length,
+      linkedNoticesDateFiltered: false as const,
+    },
     coverageLimited:
       directUrls.length > 0 ||
       startPage !== 1 ||
