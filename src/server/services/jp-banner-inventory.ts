@@ -28,6 +28,12 @@ export const JP_BANNER_INVENTORY_LIMITS = {
   collectionTimeoutMs: 60_000,
 } as const;
 const LIMITS = JP_BANNER_INVENTORY_LIMITS;
+function restrictedSummonTerms(title: string) {
+  const normalized = title.normalize("NFKC");
+  return ["有償", "福袋", "デスティニーオーダー", "フレンドポイント"].filter(
+    (term) => normalized.includes(term),
+  );
+}
 type Node = DefaultTreeAdapterMap["node"];
 type IndexEntry = {
   sourceRecordId: string;
@@ -172,7 +178,7 @@ export function parseJpBannerIndex(body: string, sourceUrl: string) {
       // Title hints prioritize inspection; they do not establish banner coverage.
       classification: !normalTitle.includes("召喚")
         ? "UNCLASSIFIED"
-        : /有償|福袋|デスティニーオーダー|フレンドポイント/.test(normalTitle)
+        : restrictedSummonTerms(title).length
           ? "RESTRICTED_SUMMON_CANDIDATE"
           : "SUMMON_CANDIDATE",
       inspectionStatus: "NOT_INSPECTED",
@@ -287,6 +293,10 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
   const nodes = walk(roots[0]!);
   const titles = nodes.filter((node) => hasClass(node, "title"));
   const title = titles.length === 1 ? text(titles[0]!) : "";
+  const restrictionTerms =
+    title.length <= LIMITS.maxTitleCharacters
+      ? restrictedSummonTerms(title)
+      : [];
   const reasons: string[] = [];
   if (!title) reasons.push("ARTICLE_TITLE_UNAVAILABLE");
   if (title.length > LIMITS.maxTitleCharacters)
@@ -392,9 +402,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     | "UNRESOLVED";
   if (reasons.length) kind = "UNRESOLVED";
   else if (hasSummonContent)
-    kind = /有償|福袋|デスティニーオーダー|フレンドポイント/.test(
-      title.normalize("NFKC"),
-    )
+    kind = restrictionTerms.length
       ? "RESTRICTED_SUMMON_CONTENT"
       : "SUMMON_CONTENT";
   else if (
@@ -423,6 +431,10 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     contentHash: createHash("sha256").update(body).digest("hex"),
     title: title ? title.slice(0, LIMITS.maxTitleCharacters) : null,
     kind,
+    // Title evidence survives incomplete body extraction; absence does not prove ordinary rules.
+    restrictionEvidence: restrictionTerms.length
+      ? { basis: "TITLE_HINT" as const, terms: restrictionTerms }
+      : null,
     reasons: [...new Set(reasons)],
     evidenceBlocks,
     imageReferences,
