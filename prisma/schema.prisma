@@ -146,6 +146,7 @@ model EventFamily {
   events            Event[]
   banners           Banner[]
   curation          EventFamilyCuration?
+  bannerTimingAnchor BannerFamilyTimingAnchor?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 }
@@ -182,6 +183,7 @@ model Event {
   anchoredBannerDates     BannerDateOverlay[]
   anchoredRewardDates     RewardDateOverlay[]
   globalRewards           RewardGlobalBaseline[]
+  bannerTimingAnchors     BannerFamilyTimingAnchor[]
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
 
@@ -538,9 +540,31 @@ model BannerSourcePublication {
   articleContentHash   String
   periodEvidenceHash   String
   publishedContentHash String
+  timingAnchorFamilyId String?
+  timingAnchorRevision Int?
+  timingAnchor         BannerFamilyTimingAnchor? @relation(fields: [timingAnchorFamilyId], references: [familyId], onDelete: Restrict)
   updatedAt            DateTime @updatedAt
   banner               Banner   @relation(fields: [bannerId], references: [id], onDelete: Restrict)
   identity             BannerSourceIdentity @relation(fields: [bannerId, sourceKey], references: [bannerId, sourceKey], onDelete: Restrict, map: "BannerSourcePublication_identity_fkey")
+
+  @@index([timingAnchorFamilyId])
+}
+
+model BannerFamilyTimingAnchor {
+  familyId          String @id
+  anchorEventId     String
+  jpResetDay        DateTime @db.Date
+  naResetDay        DateTime @db.Date
+  factsHash         String
+  sourceUrl         String
+  sourceContentHash String?
+  revision          Int @default(1)
+  updatedAt         DateTime @updatedAt
+  family            EventFamily @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  event             Event @relation(fields: [anchorEventId], references: [id], onDelete: Restrict)
+  publications      BannerSourcePublication[]
+
+  @@index([anchorEventId])
 }
 
 model Servant {

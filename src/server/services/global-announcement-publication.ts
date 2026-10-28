@@ -226,15 +226,26 @@ export async function publishAnnouncementFamily(
     )
       anchorUnchanged = true;
   }
-  const banners = target.familyId
+  const familyBanners = target.familyId
     ? await tx.banner.findMany({
         relationLoadStrategy: "join",
         where: { familyId: target.familyId },
-        include: { dateOverlay: true },
+        include: {
+          dateOverlay: true,
+          sourcePublication: { select: { ownedFields: true } },
+        },
         orderBy: { id: "asc" },
         take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
       })
     : [];
+  const heldTimingBannerIds = familyBanners
+    .filter((banner) =>
+      banner.sourcePublication?.ownedFields.includes("TIMING"),
+    )
+    .map((banner) => banner.id);
+  const banners = familyBanners.filter(
+    (banner) => !banner.sourcePublication?.ownedFields.includes("TIMING"),
+  );
   const rewards = events.flatMap((event) =>
     event.rewardSources.flatMap((source) =>
       source.rewards.map((reward) => ({ event, source, reward })),
@@ -267,7 +278,7 @@ export async function publishAnnouncementFamily(
     return new Date(current.startsAt.getTime() + offset);
   };
   if (
-    events.length + banners.length + rewards.length >
+    events.length + familyBanners.length + rewards.length >
     GLOBAL_SOURCE_LIMITS.maxBatchRecords
   )
     throw new Error("The family exceeds the publication limit.");
@@ -531,6 +542,7 @@ export async function publishAnnouncementFamily(
         anchorEventId: eventId,
         offsetMs: plan.offsetMs,
         updatedRewardDates: rewardRows.length,
+        ...(heldTimingBannerIds.length ? { heldTimingBannerIds } : {}),
         unresolvedRewardDates: plan.unresolvedRewardDates,
         unshiftedUnknownRewardIds: plan.rewards
           .filter(
@@ -550,5 +562,9 @@ export async function publishAnnouncementFamily(
       }),
     },
   });
-  return { changed: true, reason: "PUBLISHED" as const };
+  return {
+    changed: true,
+    reason: "PUBLISHED" as const,
+    ...(heldTimingBannerIds.length ? { heldTimingBannerIds } : {}),
+  };
 }

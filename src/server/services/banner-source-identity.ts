@@ -55,7 +55,7 @@ type Snapshot = Prisma.BannerGetPayload<{ include: typeof snapshotInclude }>;
 export function bannerDatabaseFingerprint(banner: Snapshot) {
   return createHash("sha256")
     .update(
-      JSON.stringify({ version: 2, banner }, (_key, value: unknown) => {
+      JSON.stringify({ version: 3, banner }, (_key, value: unknown) => {
         if (value && typeof value === "object" && !Array.isArray(value))
           return Object.fromEntries(
             Object.entries(value).sort(([a], [b]) =>

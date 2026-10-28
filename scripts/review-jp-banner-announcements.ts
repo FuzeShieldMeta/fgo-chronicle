@@ -81,10 +81,10 @@ try {
       "Database identity review: --database-preview requires --identity-map and an explicitly configured DATABASE_URL. It reads current target IDs and database fingerprints without writes. --accept-identities=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID additionally registers only reviewed bindings in one audited transaction. Acceptance requires --database-preview and an exact matching identity map, including current source/baseline evidence. No banner fields, lineups or publication ownership are changed. Never run acceptance from cron.",
     );
     console.log(
-      "Publication review: add --publication-fields=NAME,SOURCE to --database-preview for a read-only field-level diff and ownership revision. TIMING and ROSTER requests remain held until verified family-anchor and complete-roster evidence are available. --publish-reviewed=LOCAL_PUBLICATION.json --actor-id=CURATOR_ID explicitly accepts the reviewed fields, banner fingerprints and publication revisions. It cannot register identities, insert banners or bypass evidence holds. Never run acceptance or reviewed publication from cron.",
+      "Publication review: add --publication-fields=NAME,SOURCE to --database-preview for a read-only field diff and ownership revision. SOURCE,TIMING can additionally publish exact pickup clocks using an explicitly reviewed --family-anchors file, or reuse a stored family anchor. Copy each timing review snapshot into its accepted binding and include the selected familyAnchors input at the root. Exact original JP clocks are required; lineups and existing date overlays remain held. ROSTER remains held without complete evidence. --publish-reviewed=LOCAL_PUBLICATION.json --actor-id=CURATOR_ID explicitly accepts the reviewed values and revisions. It cannot register identities or insert banners. Never run acceptance or reviewed publication from cron.",
     );
     console.log(
-      "Family timing review: --family-anchors=LOCAL_ANCHORS.json requires --database-preview and its identity-map/comparison inputs. It compares registered pickups using explicitly selected family/event source keys and JP/NA reset days in a read-only database transaction. It reports source precision gaps and protected dates; consistency is not verified family identity or publication approval. Cannot combine with acceptance or publication fields. TIMING publication remains blocked.",
+      "Family timing review: --family-anchors=LOCAL_ANCHORS.json requires --database-preview and its identity-map/comparison inputs. Without publication fields it remains a read-only comparison. Combine only with publication fields including TIMING for reviewed timing publication. Identity registration remains separate. Stored anchor facts are rechecked on reuse; no source URL in a review file selects a network request.",
     );
   } else {
     const options: JpBannerInventoryOptions = {};
@@ -211,8 +211,7 @@ try {
       (familyTimingFile &&
         (!databasePreview ||
           acceptanceFile ||
-          publicationFile ||
-          publicationFields)) ||
+          (publicationFields && !publicationFields.includes("TIMING")))) ||
       (databasePreview && !process.env.DATABASE_URL)
     )
       throw new Error(
@@ -301,6 +300,14 @@ try {
       throw new Error(
         "Publication acceptance must match the explicitly selected fields.",
       );
+    if (
+      publicationAcceptance &&
+      JSON.stringify(publicationAcceptance.familyAnchors ?? null) !==
+        JSON.stringify(familyTimingInput)
+    )
+      throw new Error(
+        "Publication acceptance must match the selected family anchors.",
+      );
     const report = await inventoryJpBannerAnnouncements(options);
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
@@ -331,7 +338,7 @@ try {
         log: [],
       });
       try {
-        if (familyTimingInput) {
+        if (familyTimingInput && !publicationFields) {
           familyTimingPreview = await previewJpBannerFamilyTiming(
             database,
             report,
@@ -346,6 +353,7 @@ try {
             baseline,
             identityMap,
             publicationFields,
+            familyTimingInput ?? undefined,
           );
           if (publicationAcceptance && actorId)
             publication = await publishBannerSourceValues(

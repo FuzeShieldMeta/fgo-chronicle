@@ -66,6 +66,10 @@ export async function importBannerDataset(
           sourceUrl: true,
           status: true,
           sourceRegion: true,
+          startsAt: true,
+          endsAt: true,
+          startsAtPrecision: true,
+          endsAtPrecision: true,
           sourcePublication: { select: { ownedFields: true } },
         },
       });
@@ -83,6 +87,14 @@ export async function importBannerDataset(
                 sourceUrl: owner.sourceUrl,
                 status: owner.status,
                 sourceRegion: owner.sourceRegion,
+              }
+            : {}),
+          ...(owner && fields.includes("TIMING")
+            ? {
+                startsAt: owner.startsAt,
+                endsAt: owner.endsAt,
+                startsAtPrecision: owner.startsAtPrecision,
+                endsAtPrecision: owner.endsAtPrecision,
               }
             : {}),
         };
@@ -106,6 +118,7 @@ export async function importBannerDataset(
           id: true,
           sourceKey: true,
           featured: { select: { servantId: true, soloRateUp: true } },
+          summonLineups: { include: { featured: true } },
         },
       });
       const keyToBanner = new Map(
@@ -138,11 +151,38 @@ export async function importBannerDataset(
           ),
         });
       }
+      const heldLineupChanges: {
+        bannerId: string;
+        sourceKey: string;
+        reason: string;
+      }[] = [];
       for (const banner of banners) {
         // Missing lineups mean the source has no lineup data, not that existing ones should be deleted.
         if (banner.summonLineups === undefined) continue;
         const savedBanner = keyToBanner.get(bannerSourceKey(banner))!;
         const prefix = `${bannerSourceKey(banner)}:`;
+        if (
+          owners
+            .get(bannerSourceKey(banner))
+            ?.sourcePublication?.ownedFields.includes("TIMING")
+        ) {
+          const desired = banner.summonLineups.map((lineup) => ({
+            ...lineup,
+            sourceKey: `${prefix}${lineup.sourceKey}`,
+            lastVerifiedAt: lineup.lastVerifiedAt ?? null,
+          }));
+          const existing = savedBanner.summonLineups.map((lineup) => ({
+            ...lineup,
+            servants: lineup.featured,
+          }));
+          if (lineupSignature(desired) !== lineupSignature(existing))
+            heldLineupChanges.push({
+              bannerId: savedBanner.id,
+              sourceKey: bannerSourceKey(banner),
+              reason: "TIMING_OWNED_LINEUP_REQUIRES_REVIEW",
+            });
+          continue;
+        }
         const savedKeys: string[] = [];
         for (const lineup of banner.summonLineups) {
           const sourceKey = `${prefix}${lineup.sourceKey}`;
@@ -187,11 +227,46 @@ export async function importBannerDataset(
         imported: banners.length,
         changedBanners,
         servants: servants.length,
+        ...(heldLineupChanges.length ? { heldLineupChanges } : {}),
       };
     },
     {
       maxWait: GLOBAL_SOURCE_LIMITS.transactionMaxWaitMs,
       timeout: GLOBAL_SOURCE_LIMITS.transactionTimeoutMs,
     },
+  );
+}
+
+function lineupSignature(
+  rows: {
+    sourceKey: string;
+    name: string;
+    startsAt: string | Date;
+    endsAt: string | Date | null;
+    sourceRegion: string;
+    evidenceUrl: string;
+    lastVerifiedAt: string | Date | null;
+    servants: { servantId: number; soloRateUp: boolean }[];
+  }[],
+) {
+  return JSON.stringify(
+    rows
+      .map((row) => ({
+        sourceKey: row.sourceKey,
+        name: row.name,
+        startsAt: new Date(row.startsAt).toISOString(),
+        endsAt: row.endsAt ? new Date(row.endsAt).toISOString() : null,
+        sourceRegion: row.sourceRegion,
+        evidenceUrl: row.evidenceUrl,
+        lastVerifiedAt: row.lastVerifiedAt
+          ? new Date(row.lastVerifiedAt).toISOString()
+          : null,
+        servants: [...row.servants]
+          .sort((a, b) => a.servantId - b.servantId)
+          .map(({ servantId, soloRateUp }) => ({ servantId, soloRateUp })),
+      }))
+      .sort((a, b) =>
+        a.sourceKey < b.sourceKey ? -1 : a.sourceKey > b.sourceKey ? 1 : 0,
+      ),
   );
 }
