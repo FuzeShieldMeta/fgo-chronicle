@@ -6,7 +6,7 @@ plan summons, and see how each plan affects your resources for later campaigns.
 [Live app](https://fgo-chronicle.vercel.app) ·
 [How the forecast works](https://fgo-chronicle.vercel.app/methodology)
 
-![FGO Chronicle in dark mode, showing event and summon timelines, featured servant portraits, and daily resource forecasts.](docs/images/timeline.webp)
+![FGO Chronicle in dark mode, showing the current timeline, daily resource forecasts, and a selected summoning campaign with featured servants in the sidebar.](docs/images/timeline.webp)
 
 ## Features
 
