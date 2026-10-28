@@ -36,7 +36,7 @@ function minuteInstant(value: string | null) {
     ? time
     : null;
 }
-function anchorInstants(jpDay: string, naDay: string) {
+export function jpBannerResetAnchors(jpDay: string, naDay: string) {
   const jp = dayInstant(jpDay),
     na = dayInstant(naDay);
   if (jp === null || na === null)
@@ -58,7 +58,7 @@ export function projectJpBannerPeriods(
 ) {
   if (periods.length > 4_000)
     throw new Error("Projection period limit exceeded.");
-  const anchors = anchorInstants(jpAnchorDay, naAnchorDay);
+  const anchors = jpBannerResetAnchors(jpAnchorDay, naAnchorDay);
   return periods.map((period) => {
     const issues = [...period.issues];
     const start = minuteInstant(period.startsAt),
@@ -158,11 +158,15 @@ export function previewJpBannerProjection(schedule: Schedule, kind: Kind) {
     jpAnchorAt:
       jpAnchorDay === null
         ? null
-        : new Date(anchorInstants(jpAnchorDay, jpAnchorDay).jp).toISOString(),
+        : new Date(
+            jpBannerResetAnchors(jpAnchorDay, jpAnchorDay).jp,
+          ).toISOString(),
     naAnchorAt:
       naAnchorDay === null
         ? null
-        : new Date(anchorInstants(naAnchorDay, naAnchorDay).na).toISOString(),
+        : new Date(
+            jpBannerResetAnchors(naAnchorDay, naAnchorDay).na,
+          ).toISOString(),
     unprojectedPeriodCount: periods.length - projectedCount,
     unparsedSourcePeriodCount: schedule.unparsedPeriods.length,
     issues,

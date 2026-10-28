@@ -30,6 +30,10 @@ import {
   previewBannerSourcePublication,
   publishBannerSourceValues,
 } from "../src/server/services/banner-source-publication";
+import {
+  jpBannerFamilyTimingSchema,
+  previewJpBannerFamilyTiming,
+} from "../src/server/services/jp-banner-family-timing";
 
 async function localJson(file: string, maxBytes: number) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -79,6 +83,9 @@ try {
     console.log(
       "Publication review: add --publication-fields=NAME,SOURCE to --database-preview for a read-only field-level diff and ownership revision. TIMING and ROSTER requests remain held until verified family-anchor and complete-roster evidence are available. --publish-reviewed=LOCAL_PUBLICATION.json --actor-id=CURATOR_ID explicitly accepts the reviewed fields, banner fingerprints and publication revisions. It cannot register identities, insert banners or bypass evidence holds. Never run acceptance or reviewed publication from cron.",
     );
+    console.log(
+      "Family timing review: --family-anchors=LOCAL_ANCHORS.json requires --database-preview and its identity-map/comparison inputs. It compares registered pickups using explicitly selected family/event source keys and JP/NA reset days in a read-only database transaction. It reports source precision gaps and protected dates; consistency is not verified family identity or publication approval. Cannot combine with acceptance or publication fields. TIMING publication remains blocked.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
@@ -91,6 +98,7 @@ try {
       typeof bannerPublicationFieldsSchema.parse
     > | null = null;
     let publicationFile: string | null = null;
+    let familyTimingFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
       if (argument === "--database-preview") {
@@ -103,7 +111,8 @@ try {
         argument.startsWith("--accept-identities=") ||
         argument.startsWith("--actor-id=") ||
         argument.startsWith("--publish-reviewed=") ||
-        argument.startsWith("--publication-fields=")
+        argument.startsWith("--publication-fields=") ||
+        argument.startsWith("--family-anchors=")
       ) {
         const [flag, ...parts] = argument.split("=");
         const value = parts.join("=");
@@ -116,6 +125,7 @@ try {
             value.split(","),
           );
         else if (flag === "--publish-reviewed") publicationFile = value;
+        else if (flag === "--family-anchors") familyTimingFile = value;
         else acceptanceFile = value;
         continue;
       }
@@ -198,6 +208,11 @@ try {
       (acceptanceFile && (publicationFile || publicationFields)) ||
       (publicationFields && !databasePreview) ||
       (publicationFile && !publicationFields) ||
+      (familyTimingFile &&
+        (!databasePreview ||
+          acceptanceFile ||
+          publicationFile ||
+          publicationFields)) ||
       (databasePreview && !process.env.DATABASE_URL)
     )
       throw new Error(
@@ -211,6 +226,14 @@ try {
       throw new Error(
         "Image drafts require current image evidence and projection.",
       );
+    const familyTimingInput = familyTimingFile
+      ? jpBannerFamilyTimingSchema.parse(
+          await localJson(
+            familyTimingFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
     const baseline = baselineFile
       ? bannerDatasetSchema.parse(
           await localJson(
@@ -298,6 +321,9 @@ try {
     let publication: Awaited<
       ReturnType<typeof publishBannerSourceValues>
     > | null = null;
+    let familyTimingPreview: Awaited<
+      ReturnType<typeof previewJpBannerFamilyTiming>
+    > | null = null;
     if (databasePreview && identityMap && baseline) {
       const { PrismaClient } = await import("../generated/prisma/index.js");
       const database = new PrismaClient({
@@ -305,7 +331,15 @@ try {
         log: [],
       });
       try {
-        if (publicationFields) {
+        if (familyTimingInput) {
+          familyTimingPreview = await previewJpBannerFamilyTiming(
+            database,
+            report,
+            baseline,
+            identityMap,
+            familyTimingInput,
+          );
+        } else if (publicationFields) {
           publicationPreview = await previewBannerSourcePublication(
             database,
             report,
@@ -347,7 +381,10 @@ try {
       databaseIdentityPreview?.mappings.some(
         (mapping) => mapping.registrationStatus === "HELD",
       ) ||
-      publicationPreview?.mappings.some((mapping) => mapping.status === "HELD")
+      publicationPreview?.mappings.some(
+        (mapping) => mapping.status === "HELD",
+      ) ||
+      familyTimingPreview?.heldMappings
         ? "partial_failure"
         : report.status;
     console.log(
@@ -364,6 +401,7 @@ try {
           ...(identityRegistration ? { identityRegistration } : {}),
           ...(publicationPreview ? { publicationPreview } : {}),
           ...(publication ? { publication } : {}),
+          ...(familyTimingPreview ? { familyTimingPreview } : {}),
         },
         null,
         2,
