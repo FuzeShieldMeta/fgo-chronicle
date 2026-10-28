@@ -685,11 +685,17 @@ export async function getCachedTimelineStories() {
   );
 }
 
-async function getCuratorRevision() {
+export async function getCuratorRevision(
+  database: Pick<typeof db, "curatorChange"> = db,
+) {
   // Keep this outside unstable_cache: missed tag invalidation must not hide edits.
   // Audit rows are appended in the same transaction as corrections and resets.
-  return db.curatorChange.count({
-    where: { targetKind: { in: ["EVENT", "REWARD", "FAMILY", "BANNER"] } },
+  return database.curatorChange.count({
+    where: {
+      targetKind: { in: ["EVENT", "REWARD", "FAMILY", "BANNER"] },
+      // Binding an identity records evidence without changing public content.
+      action: { not: "BIND_SOURCE_IDENTITY" },
+    },
   });
 }
 

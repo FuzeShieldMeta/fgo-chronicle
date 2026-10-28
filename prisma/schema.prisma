@@ -505,12 +505,25 @@ model Banner {
   featured          BannerServant[]
   summonLineups     SummonLineup[]
   dateOverlay       BannerDateOverlay?
+  sourceIdentities  BannerSourceIdentity[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])
   @@index([familyId, startsAt])
+}
+
+model BannerSourceIdentity {
+  sourceKey          String   @id
+  bannerId           String
+  sourceUrl          String
+  articleContentHash String
+  periodEvidenceHash String
+  createdAt          DateTime @default(now())
+  banner             Banner   @relation(fields: [bannerId], references: [id], onDelete: Restrict)
+
+  @@index([bannerId])
 }
 
 model Servant {

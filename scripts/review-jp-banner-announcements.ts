@@ -19,6 +19,11 @@ import {
   jpBannerIdentityMapSchema,
   previewJpBannerIdentityMap,
 } from "../src/server/services/jp-banner-identity";
+import {
+  bannerIdentityAcceptanceSchema,
+  previewBannerSourceIdentities,
+  registerBannerSourceIdentities,
+} from "../src/server/services/banner-source-identity";
 
 async function localJson(file: string, maxBytes: number) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -62,13 +67,38 @@ try {
     console.log(
       "Identity preview: --identity-map=LOCAL_MAP.json requires --compare, --resolve-servants and --project-na. Explicit reviewer-assigned pickup identities are checked against current article/period evidence and baseline target fingerprints. Draft URLs never select sources. Conflicts or stale evidence hold the proposal; consistency is not identity confirmation, full roster evidence, database-ID verification or publication approval. No rekeying or writes.",
     );
+    console.log(
+      "Database identity review: --database-preview requires --identity-map and an explicitly configured DATABASE_URL. It reads current target IDs and database fingerprints without writes. --accept-identities=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID additionally registers only reviewed bindings in one audited transaction. Acceptance requires --database-preview and an exact matching identity map, including current source/baseline evidence. No banner fields, lineups or publication ownership are changed. Never run acceptance from cron.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
     let imageDraftFile: string | null = null;
     let identityMapFile: string | null = null;
+    let databasePreview = false;
+    let acceptanceFile: string | null = null;
+    let actorId: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      if (argument === "--database-preview") {
+        if (databasePreview)
+          throw new Error("Duplicate database preview flag.");
+        databasePreview = true;
+        continue;
+      }
+      if (
+        argument.startsWith("--accept-identities=") ||
+        argument.startsWith("--actor-id=")
+      ) {
+        const [flag, ...parts] = argument.split("=");
+        const value = parts.join("=");
+        if (!value || seen.has(flag!))
+          throw new Error("Invalid acceptance arguments.");
+        seen.add(flag!);
+        if (flag === "--actor-id") actorId = value;
+        else acceptanceFile = value;
+        continue;
+      }
       if (argument.startsWith("--identity-map=")) {
         if (
           identityMapFile !== null ||
@@ -142,6 +172,15 @@ try {
     if (identityMapFile && !baselineFile)
       throw new Error("Identity preview requires a comparison baseline.");
     if (
+      (databasePreview && !identityMapFile) ||
+      Boolean(acceptanceFile) !== Boolean(actorId) ||
+      (acceptanceFile && !databasePreview) ||
+      (databasePreview && !process.env.DATABASE_URL)
+    )
+      throw new Error(
+        "Database review requires explicit evidence, database configuration and paired acceptance arguments.",
+      );
+    if (
       imageDraftFile &&
       (!(options.inspectImages && options.inspectImages > 0) ||
         !options.projectNa)
@@ -173,6 +212,30 @@ try {
           ),
         )
       : null;
+    const acceptance = acceptanceFile
+      ? bannerIdentityAcceptanceSchema.parse(
+          await localJson(
+            acceptanceFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
+    if (acceptance) {
+      const acceptedMap = jpBannerIdentityMapSchema.parse({
+        version: 1,
+        mappings: acceptance.bindings.map(
+          ({
+            bannerId: _id,
+            expectedDatabaseFingerprint: _fingerprint,
+            ...mapping
+          }) => mapping,
+        ),
+      });
+      if (JSON.stringify(acceptedMap) !== JSON.stringify(identityMap))
+        throw new Error(
+          "Acceptance must match the explicitly selected identity map.",
+        );
+    }
     const report = await inventoryJpBannerAnnouncements(options);
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
@@ -181,8 +244,43 @@ try {
       identityMap && baseline
         ? previewJpBannerIdentityMap(report, baseline, identityMap)
         : null;
+    let databaseIdentityPreview: Awaited<
+      ReturnType<typeof previewBannerSourceIdentities>
+    > | null = null;
+    let identityRegistration: Awaited<
+      ReturnType<typeof registerBannerSourceIdentities>
+    > | null = null;
+    if (databasePreview && identityMap && baseline) {
+      const { PrismaClient } = await import("../generated/prisma/index.js");
+      const database = new PrismaClient({
+        datasourceUrl: process.env.DATABASE_URL,
+        log: [],
+      });
+      try {
+        databaseIdentityPreview = await previewBannerSourceIdentities(
+          database,
+          report,
+          baseline,
+          identityMap,
+        );
+        if (acceptance && actorId)
+          identityRegistration = await registerBannerSourceIdentities(
+            database,
+            actorId,
+            report,
+            baseline,
+            acceptance,
+          );
+      } finally {
+        await database.$disconnect();
+      }
+    }
     const status =
-      draftValidation?.heldRows || identityPreview?.heldMappings
+      draftValidation?.heldRows ||
+      identityPreview?.heldMappings ||
+      databaseIdentityPreview?.mappings.some(
+        (mapping) => mapping.registrationStatus === "HELD",
+      )
         ? "partial_failure"
         : report.status;
     console.log(
@@ -195,6 +293,8 @@ try {
             : {}),
           ...(draftValidation ? { imageDrafts: draftValidation } : {}),
           ...(identityPreview ? { identityMap: identityPreview } : {}),
+          ...(databaseIdentityPreview ? { databaseIdentityPreview } : {}),
+          ...(identityRegistration ? { identityRegistration } : {}),
         },
         null,
         2,

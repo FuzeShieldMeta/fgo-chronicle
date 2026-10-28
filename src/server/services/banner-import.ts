@@ -43,6 +43,18 @@ export async function importBannerDataset(
     async (tx) => {
       if (authorize) await authorize(tx);
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+      const identities = await tx.bannerSourceIdentity.findMany({
+        where: { sourceKey: { in: records.map((record) => record.sourceKey) } },
+        select: { banner: { select: { sourceKey: true } }, sourceKey: true },
+      });
+      if (
+        identities.some(
+          (identity) => identity.sourceKey !== identity.banner.sourceKey,
+        )
+      )
+        throw new Error(
+          "Banner source key is already bound to a different legacy banner.",
+        );
       await tx.$executeRaw`INSERT INTO "Servant" ("id","name","className","rarity","faceId")
       SELECT x."id",x."name",x."className",x."rarity",x."faceId"
       FROM jsonb_to_recordset(${JSON.stringify(servants)}::jsonb) AS x("id" INT,"name" TEXT,"className" TEXT,"rarity" INT,"faceId" INT)
