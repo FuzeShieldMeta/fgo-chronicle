@@ -423,6 +423,13 @@ export function associateJpBannerPickupEvidence(
       endsAt: period.endsAt,
       associations,
       issues: [...new Set(issues)],
+      countedRosterReview: reviewCountedRoster(
+        schedule,
+        identities,
+        issues,
+        canShareNoticeEvidence,
+        associations,
+      ),
       rosterComplete: false as const,
       publicationAllowed: false as const,
     };
@@ -432,6 +439,97 @@ export function associateJpBannerPickupEvidence(
     unassociatedMentionHashes: identities
       .filter((identity) => !linkedMentions.has(identity.evidenceHash))
       .map((identity) => identity.evidenceHash),
+    publicationAllowed: false as const,
+  };
+}
+
+function reviewCountedRoster(
+  schedule: ReturnType<typeof extractJpBannerSchedule>,
+  identities: ReturnType<typeof resolveJpBannerServantMentions>,
+  windowIssues: readonly string[],
+  singleWindow: boolean,
+  associations: readonly { servantId: number }[],
+) {
+  const declarations = schedule.pickupRosterDeclarations;
+  const lists = schedule.pickupRosterLists;
+  const declaration = declarations.length === 1 ? declarations[0] : undefined;
+  const list = lists.length === 1 ? lists[0] : undefined;
+  const issues = [...windowIssues];
+  if (!declarations.length)
+    issues.push("COUNTED_ROSTER_DECLARATION_UNAVAILABLE");
+  else if (declarations.length !== 1)
+    issues.push("MULTIPLE_COUNTED_ROSTER_DECLARATIONS");
+  if (lists.length !== 1) issues.push("PICKUP_ROSTER_LIST_NOT_UNIQUE");
+  if (!singleWindow) issues.push("SINGLE_PICKUP_WINDOW_REQUIRED");
+  if (schedule.unparsedPeriods.length) issues.push("UNPARSED_PERIOD_EVIDENCE");
+  issues.push(...(declaration?.issues ?? []), ...(list?.issues ?? []));
+  const resolveMembers = (members: readonly { evidenceHash: string }[]) =>
+    members.map((member) =>
+      identities.find(
+        (identity) => identity.evidenceHash === member.evidenceHash,
+      ),
+    );
+  const declared = resolveMembers(declaration?.members ?? []);
+  const listed = resolveMembers(list?.members ?? []);
+  const ids = (members: typeof declared) =>
+    [
+      ...new Set(
+        members.flatMap((member) =>
+          member?.status === "MATCHED" && member.servantId !== null
+            ? [member.servantId]
+            : [],
+        ),
+      ),
+    ].sort((a, b) => a - b);
+  const declaredIds = ids(declared),
+    listedIds = ids(listed);
+  if (
+    declaration &&
+    (declared.length !== declaredIds.length ||
+      declared.some((member) => member?.status !== "MATCHED"))
+  )
+    issues.push("COUNTED_ROSTER_IDENTITIES_UNRESOLVED");
+  if (
+    list &&
+    (listed.length !== listedIds.length ||
+      listed.some((member) => member?.status !== "MATCHED"))
+  )
+    issues.push("LIST_ROSTER_IDENTITIES_UNRESOLVED");
+  if (
+    declaration &&
+    list &&
+    (declaredIds.length !== declaration.declaredCount ||
+      listedIds.length !== declaration.declaredCount ||
+      JSON.stringify(declaredIds) !== JSON.stringify(listedIds))
+  )
+    issues.push("COUNTED_ROSTER_LIST_MISMATCH");
+  if (
+    declaration &&
+    JSON.stringify(
+      [...new Set(associations.map((member) => member.servantId))].sort(
+        (a, b) => a - b,
+      ),
+    ) !== JSON.stringify(declaredIds)
+  )
+    issues.push("COUNTED_ROSTER_WINDOW_BINDING_UNRESOLVED");
+  return {
+    status: !declarations.length
+      ? ("UNAVAILABLE" as const)
+      : issues.length
+        ? ("HELD" as const)
+        : ("CONSISTENT_REVIEW_REQUIRED" as const),
+    declaredServantCount: declaration?.declaredCount ?? null,
+    declaredServantIds: declaredIds,
+    listedServantIds: listedIds,
+    members: declaredIds.map((servantId) => ({
+      servantId,
+      rarity: declared.find((member) => member?.servantId === servantId)!
+        .rarity,
+    })),
+    declarationEvidenceHashes: declarations.map((item) => item.evidenceHash),
+    listEvidenceHashes: lists.map((item) => item.evidenceHash),
+    issues: [...new Set(issues)],
+    rosterComplete: false as const,
     publicationAllowed: false as const,
   };
 }

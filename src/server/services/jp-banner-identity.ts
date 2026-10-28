@@ -201,6 +201,12 @@ export function previewJpBannerIdentityMap(
         : ("CONSISTENT_REVIEW_REQUIRED" as const),
       issues,
       knownServantIds,
+      countedRosterReview: window?.countedRosterReview
+        ? {
+            ...window.countedRosterReview,
+            catalogueContentHash: report.servantCatalogue.contentHash,
+          }
+        : null,
       targetServantIdsWithoutSourceEvidence:
         target?.servants
           .filter((member) => !knownServantIds.includes(member.id))

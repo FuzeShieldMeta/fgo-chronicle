@@ -177,6 +177,74 @@ function pickupRosterList(context: string, sourceUrl: string) {
   };
 }
 
+function countedPickupRoster(context: string, sourceUrl: string) {
+  const normalized = context.normalize("NFKC");
+  const statement =
+    /((?:(?:「[^「」『』]+」|『[^「」『』]+』)\s*(?:[、,と]\s*)?)+)の\s*(\d{1,3})\s*騎をピックアップ[!。]?$/u.exec(
+      normalized,
+    );
+  if (!statement) return null;
+  const prose = normalized.replace(/[「『][^「」『』]*[」』]/gu, "");
+  if (
+    /場合|一例|例として|たとえば|例えば|一部|など|含む|ほか|対象外|除く|以外|ません|ではなく|代わり|ボーナス|特攻|強化|クエスト|確定|のみ|だけ|概念礼装/u.test(
+      prose,
+    )
+  )
+    return null;
+  const evidenceHash = hash([sourceUrl, "COUNTED_PICKUP_ROSTER", normalized]);
+  const issues: string[] = [];
+  const declaredCount = Number(statement[2]);
+  if (!declaredCount) issues.push("INVALID_DECLARED_SERVANT_COUNT");
+  if (/[「『]\s*[★☆]/u.test(normalized.slice(0, statement.index)))
+    issues.push("INCOMPLETE_COUNTED_ENUMERATION");
+  const members: { name: string; rarity: number; evidenceHash: string }[] = [];
+  const labels: Record<string, number> = { SSR: 5, SR: 4, R: 3, UC: 2, C: 1 };
+  for (const token of statement[1]!.matchAll(
+    /「([^「」『』]+)」|『([^「」『』]+)』/gu,
+  )) {
+    const member =
+      /^\s*[★☆]\s*([0-5])\s*(?:\((SSR|SR|R|UC|C)\))?\s*([^。※▼◆◇]{1,120})$/u.exec(
+        token[1] ?? token[2]!,
+      );
+    if (!member) {
+      issues.push("UNSUPPORTED_COUNTED_ROSTER_MEMBER");
+      continue;
+    }
+    const rarity = Number(member[1]),
+      name = member[3]!.trim();
+    if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
+      issues.push("EMPTY_COUNTED_ROSTER_NAME");
+    if (member[2] && labels[member[2]] !== rarity)
+      issues.push("COUNTED_ROSTER_RARITY_MISMATCH");
+    if (
+      members.some(
+        (previous) => previous.name === name && previous.rarity === rarity,
+      )
+    )
+      issues.push("DUPLICATE_COUNTED_ROSTER_MEMBER");
+    members.push({
+      name,
+      rarity,
+      evidenceHash: hash([
+        sourceUrl,
+        "COUNTED_ROSTER_MEMBER",
+        evidenceHash,
+        name,
+        rarity,
+      ]),
+    });
+  }
+  if (members.length !== declaredCount)
+    issues.push("DECLARED_ROSTER_COUNT_MISMATCH");
+  return {
+    context,
+    evidenceHash,
+    declaredCount,
+    members,
+    issues: [...new Set(issues)],
+  };
+}
+
 export function extractJpBannerSchedule(source: ScheduleSource) {
   if (
     source.blocks.length > 80 ||
@@ -199,9 +267,24 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
   }[] = [];
   const pickupRosterLists: NonNullable<ReturnType<typeof pickupRosterList>>[] =
     [];
+  const pickupRosterDeclarations: NonNullable<
+    ReturnType<typeof countedPickupRoster>
+  >[] = [];
   let explicitSeparatePeriods = false;
   for (const context of source.blocks) {
     const normalized = context.normalize("NFKC");
+    const counted = countedPickupRoster(context, source.sourceUrl);
+    if (
+      counted &&
+      !pickupRosterDeclarations.some(
+        (item) => item.evidenceHash === counted.evidenceHash,
+      )
+    ) {
+      pickupRosterDeclarations.push(counted);
+      if (!counted.issues.length)
+        for (const member of counted.members)
+          servantMentions.push({ ...member, context });
+    }
     const roster = pickupRosterList(context, source.sourceUrl);
     if (
       roster &&
@@ -418,6 +501,7 @@ export function extractJpBannerSchedule(source: ScheduleSource) {
     unparsedPeriods,
     servantMentions,
     pickupRosterLists,
+    pickupRosterDeclarations,
     summonGroupEvidence,
     scheduleImageCandidates,
     pendingEvidence,
