@@ -9,7 +9,7 @@
 
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { ZodError } from "zod";
+import { flattenError, ZodError } from "zod";
 
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -47,12 +47,18 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    // Procedure schemas have different keys; keep named field errors available
+    // to clients without assuming one procedure's input shape.
+    const zodError: {
+      formErrors: string[];
+      fieldErrors: Record<string, string[] | undefined>;
+    } | null =
+      error.cause instanceof ZodError ? flattenError(error.cause) : null;
     return {
       ...shape,
       data: {
         ...shape.data,
-        zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+        zodError,
       },
     };
   },
