@@ -300,6 +300,63 @@ export async function fetchJpBannerArticle(
   return fetchJpHtml(articleUrl(url), fetchFn, signal);
 }
 
+function articleScheduleBlocks(blockText: Map<Node, string>, root: Node) {
+  const consumed = new Set<Node>();
+  const blocks: string[] = [];
+  for (const [node, value] of blockText) {
+    if (consumed.has(node)) continue;
+    let parent = "parentNode" in node ? node.parentNode : null;
+    let nested = false;
+    while (parent && parent !== root) {
+      if (blockText.has(parent)) {
+        nested = true;
+        break;
+      }
+      parent = "parentNode" in parent ? parent.parentNode : null;
+    }
+    if (nested || !value) continue;
+    let context = value;
+    if (
+      node.nodeName === "p" &&
+      /^【ピックアップ対象】\s*▼(?:期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.test(
+        value.normalize("NFKC"),
+      ) &&
+      "parentNode" in node &&
+      node.parentNode
+    ) {
+      const siblings = node.parentNode.childNodes;
+      for (
+        let index = siblings.indexOf(node) + 1;
+        index < siblings.length;
+        index++
+      ) {
+        const sibling = siblings[index]!;
+        // Formatting whitespace and comments do not separate source sections.
+        if (
+          sibling.nodeName === "#comment" ||
+          (sibling.nodeName === "#text" &&
+            "value" in sibling &&
+            !sibling.value.trim())
+        )
+          continue;
+        const continuation = blockText.get(sibling);
+        if (
+          sibling.nodeName !== "p" ||
+          !continuation ||
+          !/^▼(?:期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.test(
+            continuation.normalize("NFKC"),
+          )
+        )
+          break;
+        context += ` ${continuation}`;
+        consumed.add(sibling);
+      }
+    }
+    blocks.push(context);
+  }
+  return blocks;
+}
+
 export function parseJpBannerArticle(body: string, sourceUrl: string) {
   const url = articleUrl(sourceUrl);
   if (Buffer.byteLength(body) > LIMITS.maxBodyBytes)
@@ -324,9 +381,11 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
       .map((node) => [node, text(node)] as const),
   );
   const blocks = [...blockText.values()].filter(Boolean);
+  const scheduleBlocks = articleScheduleBlocks(blockText, roots[0]!);
   if (
     blocks.length > LIMITS.maxEvidenceBlocks ||
-    blocks.some((block) => block.length > LIMITS.maxEvidenceCharacters)
+    blocks.some((block) => block.length > LIMITS.maxEvidenceCharacters) ||
+    scheduleBlocks.some((block) => block.length > LIMITS.maxEvidenceCharacters)
   )
     reasons.push("ARTICLE_EVIDENCE_LIMIT");
   const evidenceBlocks = blocks
@@ -462,17 +521,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     schedule: extractJpBannerSchedule({
       sourceUrl: url,
       title,
-      blocks: [...blockText.entries()]
-        .filter(([node]) => {
-          let parent = "parentNode" in node ? node.parentNode : null;
-          while (parent && parent !== roots[0]) {
-            if (blockText.has(parent)) return false;
-            parent = "parentNode" in parent ? parent.parentNode : null;
-          }
-          return true;
-        })
-        .map(([, value]) => value)
-        .filter(Boolean)
+      blocks: scheduleBlocks
         .slice(0, LIMITS.maxEvidenceBlocks)
         .map((value) => value.slice(0, LIMITS.maxEvidenceCharacters)),
       images: imageReferences,
