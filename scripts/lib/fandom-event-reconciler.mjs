@@ -7,6 +7,7 @@ import {
 } from "./reward-reconciliation.mjs";
 import { parseEventDataset } from "./event-dataset.mjs";
 import { addCalendarYears, planEventReconciliation } from "./jp-event-sync.mjs";
+import { saveEventSourcePrecision } from "./event-source-precision.mjs";
 import { IMPORT_WRITE_LIMITS } from "../../src/shared/import-write-config.mjs";
 import {
   countImportIssues,
@@ -34,7 +35,9 @@ function eventData(event) {
     sourceUrl: event.sourceUrl,
     sourceRegion: event.sourceRegion,
     sourceStartsAt: toDate(event.sourceStartsAt),
+    sourceStartsAtPrecision: event.sourceStartsAtPrecision ?? null,
     sourceEndsAt: toDate(event.sourceEndsAt),
+    sourceEndsAtPrecision: event.sourceEndsAtPrecision ?? null,
     projectionMethod: event.projectionMethod,
     lastSyncedAt: toDate(event.lastSyncedAt),
     sourceContentHash: event.sourceContentHash,
@@ -537,6 +540,7 @@ export async function reconcileProjectedFandomEvents(
     selected: dataset.events.length,
     inserted: plan.inserts.length,
     updated: plan.updates.length,
+    sourcePrecisionUpdates: plan.sourcePrecisionUpdates.length,
     unchangedMutable: plan.unchangedMutable.length,
     frozenDifferences: plan.frozenDifferences.length,
     protectedDifferences: plan.protectedDifferences.length,
@@ -583,6 +587,12 @@ export async function reconcileProjectedFandomEvents(
         if (!lock?.acquired) {
           throw new Error("Another Fandom event synchronisation is running.");
         }
+        for (const event of plan.sourcePrecisionUpdates)
+          await saveEventSourcePrecision(
+            transaction,
+            event,
+            existingByKey.get(event.sourceKey),
+          );
 
         for (const candidate of [...plan.inserts, ...plan.updates]) {
           const family = families.get(candidate.familySourceKey);

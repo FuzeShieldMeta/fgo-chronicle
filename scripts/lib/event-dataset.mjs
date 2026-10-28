@@ -46,7 +46,17 @@ const eventSchema = z
     sourceUrl: z.string().url(),
     sourceRegion: z.string().trim().min(1),
     sourceStartsAt: nullableDate.optional(),
+    sourceStartsAtPrecision: z
+      .enum(["DATE_ONLY", "EXACT"])
+      .nullable()
+      .optional()
+      .default(null),
     sourceEndsAt: nullableDate.optional(),
+    sourceEndsAtPrecision: z
+      .enum(["DATE_ONLY", "EXACT"])
+      .nullable()
+      .optional()
+      .default(null),
     projectionMethod: z.enum(["TWO_CALENDAR_YEARS"]).nullable().optional(),
     lastSyncedAt: nullableDate.optional(),
     sourceContentHash: z.string().trim().min(1).nullable().optional(),
@@ -69,6 +79,22 @@ const eventSchema = z
     {
       message: "An event with an end time must declare its end-time precision.",
       path: ["endsAtPrecision"],
+    },
+  )
+  .refine(
+    ({ sourceStartsAt, sourceStartsAtPrecision }) =>
+      sourceStartsAt != null || sourceStartsAtPrecision === null,
+    {
+      message: "Source start precision requires a source timestamp.",
+      path: ["sourceStartsAtPrecision"],
+    },
+  )
+  .refine(
+    ({ sourceEndsAt, sourceEndsAtPrecision }) =>
+      sourceEndsAt != null || sourceEndsAtPrecision === null,
+    {
+      message: "Source end precision requires a source timestamp.",
+      path: ["sourceEndsAtPrecision"],
     },
   );
 

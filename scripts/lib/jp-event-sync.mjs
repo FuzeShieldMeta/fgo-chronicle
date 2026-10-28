@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { eventSourcePrecisionChanged } from "./event-source-precision.mjs";
 
 import {
   normalizeAtlasEvent,
@@ -302,6 +303,7 @@ export function planEventReconciliation(candidates, existingEvents, asOf) {
     unchangedMutable: Array<Record<string, any>>,
     unchangedFrozen: Array<Record<string, any>>,
     missingSourceKeys: string[]
+    sourcePrecisionUpdates: Array<Record<string, any>>
   }} */ ({
     inserts: [],
     updates: [],
@@ -309,6 +311,7 @@ export function planEventReconciliation(candidates, existingEvents, asOf) {
     protectedDifferences: [],
     unchangedMutable: [],
     unchangedFrozen: [],
+    sourcePrecisionUpdates: [],
     missingSourceKeys: existingEvents
       .filter(({ sourceKey }) => !candidateKeys.has(sourceKey))
       .map(({ sourceKey }) => sourceKey),
@@ -322,6 +325,12 @@ export function planEventReconciliation(candidates, existingEvents, asOf) {
     }
 
     const changed = eventSignature(candidate) !== eventSignature(existing);
+    if (
+      !changed &&
+      existing.status === "PROJECTED" &&
+      eventSourcePrecisionChanged(candidate, existing)
+    )
+      plan.sourcePrecisionUpdates.push(candidate);
     const mutable = isMutableSourceEvent(candidate, asOf);
     if (existing.status !== "PROJECTED") {
       if (changed) plan.protectedDifferences.push(candidate);
@@ -469,7 +478,11 @@ export function buildProjectedEventDataset(rawEvents, options) {
         endsAtPrecision: "DATE_ONLY",
         status: "PROJECTED",
         sourceStartsAt: result.event.startsAt,
+        sourceStartsAtPrecision: result.event.startsAtPrecision,
         sourceEndsAt: result.event.endsAt,
+        sourceEndsAtPrecision: result.event.endsAt
+          ? result.event.endsAtPrecision
+          : null,
         projectionMethod: "TWO_CALENDAR_YEARS",
         lastSyncedAt: options.retrievedAt,
         sourceContentHash: options.contentHash,

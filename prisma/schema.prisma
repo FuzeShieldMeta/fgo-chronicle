@@ -151,37 +151,39 @@ model EventFamily {
 }
 
 model Event {
-  id                  String                    @id @default(cuid())
-  sourceKey           String                    @unique
-  familyId            String?
-  name                String
-  type                EventType
-  startsAt            DateTime
-  startsAtPrecision   ScheduleTimePrecision     @default(EXACT)
-  endsAt              DateTime?
-  endsAtPrecision     ScheduleTimePrecision?
-  status              ScheduleStatus
-  sourceUrl           String?
-  sourceRegion        String
-  sourceStartsAt      DateTime?
-  sourceEndsAt        DateTime?
-  projectionMethod    ScheduleProjectionMethod?
-  lastSyncedAt        DateTime?
-  sourceContentHash   String?
-  family              EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
-  rewardSources       RewardSource[]
-  curation            EventCuration?
-  reviews             EventReview[]
-  dateEvidence        EventDateEvidence[]
-  globalCandidates    GlobalEventCandidate[]
-  globalBaseline      EventGlobalBaseline?
-  dateOverlay         EventDateOverlay?         @relation("EventDateTarget")
-  anchoredEventDates  EventDateOverlay[]        @relation("EventDateAnchor")
-  anchoredBannerDates BannerDateOverlay[]
-  anchoredRewardDates RewardDateOverlay[]
-  globalRewards       RewardGlobalBaseline[]
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
+  id                      String                    @id @default(cuid())
+  sourceKey               String                    @unique
+  familyId                String?
+  name                    String
+  type                    EventType
+  startsAt                DateTime
+  startsAtPrecision       ScheduleTimePrecision     @default(EXACT)
+  endsAt                  DateTime?
+  endsAtPrecision         ScheduleTimePrecision?
+  status                  ScheduleStatus
+  sourceUrl               String?
+  sourceRegion            String
+  sourceStartsAt          DateTime?
+  sourceStartsAtPrecision ScheduleTimePrecision?
+  sourceEndsAt            DateTime?
+  sourceEndsAtPrecision   ScheduleTimePrecision?
+  projectionMethod        ScheduleProjectionMethod?
+  lastSyncedAt            DateTime?
+  sourceContentHash       String?
+  family                  EventFamily?              @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  rewardSources           RewardSource[]
+  curation                EventCuration?
+  reviews                 EventReview[]
+  dateEvidence            EventDateEvidence[]
+  globalCandidates        GlobalEventCandidate[]
+  globalBaseline          EventGlobalBaseline?
+  dateOverlay             EventDateOverlay?         @relation("EventDateTarget")
+  anchoredEventDates      EventDateOverlay[]        @relation("EventDateAnchor")
+  anchoredBannerDates     BannerDateOverlay[]
+  anchoredRewardDates     RewardDateOverlay[]
+  globalRewards           RewardGlobalBaseline[]
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   @@index([startsAt])
   @@index([status, startsAt])

@@ -190,6 +190,8 @@ export async function previewJpBannerFamilyTiming(
             issues.push("ANCHOR_EVENT_FAMILY_MISMATCH");
           if (event.sourceRegion !== "JP" || !event.sourceStartsAt)
             issues.push("JP_ANCHOR_SOURCE_UNAVAILABLE");
+          if (event.sourceStartsAtPrecision === "DATE_ONLY")
+            issues.push("JP_ANCHOR_SOURCE_DATE_ONLY");
           if (eventIsHidden(event)) issues.push("ANCHOR_EVENT_HIDDEN");
           if (
             ![
@@ -310,7 +312,8 @@ export async function previewJpBannerFamilyTiming(
                   originalJpStartsAt:
                     event.sourceStartsAt?.toISOString() ?? null,
                   originalJpEndsAt: event.sourceEndsAt?.toISOString() ?? null,
-                  sourceTimePrecision: "UNRECORDED" as const,
+                  sourceStartsAtPrecision: event.sourceStartsAtPrecision,
+                  sourceEndsAtPrecision: event.sourceEndsAtPrecision,
                   sourceUrl: event.sourceUrl,
                   sourceContentHash: event.sourceContentHash,
                   base: timing(event),
@@ -361,7 +364,9 @@ export async function previewJpBannerFamilyTiming(
           issues: [...new Set(issues)],
           unresolvedEvidence: [
             "FAMILY_RELATIONSHIP_REQUIRES_REVIEW",
-            "SOURCE_ANCHOR_PRECISION_UNVERIFIED",
+            ...(event?.sourceStartsAtPrecision === "EXACT"
+              ? []
+              : ["SOURCE_ANCHOR_PRECISION_UNVERIFIED"]),
             "ROSTER_COMPLETENESS_UNVERIFIED",
           ],
           reviewFingerprint: fingerprint,

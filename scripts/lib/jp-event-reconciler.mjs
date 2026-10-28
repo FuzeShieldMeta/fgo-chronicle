@@ -7,6 +7,7 @@ import {
 import { parseEventDataset } from "./event-dataset.mjs";
 import { addCalendarYears, planEventReconciliation } from "./jp-event-sync.mjs";
 import { countImportIssues } from "./event-schedule-monitoring.mjs";
+import { saveEventSourcePrecision } from "./event-source-precision.mjs";
 
 const SYNC_SOURCE = "ATLAS_JP_EVENT_EXPORT";
 
@@ -28,7 +29,9 @@ function eventData(event) {
     sourceUrl: event.sourceUrl,
     sourceRegion: event.sourceRegion,
     sourceStartsAt: toDate(event.sourceStartsAt),
+    sourceStartsAtPrecision: event.sourceStartsAtPrecision ?? null,
     sourceEndsAt: toDate(event.sourceEndsAt),
+    sourceEndsAtPrecision: event.sourceEndsAtPrecision ?? null,
     projectionMethod: event.projectionMethod,
     lastSyncedAt: toDate(event.lastSyncedAt),
     sourceContentHash: event.sourceContentHash,
@@ -338,6 +341,7 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
     obsoleteRewardSources,
     inserted: plan.inserts.length,
     updated: plan.updates.length,
+    sourcePrecisionUpdates: plan.sourcePrecisionUpdates.length,
     unchangedMutable: plan.unchangedMutable.length,
     frozenDifferences: plan.frozenDifferences.length,
     protectedDifferences: plan.protectedDifferences.length,
@@ -394,6 +398,12 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
         if (!lock?.acquired) {
           throw new Error("Another JP event synchronisation is running.");
         }
+        for (const event of plan.sourcePrecisionUpdates)
+          await saveEventSourcePrecision(
+            transaction,
+            event,
+            existingByKey.get(event.sourceKey),
+          );
 
         for (const event of fullWrites) {
           const existing = existingByKey.get(event.sourceKey);

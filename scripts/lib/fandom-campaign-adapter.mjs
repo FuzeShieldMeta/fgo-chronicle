@@ -65,7 +65,7 @@ for (const [month, index] of [...MONTHS]) {
 }
 
 /** @param {string} value */
-export function parseJstDate(value) {
+function parseJstDateEvidence(value) {
   const match = value
     .trim()
     .replace(/\s+JST$/i, "")
@@ -88,7 +88,18 @@ export function parseJstDate(value) {
   ) {
     return null;
   }
-  return date;
+  return {
+    date,
+    precision:
+      match[4] === undefined
+        ? /** @type {const} */ ("DATE_ONLY")
+        : /** @type {const} */ ("EXACT"),
+  };
+}
+
+/** @param {string} value */
+export function parseJstDate(value) {
+  return parseJstDateEvidence(value)?.date ?? null;
 }
 
 /** @param {string} value */
@@ -1293,15 +1304,17 @@ export function parseFandomEventHeader(wikitext) {
   const headerBody = extractNestedTemplates(wikitext, "EventHeaderJP")[0];
   if (!headerBody) return null;
   const parameters = parseTemplateParameters(headerBody);
-  const start = parseJstDate(parameters.get("start") ?? "");
-  const end = parseJstDate(
+  const start = parseJstDateEvidence(parameters.get("start") ?? "");
+  const end = parseJstDateEvidence(
     parameters.get("end")?.trim() || parameters.get("displayend")?.trim() || "",
   );
   return {
     name: parameters.get("pagename")?.trim() || null,
     sourceType: parameters.get("type")?.trim() || null,
-    startsAt: start?.toISOString() ?? null,
-    endsAt: end?.toISOString() ?? null,
+    startsAt: start?.date.toISOString() ?? null,
+    startsAtPrecision: start?.precision ?? null,
+    endsAt: end?.date.toISOString() ?? null,
+    endsAtPrecision: end?.precision ?? null,
   };
 }
 
@@ -1363,7 +1376,9 @@ export function normaliseFandomCampaign(page, listEntry, options) {
     sourceUrl: page.url,
     sourceRegion: "JP",
     sourceStartsAt,
+    sourceStartsAtPrecision: header?.startsAtPrecision ?? "DATE_ONLY",
     sourceEndsAt,
+    sourceEndsAtPrecision: header?.endsAtPrecision ?? "DATE_ONLY",
     projectionMethod: "TWO_CALENDAR_YEARS",
     lastSyncedAt: options.retrievedAt,
     sourceContentHash: page.contentHash,
