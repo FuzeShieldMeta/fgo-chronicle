@@ -10,7 +10,6 @@ export const dateEvidenceSchema = z
   .object({
     sourceKind: z.enum(["GLOBAL_GAME_DATA", "PUBLISHER_ANNOUNCEMENT"]),
     sourceUrl: z
-      .string()
       .url()
       .max(2048)
       .refine((value) => {

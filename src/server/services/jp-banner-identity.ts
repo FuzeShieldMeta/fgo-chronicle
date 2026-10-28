@@ -28,10 +28,7 @@ export const jpBannerIdentityMapSchema = z
               .string()
               .max(BANNER_SYNC_LIMITS.maxTextCharacters)
               .regex(/^publisher:JP:pickup:[a-z0-9][a-z0-9_-]*$/u),
-            sourceUrl: z
-              .string()
-              .url()
-              .max(BANNER_SYNC_LIMITS.maxTextCharacters),
+            sourceUrl: z.url().max(BANNER_SYNC_LIMITS.maxTextCharacters),
             articleContentHash: digest,
             periodEvidenceHash: digest,
             targetSourceKey: z

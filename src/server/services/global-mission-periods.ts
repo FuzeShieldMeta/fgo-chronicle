@@ -12,8 +12,8 @@ export const officialMissionRowSchema = z
   .object({
     label: z.string().min(1).max(LIMITS.maxContextCharacters),
     missionPeriod: z.string().min(1).max(LIMITS.maxContextCharacters),
-    startsAt: z.string().datetime(),
-    endsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime(),
     rewards: z
       .array(
         z.object({

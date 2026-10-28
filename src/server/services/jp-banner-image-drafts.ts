@@ -41,9 +41,9 @@ const boundary = z
   .strict();
 const imageDraft = z
   .object({
-    articleUrl: z.string().url(),
+    articleUrl: z.url(),
     articleContentHash: hash,
-    imageUrl: z.string().url(),
+    imageUrl: z.url(),
     imageContentHash: hash,
     width: z.number().int().min(1).max(8192),
     height: z.number().int().min(1).max(8192),

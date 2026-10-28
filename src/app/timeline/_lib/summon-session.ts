@@ -35,7 +35,7 @@ const summonSessionDraftSchema = z.object({
     startingNp: z.number().int().min(0).max(5),
     rate: z.number().finite().gt(0).max(1),
     rateKind: z.enum(["SOURCED", "STANDARD_PRESET", "CUSTOM"]),
-    rateEvidenceUrl: z.string().url().nullable(),
+    rateEvidenceUrl: z.url().nullable(),
     guaranteedEligible: z.boolean(),
   }),
   startingGuaranteedCount: z.number().int().min(0).max(329),
@@ -51,8 +51,8 @@ const summonSessionDraftSchema = z.object({
 export const summonSessionSchema = summonSessionDraftSchema.extend({
   id: z.string().trim().min(1),
   version: z.literal(1),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type SummonSessionDraft = z.infer<typeof summonSessionDraftSchema>;

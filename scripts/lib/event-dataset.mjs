@@ -1,22 +1,22 @@
 import { z } from "zod";
 
-const nullableDate = z.string().datetime().nullable();
+const nullableDate = z.iso.datetime().nullable();
 const sourceKey = z.string().trim().min(1);
 
 const evidenceSourceSchema = z.object({
   sourceKey,
   type: z.enum(["ATLAS_ACADEMY", "OFFICIAL_ANNOUNCEMENT", "WIKI", "CURATED"]),
   region: z.string().trim().min(1),
-  url: z.string().url(),
-  retrievedAt: z.string().datetime(),
+  url: z.url(),
+  retrievedAt: z.iso.datetime(),
   contentHash: z.string().trim().min(1).nullable(),
 });
 
 const familySchema = z.object({
   sourceKey,
   name: z.string().trim().min(1),
-  artworkUrl: z.string().url().nullable(),
-  artworkSourceUrl: z.string().url().nullable(),
+  artworkUrl: z.url().nullable(),
+  artworkSourceUrl: z.url().nullable(),
   artworkAlt: z.string().trim().min(1).nullable(),
   artworkReviewedAt: nullableDate,
 });
@@ -38,12 +38,12 @@ const eventSchema = z
       "MAINTENANCE",
       "OTHER",
     ]),
-    startsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
     startsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]),
     endsAt: nullableDate,
     endsAtPrecision: z.enum(["DATE_ONLY", "EXACT"]).nullable(),
     status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
-    sourceUrl: z.string().url(),
+    sourceUrl: z.url(),
     sourceRegion: z.string().trim().min(1),
     sourceStartsAt: nullableDate.optional(),
     sourceStartsAtPrecision: z
@@ -145,7 +145,7 @@ const rewardSourceSchema = z
       "OTHER",
     ]),
     status: z.enum(["PROJECTED", "CURATED", "OFFICIAL"]),
-    evidenceUrl: z.string().url(),
+    evidenceUrl: z.url(),
     lastVerifiedAt: nullableDate,
     rewards: z.array(rewardSchema).min(1),
   })
@@ -168,7 +168,7 @@ const reviewIssueSchema = z.object({
 const eventDatasetSchema = z
   .object({
     schemaVersion: z.literal(1),
-    generatedAt: z.string().datetime(),
+    generatedAt: z.iso.datetime(),
     review: z.object({
       status: z.enum(["NEEDS_REVIEW", "APPROVED"]),
       reviewedAt: nullableDate,

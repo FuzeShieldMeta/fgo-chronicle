@@ -52,7 +52,7 @@ function date(value: string | undefined) {
   if (!value?.trim()) return null;
   const match = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(value.trim());
   if (!match) throw new Error("Unsupported spreadsheet date.");
-  return z.string().date().parse(`${match[1]}-${match[2]}-${match[3]}`);
+  return z.iso.date().parse(`${match[1]}-${match[2]}-${match[3]}`);
 }
 async function sheetCsv(sheetId: string, sheet: string, fetchFn: typeof fetch) {
   const url = new URL(

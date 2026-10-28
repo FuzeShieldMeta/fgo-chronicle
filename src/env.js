@@ -20,9 +20,9 @@ export const env = createEnv({
       .regex(/^[A-Za-z0-9_-]+$/)
       .max(BANNER_SYNC_LIMITS.maxTextCharacters)
       .optional(),
-    DATABASE_URL: z.string().url(),
-    SITE_URL: z.string().url().optional(),
-    SUPABASE_URL: z.string().url().optional(),
+    DATABASE_URL: z.url(),
+    SITE_URL: z.url().optional(),
+    SUPABASE_URL: z.url().optional(),
     SUPABASE_SECRET_KEY: z.string().min(1).optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])

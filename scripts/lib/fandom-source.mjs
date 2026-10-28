@@ -34,7 +34,7 @@ const revisionResponseSchema = z.object({
             .array(
               z.object({
                 revid: z.number().int().positive(),
-                timestamp: z.string().datetime(),
+                timestamp: z.iso.datetime(),
                 slots: z.object({
                   main: z.object({ content: z.string() }).passthrough(),
                 }),

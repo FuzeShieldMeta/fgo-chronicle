@@ -3,8 +3,7 @@ import { BANNER_SYNC_LIMITS as LIMITS } from "~/shared/banner-sync-config.mjs";
 
 const text = z.string().trim().min(1).max(LIMITS.maxTextCharacters);
 const id = z.number().int().positive().max(2_147_483_647);
-const instant = z
-  .string()
+const instant = z.iso
   .datetime({ offset: true })
   .refine(
     (value) => Number.isFinite(Date.parse(value)),
@@ -21,11 +20,11 @@ const featured = z.object({
 const lineup = z.object({
   sourceKey: text,
   name: text,
-  startsAt: z.string().datetime(),
-  endsAt: z.string().datetime().nullable(),
-  evidenceUrl: z.string().url(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime().nullable(),
+  evidenceUrl: z.url(),
   sourceRegion: text,
-  lastVerifiedAt: z.string().datetime().nullable().optional(),
+  lastVerifiedAt: z.iso.datetime().nullable().optional(),
   servants: z
     .array(z.object({ servantId: id, soloRateUp: z.boolean() }))
     .max(LIMITS.maxFeaturedServants),
@@ -40,21 +39,18 @@ const common = {
 export const spreadsheetBannerSchema = z
   .object({
     ...common,
-    startDate: z.string().date(),
-    endDate: z.string().date().nullable(),
+    startDate: z.iso.date(),
+    endDate: z.iso.date().nullable(),
   })
   .strict();
 const exactBanner = z
   .object({
     ...common,
     sourceKey: text,
-    sourceUrl: z
-      .string()
-      .url()
-      .refine((value) => {
-        const url = new URL(value);
-        return url.protocol === "https:" && !url.username && !url.password;
-      }, "Evidence requires a credential-free HTTPS URL."),
+    sourceUrl: z.url().refine((value) => {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password;
+    }, "Evidence requires a credential-free HTTPS URL."),
     startsAt: instant,
     endsAt: instant.nullable(),
     timePrecision: z.literal("EXACT"),
@@ -128,7 +124,7 @@ export function bannerSourceKey(
 }
 export const bannerDatasetSchema = z
   .object({
-    importedAt: z.string().datetime().optional(),
+    importedAt: z.iso.datetime().optional(),
     banners: z.array(banner).min(1).max(LIMITS.maxBanners),
   })
   .superRefine((value, ctx) => {

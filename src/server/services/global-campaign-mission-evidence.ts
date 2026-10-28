@@ -46,8 +46,8 @@ const campaignMissionEvidenceSchema = z
         contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
         sourceRecordId: text,
         name: z.string().min(1).max(LIMITS.maxTitleCharacters),
-        startsAt: z.string().datetime(),
-        endsAt: z.string().datetime(),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
       })
       .strict(),
     missions: z

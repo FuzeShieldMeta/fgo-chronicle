@@ -42,8 +42,8 @@ export function campaignSourceWikitext(value: string) {
 }
 const text = z.string().min(1).max(BODY.maxContextCharacters);
 const periodSchema = z.object({
-  startsAt: z.string().datetime(),
-  endsAt: z.string().datetime(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
 });
 export const jpCampaignProofSchema = z
   .object({
@@ -59,7 +59,7 @@ export const jpCampaignProofSchema = z
         title: text,
         exchange: text,
         contentHash: z.string().regex(/^[a-f0-9]{64}$/),
-        retrievedAt: z.string().datetime(),
+        retrievedAt: z.iso.datetime(),
       })
       .strict(),
     atlasId: z.string().regex(/^[1-9]\d*$/),

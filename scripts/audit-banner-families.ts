@@ -9,8 +9,8 @@ import {
 
 const bannerSchema = z.object({
   name: z.string().min(1),
-  startDate: z.string().date(),
-  endDate: z.string().date().nullable(),
+  startDate: z.iso.date(),
+  endDate: z.iso.date().nullable(),
 });
 const datasetSchema = z.object({
   importedAt: z.string().optional(),
@@ -25,7 +25,7 @@ for (const argument of process.argv.slice(2)) {
   if (argument.startsWith("--source-file="))
     options.sourceFile = argument.slice("--source-file=".length);
   else if (argument.startsWith("--as-of="))
-    options.asOf = z.string().date().parse(argument.slice("--as-of=".length));
+    options.asOf = z.iso.date().parse(argument.slice("--as-of=".length));
   else if (argument.startsWith("--output="))
     options.output = argument.slice("--output=".length);
   else throw new Error(`Unknown argument: ${argument}`);

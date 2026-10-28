@@ -49,7 +49,7 @@ export const chapterMissionProofSchema = z
         url: text,
         title: text,
         contentHash: digest,
-        retrievedAt: z.string().datetime(),
+        retrievedAt: z.iso.datetime(),
         campaignPeriod: text,
         chapterName: text,
       })
@@ -60,8 +60,8 @@ export const chapterMissionProofSchema = z
         name: z.string().min(1).max(LIMITS.maxTitleCharacters),
         contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
         chapterName: text,
-        startsAt: z.string().datetime(),
-        endsAt: z.string().datetime(),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
       })
       .strict(),
     missions: z
