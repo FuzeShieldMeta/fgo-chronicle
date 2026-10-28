@@ -55,6 +55,38 @@ export async function importBannerDataset(
         throw new Error(
           "Banner source key is already bound to a different legacy banner.",
         );
+      const ownedBanners = await tx.banner.findMany({
+        where: {
+          sourceKey: { in: records.map((record) => record.sourceKey) },
+          sourcePublication: { isNot: null },
+        },
+        select: {
+          sourceKey: true,
+          name: true,
+          sourceUrl: true,
+          status: true,
+          sourceRegion: true,
+          sourcePublication: { select: { ownedFields: true } },
+        },
+      });
+      const owners = new Map(
+        ownedBanners.map((banner) => [banner.sourceKey, banner]),
+      );
+      const sourceRecords = records.map((record) => {
+        const owner = owners.get(record.sourceKey);
+        const fields = owner?.sourcePublication?.ownedFields ?? [];
+        return {
+          ...record,
+          ...(owner && fields.includes("NAME") ? { name: owner.name } : {}),
+          ...(owner && fields.includes("SOURCE")
+            ? {
+                sourceUrl: owner.sourceUrl,
+                status: owner.status,
+                sourceRegion: owner.sourceRegion,
+              }
+            : {}),
+        };
+      });
       await tx.$executeRaw`INSERT INTO "Servant" ("id","name","className","rarity","faceId")
       SELECT x."id",x."name",x."className",x."rarity",x."faceId"
       FROM jsonb_to_recordset(${JSON.stringify(servants)}::jsonb) AS x("id" INT,"name" TEXT,"className" TEXT,"rarity" INT,"faceId" INT)
@@ -64,7 +96,7 @@ export async function importBannerDataset(
       const changedBanners =
         await tx.$executeRaw`INSERT INTO "Banner" ("id","sourceKey","name","startsAt","endsAt","startsAtPrecision","endsAtPrecision","status","sourceRegion","sourceUrl","updatedAt")
       SELECT x."id",x."sourceKey",x."name",x."startsAt",x."endsAt",x."startsAtPrecision"::"ScheduleTimePrecision",x."endsAtPrecision"::"ScheduleTimePrecision",x."status"::"ScheduleStatus",x."sourceRegion",x."sourceUrl",CURRENT_TIMESTAMP
-      FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS x("id" TEXT,"sourceKey" TEXT,"name" TEXT,"startsAt" TIMESTAMP,"endsAt" TIMESTAMP,"startsAtPrecision" TEXT,"endsAtPrecision" TEXT,"status" TEXT,"sourceRegion" TEXT,"sourceUrl" TEXT)
+      FROM jsonb_to_recordset(${JSON.stringify(sourceRecords)}::jsonb) AS x("id" TEXT,"sourceKey" TEXT,"name" TEXT,"startsAt" TIMESTAMP,"endsAt" TIMESTAMP,"startsAtPrecision" TEXT,"endsAtPrecision" TEXT,"status" TEXT,"sourceRegion" TEXT,"sourceUrl" TEXT)
       ORDER BY x."sourceKey"
       ON CONFLICT ("sourceKey") DO UPDATE SET "name"=EXCLUDED."name","startsAt"=EXCLUDED."startsAt","endsAt"=EXCLUDED."endsAt","startsAtPrecision"=EXCLUDED."startsAtPrecision","endsAtPrecision"=EXCLUDED."endsAtPrecision","status"=EXCLUDED."status","sourceRegion"=EXCLUDED."sourceRegion","sourceUrl"=COALESCE(EXCLUDED."sourceUrl","Banner"."sourceUrl"),"updatedAt"=CURRENT_TIMESTAMP
       WHERE ("Banner"."name","Banner"."startsAt","Banner"."endsAt","Banner"."startsAtPrecision","Banner"."endsAtPrecision","Banner"."status","Banner"."sourceRegion","Banner"."sourceUrl") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."startsAt",EXCLUDED."endsAt",EXCLUDED."startsAtPrecision",EXCLUDED."endsAtPrecision",EXCLUDED."status",EXCLUDED."sourceRegion",COALESCE(EXCLUDED."sourceUrl","Banner"."sourceUrl"))`;

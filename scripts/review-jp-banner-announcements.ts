@@ -24,6 +24,12 @@ import {
   previewBannerSourceIdentities,
   registerBannerSourceIdentities,
 } from "../src/server/services/banner-source-identity";
+import {
+  bannerPublicationFieldsSchema,
+  bannerPublicationAcceptanceSchema,
+  previewBannerSourcePublication,
+  publishBannerSourceValues,
+} from "../src/server/services/banner-source-publication";
 
 async function localJson(file: string, maxBytes: number) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -70,6 +76,9 @@ try {
     console.log(
       "Database identity review: --database-preview requires --identity-map and an explicitly configured DATABASE_URL. It reads current target IDs and database fingerprints without writes. --accept-identities=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID additionally registers only reviewed bindings in one audited transaction. Acceptance requires --database-preview and an exact matching identity map, including current source/baseline evidence. No banner fields, lineups or publication ownership are changed. Never run acceptance from cron.",
     );
+    console.log(
+      "Publication review: add --publication-fields=NAME,SOURCE to --database-preview for a read-only field-level diff and ownership revision. TIMING and ROSTER requests remain held until verified family-anchor and complete-roster evidence are available. --publish-reviewed=LOCAL_PUBLICATION.json --actor-id=CURATOR_ID explicitly accepts the reviewed fields, banner fingerprints and publication revisions. It cannot register identities, insert banners or bypass evidence holds. Never run acceptance or reviewed publication from cron.",
+    );
   } else {
     const options: JpBannerInventoryOptions = {};
     let baselineFile: string | null = null;
@@ -78,6 +87,10 @@ try {
     let databasePreview = false;
     let acceptanceFile: string | null = null;
     let actorId: string | null = null;
+    let publicationFields: ReturnType<
+      typeof bannerPublicationFieldsSchema.parse
+    > | null = null;
+    let publicationFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
       if (argument === "--database-preview") {
@@ -88,7 +101,9 @@ try {
       }
       if (
         argument.startsWith("--accept-identities=") ||
-        argument.startsWith("--actor-id=")
+        argument.startsWith("--actor-id=") ||
+        argument.startsWith("--publish-reviewed=") ||
+        argument.startsWith("--publication-fields=")
       ) {
         const [flag, ...parts] = argument.split("=");
         const value = parts.join("=");
@@ -96,6 +111,11 @@ try {
           throw new Error("Invalid acceptance arguments.");
         seen.add(flag!);
         if (flag === "--actor-id") actorId = value;
+        else if (flag === "--publication-fields")
+          publicationFields = bannerPublicationFieldsSchema.parse(
+            value.split(","),
+          );
+        else if (flag === "--publish-reviewed") publicationFile = value;
         else acceptanceFile = value;
         continue;
       }
@@ -173,8 +193,11 @@ try {
       throw new Error("Identity preview requires a comparison baseline.");
     if (
       (databasePreview && !identityMapFile) ||
-      Boolean(acceptanceFile) !== Boolean(actorId) ||
+      Boolean(acceptanceFile ?? publicationFile) !== Boolean(actorId) ||
       (acceptanceFile && !databasePreview) ||
+      (acceptanceFile && (publicationFile || publicationFields)) ||
+      (publicationFields && !databasePreview) ||
+      (publicationFile && !publicationFields) ||
       (databasePreview && !process.env.DATABASE_URL)
     )
       throw new Error(
@@ -220,22 +243,41 @@ try {
           ),
         )
       : null;
-    if (acceptance) {
+    const publicationAcceptance = publicationFile
+      ? bannerPublicationAcceptanceSchema.parse(
+          await localJson(
+            publicationFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
+    const accepted = acceptance ?? publicationAcceptance;
+    if (accepted) {
       const acceptedMap = jpBannerIdentityMapSchema.parse({
         version: 1,
-        mappings: acceptance.bindings.map(
-          ({
-            bannerId: _id,
-            expectedDatabaseFingerprint: _fingerprint,
-            ...mapping
-          }) => mapping,
-        ),
+        mappings: accepted.bindings.map((binding) => ({
+          sourceKey: binding.sourceKey,
+          sourceUrl: binding.sourceUrl,
+          articleContentHash: binding.articleContentHash,
+          periodEvidenceHash: binding.periodEvidenceHash,
+          targetSourceKey: binding.targetSourceKey,
+          targetContentHash: binding.targetContentHash,
+        })),
       });
       if (JSON.stringify(acceptedMap) !== JSON.stringify(identityMap))
         throw new Error(
           "Acceptance must match the explicitly selected identity map.",
         );
     }
+    if (
+      publicationAcceptance?.bindings.some(
+        (binding) =>
+          JSON.stringify(binding.fields) !== JSON.stringify(publicationFields),
+      )
+    )
+      throw new Error(
+        "Publication acceptance must match the explicitly selected fields.",
+      );
     const report = await inventoryJpBannerAnnouncements(options);
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
@@ -250,6 +292,12 @@ try {
     let identityRegistration: Awaited<
       ReturnType<typeof registerBannerSourceIdentities>
     > | null = null;
+    let publicationPreview: Awaited<
+      ReturnType<typeof previewBannerSourcePublication>
+    > | null = null;
+    let publication: Awaited<
+      ReturnType<typeof publishBannerSourceValues>
+    > | null = null;
     if (databasePreview && identityMap && baseline) {
       const { PrismaClient } = await import("../generated/prisma/index.js");
       const database = new PrismaClient({
@@ -257,20 +305,38 @@ try {
         log: [],
       });
       try {
-        databaseIdentityPreview = await previewBannerSourceIdentities(
-          database,
-          report,
-          baseline,
-          identityMap,
-        );
-        if (acceptance && actorId)
-          identityRegistration = await registerBannerSourceIdentities(
+        if (publicationFields) {
+          publicationPreview = await previewBannerSourcePublication(
             database,
-            actorId,
             report,
             baseline,
-            acceptance,
+            identityMap,
+            publicationFields,
           );
+          if (publicationAcceptance && actorId)
+            publication = await publishBannerSourceValues(
+              database,
+              actorId,
+              report,
+              baseline,
+              publicationAcceptance,
+            );
+        } else {
+          databaseIdentityPreview = await previewBannerSourceIdentities(
+            database,
+            report,
+            baseline,
+            identityMap,
+          );
+          if (acceptance && actorId)
+            identityRegistration = await registerBannerSourceIdentities(
+              database,
+              actorId,
+              report,
+              baseline,
+              acceptance,
+            );
+        }
       } finally {
         await database.$disconnect();
       }
@@ -280,7 +346,8 @@ try {
       identityPreview?.heldMappings ||
       databaseIdentityPreview?.mappings.some(
         (mapping) => mapping.registrationStatus === "HELD",
-      )
+      ) ||
+      publicationPreview?.mappings.some((mapping) => mapping.status === "HELD")
         ? "partial_failure"
         : report.status;
     console.log(
@@ -295,6 +362,8 @@ try {
           ...(identityPreview ? { identityMap: identityPreview } : {}),
           ...(databaseIdentityPreview ? { databaseIdentityPreview } : {}),
           ...(identityRegistration ? { identityRegistration } : {}),
+          ...(publicationPreview ? { publicationPreview } : {}),
+          ...(publication ? { publication } : {}),
         },
         null,
         2,

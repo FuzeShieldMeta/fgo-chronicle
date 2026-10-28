@@ -39,6 +39,7 @@ export const bannerIdentityAcceptanceSchema = z
   .strict();
 
 const snapshotInclude = {
+  sourcePublication: true,
   family: { include: { curation: true } },
   dateOverlay: true,
   featured: { orderBy: { servantId: "asc" } },
@@ -54,10 +55,12 @@ type Snapshot = Prisma.BannerGetPayload<{ include: typeof snapshotInclude }>;
 export function bannerDatabaseFingerprint(banner: Snapshot) {
   return createHash("sha256")
     .update(
-      JSON.stringify({ version: 1, banner }, (_key, value: unknown) => {
+      JSON.stringify({ version: 2, banner }, (_key, value: unknown) => {
         if (value && typeof value === "object" && !Array.isArray(value))
           return Object.fromEntries(
-            Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+            Object.entries(value).sort(([a], [b]) =>
+              a < b ? -1 : a > b ? 1 : 0,
+            ),
           );
         return value;
       }),
@@ -74,7 +77,10 @@ function eligible(banner: Snapshot) {
   );
 }
 
-async function databasePreview(database: Database, source: SourcePreview) {
+export async function loadBannerIdentityTargets(
+  database: Database,
+  source: SourcePreview,
+) {
   const keys = [
     ...new Set(
       source.mappings.flatMap((mapping) => [
@@ -97,6 +103,14 @@ async function databasePreview(database: Database, source: SourcePreview) {
   const byKey = new Map(banners.map((banner) => [banner.sourceKey, banner]));
   const byIdentity = new Map(
     identities.map((identity) => [identity.sourceKey, identity]),
+  );
+  return { byKey, byIdentity };
+}
+
+async function databasePreview(database: Database, source: SourcePreview) {
+  const { byKey, byIdentity } = await loadBannerIdentityTargets(
+    database,
+    source,
   );
   const mappings = source.mappings.map((mapping) => {
     const issues = [...mapping.issues];

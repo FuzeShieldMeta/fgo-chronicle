@@ -506,6 +506,7 @@ model Banner {
   summonLineups     SummonLineup[]
   dateOverlay       BannerDateOverlay?
   sourceIdentities  BannerSourceIdentity[]
+  sourcePublication BannerSourcePublication?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -522,8 +523,22 @@ model BannerSourceIdentity {
   periodEvidenceHash String
   createdAt          DateTime @default(now())
   banner             Banner   @relation(fields: [bannerId], references: [id], onDelete: Restrict)
+  publications       BannerSourcePublication[]
 
-  @@index([bannerId])
+  @@unique([bannerId, sourceKey])
+}
+
+model BannerSourcePublication {
+  bannerId             String   @id
+  sourceKey            String
+  ownedFields          String[]
+  revision             Int      @default(1)
+  articleContentHash   String
+  periodEvidenceHash   String
+  publishedContentHash String
+  updatedAt            DateTime @updatedAt
+  banner               Banner   @relation(fields: [bannerId], references: [id], onDelete: Restrict)
+  identity             BannerSourceIdentity @relation(fields: [bannerId, sourceKey], references: [bannerId, sourceKey], onDelete: Restrict, map: "BannerSourcePublication_identity_fkey")
 }
 
 model Servant {
