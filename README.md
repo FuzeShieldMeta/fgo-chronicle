@@ -111,3 +111,13 @@ Data comes from Atlas Academy, the Fate/Grand Order Fandom wiki, official
 announcements and the linked banner spreadsheet. Entries retain source links
 where available. FGO Chronicle is an unofficial fan project. Game artwork and
 names belong to their respective owners.
+
+## License
+
+Original project code is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Use, modification and
+redistribution are permitted for the purposes specified in the license.
+Commercial use requires separate permission from the relevant rights holders.
+
+This license does not cover third-party dependencies, game artwork or external
+data. Those remain subject to their respective licenses and owners' rights.
