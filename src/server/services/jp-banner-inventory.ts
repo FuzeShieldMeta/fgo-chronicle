@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import {
   extractJpBannerSchedule,
+  boundJpBannerTextEvidence,
+  JP_BANNER_TEXT_EVIDENCE_LIMITS,
   parseJpBannerSectionDate,
   JP_BANNER_HTML_SECTION_LIMITS,
   type JpBannerHtmlPickupSection,
@@ -32,8 +34,9 @@ export const JP_BANNER_INVENTORY_LIMITS = {
   maxTitleCharacters: 1_000,
   maxArticleInspections: 20,
   maxDiscoveredLinkedArticles: 200,
-  maxEvidenceBlocks: 80,
-  maxEvidenceCharacters: 4_000,
+  maxEvidenceBlocks: JP_BANNER_TEXT_EVIDENCE_LIMITS.maxBlocks,
+  maxEvidenceCharacters: JP_BANNER_TEXT_EVIDENCE_LIMITS.maxBlockCharacters,
+  maxTotalEvidenceCharacters: JP_BANNER_TEXT_EVIDENCE_LIMITS.maxTotalCharacters,
   maxImageReferences: 100,
   maxLinkedArticles: 100,
   requestTimeoutMs: 15_000,
@@ -558,15 +561,14 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
   );
   const blocks = [...blockText.values()].filter(Boolean);
   const scheduleBlocks = articleScheduleBlocks(blockText, roots[0]!);
+  const articleText = boundJpBannerTextEvidence(blocks);
+  const scheduleText = boundJpBannerTextEvidence(scheduleBlocks);
   if (
-    blocks.length > LIMITS.maxEvidenceBlocks ||
-    blocks.some((block) => block.length > LIMITS.maxEvidenceCharacters) ||
-    scheduleBlocks.some((block) => block.length > LIMITS.maxEvidenceCharacters)
+    articleText.budget.exceededLimits.length ||
+    scheduleText.budget.exceededLimits.length
   )
     reasons.push("ARTICLE_EVIDENCE_LIMIT");
-  const evidenceBlocks = blocks
-    .slice(0, LIMITS.maxEvidenceBlocks)
-    .map((block) => block.slice(0, LIMITS.maxEvidenceCharacters));
+  const evidenceBlocks = articleText.blocks;
   const images = nodes.filter((node) => node.nodeName === "img");
   if (images.length > LIMITS.maxImageReferences)
     reasons.push("IMAGE_REFERENCE_LIMIT");
@@ -684,6 +686,11 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
       : null,
     reasons: [...new Set(reasons)],
     evidenceBlocks,
+    textEvidenceBudget: {
+      limits: JP_BANNER_TEXT_EVIDENCE_LIMITS,
+      article: articleText.budget,
+      schedule: scheduleText.budget,
+    },
     imageReferences,
     linkedArticles: linkedArticles.slice(0, LIMITS.maxLinkedArticles),
     htmlPickupSections: htmlPickupSections(nodes, roots[0]!, url, kind),
@@ -698,9 +705,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     schedule: extractJpBannerSchedule({
       sourceUrl: url,
       title,
-      blocks: scheduleBlocks
-        .slice(0, LIMITS.maxEvidenceBlocks)
-        .map((value) => value.slice(0, LIMITS.maxEvidenceCharacters)),
+      blocks: scheduleText.blocks,
       images: imageReferences,
       summonContent: hasSummonContent,
       evidenceComplete: kind === "NOT_RELEVANT" || !reasons.length,

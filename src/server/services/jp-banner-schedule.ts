@@ -26,6 +26,54 @@ type PeriodCandidate = {
   issues: string[];
 };
 
+// Text limits are shared by article inspection and schedule extraction.
+// Character budgets use JavaScript string length (UTF-16 code units).
+export const JP_BANNER_TEXT_EVIDENCE_LIMITS = {
+  maxBlocks: 1_024,
+  maxBlockCharacters: 4_000,
+  maxTotalCharacters: 65_536,
+} as const;
+
+/** Retain a bounded diagnostic prefix; exceeded limits must keep the source held. */
+export function boundJpBannerTextEvidence(input: readonly string[]) {
+  const limits = JP_BANNER_TEXT_EVIDENCE_LIMITS;
+  const observedCharacters = input.reduce(
+    (total, block) => total + block.length,
+    0,
+  );
+  const exceededLimits = [
+    ...(input.length > limits.maxBlocks ? ["BLOCK_COUNT"] : []),
+    ...(input.some((block) => block.length > limits.maxBlockCharacters)
+      ? ["BLOCK_CHARACTERS"]
+      : []),
+    ...(observedCharacters > limits.maxTotalCharacters
+      ? ["TOTAL_CHARACTERS"]
+      : []),
+  ];
+  const blocks: string[] = [];
+  let retainedCharacters = 0;
+  for (const block of input.slice(0, limits.maxBlocks)) {
+    const available = limits.maxTotalCharacters - retainedCharacters;
+    if (available <= 0 && block.length) break;
+    const retained = block.slice(
+      0,
+      Math.min(limits.maxBlockCharacters, available),
+    );
+    blocks.push(retained);
+    retainedCharacters += retained.length;
+  }
+  return {
+    blocks,
+    budget: {
+      observedBlocks: input.length,
+      observedCharacters,
+      retainedBlocks: blocks.length,
+      retainedCharacters,
+      exceededLimits,
+    },
+  };
+}
+
 export const JP_BANNER_HTML_SECTION_LIMITS = {
   maxSections: 100,
   maxNamesPerSection: 20,
@@ -329,10 +377,7 @@ function countedPickupRoster(context: string, sourceUrl: string) {
 }
 
 export function extractJpBannerSchedule(source: ScheduleSource) {
-  if (
-    source.blocks.length > 80 ||
-    source.blocks.some((block) => block.length > 4_000)
-  )
+  if (boundJpBannerTextEvidence(source.blocks).budget.exceededLimits.length)
     throw new Error("JP schedule evidence exceeds the extraction limit.");
   const periods: PeriodCandidate[] = [];
   const unparsedPeriods: { context: string; reason: string }[] = [];
