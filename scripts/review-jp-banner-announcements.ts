@@ -386,7 +386,11 @@ try {
         await database.$disconnect();
       }
     }
+    const comparison = baseline
+      ? compareJpBannerEvidence(report, baseline)
+      : null;
     const status =
+      comparison?.comparisonLimited ||
       draftValidation?.heldRows ||
       identityPreview?.heldMappings ||
       databaseIdentityPreview?.mappings.some(
@@ -403,9 +407,7 @@ try {
         {
           ...report,
           status,
-          ...(baseline
-            ? { comparison: compareJpBannerEvidence(report, baseline) }
-            : {}),
+          ...(comparison ? { comparison } : {}),
           ...(draftValidation ? { imageDrafts: draftValidation } : {}),
           ...(identityPreview ? { identityMap: identityPreview } : {}),
           ...(databaseIdentityPreview ? { databaseIdentityPreview } : {}),

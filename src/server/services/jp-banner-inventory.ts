@@ -1,3 +1,12 @@
+import {
+  JP_BANNER_ORIGIN as ORIGIN,
+  jpBannerOfficialUrl as officialUrl,
+  jpBannerArticleUrl,
+} from "./jp-banner-source-url";
+export {
+  jpBannerArticleUrl,
+  isJpBannerPickupUrl,
+} from "./jp-banner-source-url";
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import {
@@ -23,7 +32,6 @@ import {
   resolveJpBannerHtmlSectionNames,
 } from "./jp-banner-servants";
 
-const ORIGIN = "https://news.fate-go.jp";
 export const JP_BANNER_INVENTORY_LIMITS = {
   defaultPages: 2,
   maxPages: 50,
@@ -98,18 +106,6 @@ function text(node: Node) {
     .replace(/\s+/g, " ")
     .trim();
 }
-function officialUrl(value: string) {
-  const url = new URL(value);
-  if (
-    url.origin !== ORIGIN ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error("Unsupported JP source URL.");
-  return url;
-}
 export function jpBannerIndexUrl(page: number) {
   if (!Number.isSafeInteger(page) || page < 1 || page > LIMITS.maxPageNumber)
     throw new Error("Invalid JP index page.");
@@ -123,17 +119,6 @@ function indexUrl(value: string) {
       : Number(/^\/page\/([1-9]\d*)\/$/.exec(url.pathname)?.[1]);
   if (jpBannerIndexUrl(page) !== url.href)
     throw new Error("Unsupported JP index URL.");
-  return url.href;
-}
-function articleUrl(value: string) {
-  const url = officialUrl(value);
-  if (
-    !/^\/(?:20\d{2}\/(?:\d{2}\/)?|info\/)[A-Za-z0-9_-]+\/$/.test(
-      url.pathname,
-    ) ||
-    url.pathname.length > 240
-  )
-    throw new Error("Unsupported JP article URL.");
   return url.href;
 }
 function calendarDate(value: string) {
@@ -184,7 +169,7 @@ export function parseJpBannerIndex(body: string, sourceUrl: string) {
         .map((node) => {
           const href = attribute(node, "href");
           if (!href) throw new Error("Missing JP article link.");
-          return articleUrl(new URL(href, url).href);
+          return jpBannerArticleUrl(new URL(href, url).href);
         }),
     );
     if (links.size !== 1) throw new Error("Ambiguous JP article link.");
@@ -306,7 +291,7 @@ export async function fetchJpBannerArticle(
   fetchFn: typeof fetch = fetch,
   signal?: AbortSignal,
 ) {
-  return fetchJpHtml(articleUrl(url), fetchFn, signal);
+  return fetchJpHtml(jpBannerArticleUrl(url), fetchFn, signal);
 }
 
 function articleScheduleBlocks(blockText: Map<Node, string>, root: Node) {
@@ -537,7 +522,7 @@ function htmlPickupSections(
 }
 
 export function parseJpBannerArticle(body: string, sourceUrl: string) {
-  const url = articleUrl(sourceUrl);
+  const url = jpBannerArticleUrl(sourceUrl);
   if (Buffer.byteLength(body) > LIMITS.maxBodyBytes)
     throw new Error("JP article body limit exceeded.");
   const document = walk(parse(body));
@@ -632,7 +617,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     try {
       const linked = new URL(href, url);
       linked.hash = "";
-      const checked = articleUrl(linked.href);
+      const checked = jpBannerArticleUrl(linked.href);
       if (checked !== url && !linkedArticles.includes(checked))
         linkedArticles.push(checked);
     } catch {
@@ -757,7 +742,9 @@ export async function inventoryJpBannerAnnouncements(
       options.articleUrls.some((url) => typeof url !== "string"))
   )
     throw new Error("Invalid direct JP article selection.");
-  const directUrls = [...new Set((options.articleUrls ?? []).map(articleUrl))];
+  const directUrls = [
+    ...new Set((options.articleUrls ?? []).map(jpBannerArticleUrl)),
+  ];
   if (
     directUrls.length &&
     (options.pages !== undefined ||

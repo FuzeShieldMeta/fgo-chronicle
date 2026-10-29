@@ -10,13 +10,13 @@ import {
   previewJpBannerIdentityMap,
 } from "./jp-banner-identity";
 import type { inventoryJpBannerAnnouncements } from "./jp-banner-inventory";
+import { isJpBannerPickupUrl } from "./jp-banner-source-url";
 
 type SourceReport = Awaited<ReturnType<typeof inventoryJpBannerAnnouncements>>;
 type SourcePreview = ReturnType<typeof previewJpBannerIdentityMap>;
 type Database = PrismaClient | Prisma.TransactionClient;
 const mappingSchema = jpBannerIdentityMapSchema.shape.mappings.element;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const sourceUrl = /^https:\/\/news\.fate-go\.jp\/[0-9]{4}\/[A-Za-z0-9_-]+\/$/u;
 export const bannerIdentityAcceptanceSchema = z
   .object({
     version: z.literal(1),
@@ -28,7 +28,10 @@ export const bannerIdentityAcceptanceSchema = z
     bindings: z
       .array(
         mappingSchema.omit({ htmlSection: true }).extend({
-          sourceUrl: mappingSchema.shape.sourceUrl.regex(sourceUrl),
+          sourceUrl: mappingSchema.shape.sourceUrl.refine(
+            isJpBannerPickupUrl,
+            "Unsupported pickup notice URL.",
+          ),
           bannerId: z.string().min(1).max(100),
           expectedDatabaseFingerprint: digest,
         }),
@@ -114,7 +117,7 @@ async function databasePreview(database: Database, source: SourcePreview) {
   );
   const mappings = source.mappings.map((mapping) => {
     const issues = [...mapping.issues, ...mapping.registrationHolds];
-    if (!sourceUrl.test(mapping.sourceUrl))
+    if (!isJpBannerPickupUrl(mapping.sourceUrl))
       issues.push("UNSUPPORTED_SOURCE_URL");
     const banner = byKey.get(mapping.targetSourceKey);
     const collision = byKey.get(mapping.sourceKey);

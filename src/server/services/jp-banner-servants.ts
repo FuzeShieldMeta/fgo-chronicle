@@ -19,6 +19,14 @@ const CLASS_SUFFIXES = new Map([
   ["キャスター", "caster"],
   ["アサシン", "assassin"],
   ["バーサーカー", "berserker"],
+  ["ルーラー", "ruler"],
+  ["アヴェンジャー", "avenger"],
+  ["ムーンキャンサー", "moonCancer"],
+  ["アルターエゴ", "alterEgo"],
+  ["フォーリナー", "foreigner"],
+  ["プリテンダー", "pretender"],
+  ["シールダー", "shielder"],
+  ["ビースト", "beast"],
 ]);
 
 type Servant = {

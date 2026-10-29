@@ -15,6 +15,7 @@
     "data:audit-event-coverage": "node --env-file=.env scripts/audit-event-coverage.mjs",
     "data:audit-banner-families": "node --import tsx --env-file=.env scripts/audit-banner-families.ts",
     "data:review-global-events": "node scripts/report-global-event-candidates.mjs",
+    "data:audit-jp-banners": "node --import tsx scripts/audit-jp-banner-announcements.ts",
     "data:review-jp-banners": "node --import tsx scripts/review-jp-banner-announcements.ts",
     "data:sync-event-schedule": "node --import tsx --env-file=.env scripts/sync-event-schedule.mjs",
     "data:sync-jp-events": "node --env-file=.env scripts/sync-jp-events.mjs",
