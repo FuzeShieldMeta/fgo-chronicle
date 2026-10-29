@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "../../../generated/prisma";
 import {
   JP_BANNER_IDENTITY_LIMITS,
   previewJpBannerIdentityMap,
+  selectJpBannerReviewPeriod,
 } from "./jp-banner-identity";
 import {
   bannerDatabaseFingerprint,
@@ -194,7 +195,8 @@ export async function loadJpBannerFamilyTiming(
     const issues = [...mapping.issues];
     if (!anchor) issues.push("FAMILY_ANCHOR_NOT_SELECTED");
     if (!banner) issues.push("DATABASE_TARGET_NOT_FOUND");
-    if (!identity) issues.push("IDENTITY_NOT_REGISTERED");
+    if (!identity && mapping.sourceEvidenceKind !== "HTML_PICKUP_SECTION")
+      issues.push("IDENTITY_NOT_REGISTERED");
     if (
       identity &&
       (identity.bannerId !== banner?.id ||
@@ -273,9 +275,9 @@ export async function loadJpBannerFamilyTiming(
     const article = report.articles.find(
       (row) => row.url === mapping.sourceUrl,
     )?.inspection;
-    const period = article?.schedule.periods.find(
-      (row) => row.evidenceHash === mapping.periodEvidenceHash,
-    );
+    const selected = selectJpBannerReviewPeriod(article, mapping);
+    const period = selected.period;
+    issues.push(...selected.issues);
     const projection =
       anchor && period && !issues.length
         ? projectJpBannerPeriods(
@@ -361,6 +363,8 @@ export async function loadJpBannerFamilyTiming(
       .digest("hex");
     return {
       sourceKey: mapping.sourceKey,
+      sourceEvidenceKind: mapping.sourceEvidenceKind,
+      ...(mapping.htmlSection ? { htmlSection: mapping.htmlSection } : {}),
       storedAnchor: storedAnchor ?? null,
       anchorStatus,
       anchorFactsHash,
@@ -437,10 +441,12 @@ export async function loadJpBannerFamilyTiming(
             ? Date.parse(projection.projectedEndsAt) - current.endsAt.getTime()
             : null,
       },
-      status: issues.length
-        ? ("HELD" as const)
-        : ("CONSISTENT_REVIEW_REQUIRED" as const),
-      issues: [...new Set(issues)],
+      status:
+        issues.length || mapping.registrationHolds.length
+          ? ("HELD" as const)
+          : ("CONSISTENT_REVIEW_REQUIRED" as const),
+      issues: [...new Set([...issues, ...mapping.registrationHolds])],
+      registrationHolds: mapping.registrationHolds,
       unresolvedEvidence: [
         "FAMILY_RELATIONSHIP_REQUIRES_REVIEW",
         ...(event?.sourceStartsAtPrecision === "EXACT"

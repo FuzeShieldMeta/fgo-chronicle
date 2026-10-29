@@ -156,7 +156,7 @@ async function publicationRows(
     throw new Error("Family timing ownership limit exceeded.");
   return source.mappings.map((mapping) => {
     const fields = selections.get(mapping.sourceKey)!;
-    const issues = [...mapping.issues];
+    const issues = [...mapping.issues, ...mapping.registrationHolds];
     const banner = byKey.get(mapping.targetSourceKey);
     const identity = byIdentity.get(mapping.sourceKey);
     const ownership = banner?.sourcePublication;

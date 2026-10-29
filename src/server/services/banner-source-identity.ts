@@ -27,7 +27,7 @@ export const bannerIdentityAcceptanceSchema = z
       .max(GLOBAL_SOURCE_LIMITS.maxPublicationReasonLength),
     bindings: z
       .array(
-        mappingSchema.extend({
+        mappingSchema.omit({ htmlSection: true }).extend({
           sourceUrl: mappingSchema.shape.sourceUrl.regex(sourceUrl),
           bannerId: z.string().min(1).max(100),
           expectedDatabaseFingerprint: digest,
@@ -113,7 +113,7 @@ async function databasePreview(database: Database, source: SourcePreview) {
     source,
   );
   const mappings = source.mappings.map((mapping) => {
-    const issues = [...mapping.issues];
+    const issues = [...mapping.issues, ...mapping.registrationHolds];
     if (!sourceUrl.test(mapping.sourceUrl))
       issues.push("UNSUPPORTED_SOURCE_URL");
     const banner = byKey.get(mapping.targetSourceKey);
@@ -195,7 +195,10 @@ export async function registerBannerSourceIdentities(
     ),
   };
   const source = previewJpBannerIdentityMap(report, baseline, map);
-  if (source.heldMappings)
+  if (
+    source.heldMappings ||
+    source.mappings.some((mapping) => mapping.registrationHolds.length)
+  )
     throw new TRPCError({
       code: "CONFLICT",
       message:

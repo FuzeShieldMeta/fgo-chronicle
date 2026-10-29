@@ -7,6 +7,7 @@ import {
   type BannerDataset,
 } from "./banner-dataset";
 import type { inventoryJpBannerAnnouncements } from "./jp-banner-inventory";
+import { JP_BANNER_SERVANT_SOURCE } from "./jp-banner-servants";
 
 const MEBIBYTE = 1_024 * 1_024;
 export const JP_BANNER_IDENTITY_LIMITS = {
@@ -31,6 +32,17 @@ export const jpBannerIdentityMapSchema = z
             sourceUrl: z.url().max(BANNER_SYNC_LIMITS.maxTextCharacters),
             articleContentHash: digest,
             periodEvidenceHash: digest,
+            htmlSection: z
+              .object({
+                sectionId: z
+                  .string()
+                  .min(1)
+                  .max(BANNER_SYNC_LIMITS.maxTextCharacters),
+                sectionEvidenceHash: digest,
+                catalogueContentHash: digest,
+              })
+              .strict()
+              .optional(),
             targetSourceKey: z
               .string()
               .trim()
@@ -44,6 +56,60 @@ export const jpBannerIdentityMapSchema = z
       .max(JP_BANNER_IDENTITY_LIMITS.maxMappings),
   })
   .strict();
+
+type Inspection = NonNullable<
+  Awaited<
+    ReturnType<typeof inventoryJpBannerAnnouncements>
+  >["articles"][number]["inspection"]
+>;
+type ReviewSelection = Pick<
+  z.infer<typeof jpBannerIdentityMapSchema>["mappings"][number],
+  "periodEvidenceHash" | "htmlSection"
+>;
+
+/** The same exact source selection feeds identity review and family-clock review. */
+export function selectJpBannerReviewPeriod(
+  inspection: Inspection | null | undefined,
+  selection: ReviewSelection,
+) {
+  const selector = selection.htmlSection;
+  if (!selector) {
+    const periods =
+      inspection?.schedule.periods.filter(
+        (period) => period.evidenceHash === selection.periodEvidenceHash,
+      ) ?? [];
+    return {
+      period: periods.length === 1 ? periods[0]! : null,
+      section: null,
+      issues: [] as string[],
+    };
+  }
+  const sections =
+    inspection?.htmlPickupSections.sections.filter(
+      (section) => section.sectionId === selector.sectionId,
+    ) ?? [];
+  const section = sections.length === 1 ? sections[0]! : null;
+  const issues: string[] = [];
+  if (!section) issues.push("HTML_SECTION_NOT_UNIQUE_OR_UNAVAILABLE");
+  if (section && section.evidenceHash !== selector.sectionEvidenceHash)
+    issues.push("HTML_SECTION_EVIDENCE_CHANGED");
+  if (section && section.period?.evidenceHash !== selection.periodEvidenceHash)
+    issues.push("SECTION_PERIOD_EVIDENCE_CHANGED");
+  return {
+    section,
+    period:
+      section?.period && !issues.length
+        ? {
+            ...section.period,
+            // The DOM section supplies scope; it does not supply a campaign title.
+            scope: "LABELLED_SUMMON" as const,
+            subject: null,
+            issues: [...section.issues],
+          }
+        : null,
+    issues,
+  };
+}
 
 /** Review snapshot only, not banner identity. Parse through the shared dataset schema first. */
 export function jpBannerIdentityTargetHash(
@@ -100,7 +166,15 @@ export function previewJpBannerIdentityMap(
   const duplicateIdentity = repeated((mapping) => mapping.sourceKey);
   const duplicateTarget = repeated((mapping) => mapping.targetSourceKey);
   const duplicateSource = repeated((mapping) =>
-    JSON.stringify([mapping.sourceUrl, mapping.periodEvidenceHash]),
+    JSON.stringify(
+      mapping.htmlSection
+        ? [
+            mapping.sourceUrl,
+            "HTML_PICKUP_SECTION",
+            mapping.htmlSection.sectionId,
+          ]
+        : [mapping.sourceUrl, mapping.periodEvidenceHash],
+    ),
   );
   const mappings = proposal.mappings.map((mapping) => {
     const issues: string[] = [];
@@ -121,42 +195,86 @@ export function previewJpBannerIdentityMap(
       )
         issues.push("SOURCE_NOT_ELIGIBLE");
     }
-    const periods =
-      inspection?.schedule.periods.filter(
-        (period) => period.evidenceHash === mapping.periodEvidenceHash,
-      ) ?? [];
+    const selected = selectJpBannerReviewPeriod(inspection, mapping);
+    const { period, section } = selected;
+    issues.push(...selected.issues);
+    const isSection = Boolean(mapping.htmlSection);
     const windows =
       inspection?.pickupEvidence?.windows.filter(
         (window) => window.periodEvidenceHash === mapping.periodEvidenceHash,
       ) ?? [];
-    const period = periods.length === 1 ? periods[0] : null;
-    const window = windows.length === 1 ? windows[0] : null;
-    if (!period || !window)
+    const window = !isSection && windows.length === 1 ? windows[0] : null;
+    if (!period || (!isSection && !window))
       issues.push("PICKUP_EVIDENCE_NOT_UNIQUE_OR_UNAVAILABLE");
-    const namedPickup = window?.associations.some(
-      (member) =>
-        member.basis === "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY",
-    );
-    const ambiguousEnvelope =
-      period?.scope === "ARTICLE_ENVELOPE" &&
-      inspection?.schedule.pendingEvidence.some(
-        (issue) =>
-          issue === "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED" ||
-          issue === "IMAGE_SCHEDULE_UNINTERPRETED",
+    if (isSection) {
+      if (!section?.names.length) issues.push("NO_RESOLVED_SECTION_NAMES");
+      if (section?.issues.length) issues.push("PICKUP_EVIDENCE_UNRESOLVED");
+      if (
+        section?.names.some(
+          (member) =>
+            member.identityStatus !== "MATCHED" ||
+            member.catalogueIdentity?.servantId == null,
+        )
+      )
+        issues.push("SECTION_NAME_IDENTITIES_UNRESOLVED");
+      if (
+        report.servantCatalogue.status !== "SUCCEEDED" ||
+        report.servantCatalogue.contentHash !==
+          mapping.htmlSection!.catalogueContentHash ||
+        section?.names.some(
+          (member) =>
+            member.catalogueIdentity?.contentHash !==
+              mapping.htmlSection!.catalogueContentHash ||
+            member.catalogueIdentity?.sourceUrl !== JP_BANNER_SERVANT_SOURCE,
+        )
+      )
+        issues.push("SECTION_CATALOGUE_EVIDENCE_CHANGED");
+      if (
+        inspection?.schedule.pendingEvidence.includes(
+          "INCOMPLETE_ARTICLE_EVIDENCE",
+        )
+      )
+        issues.push("INCOMPLETE_ARTICLE_EVIDENCE");
+    } else {
+      const namedPickup = window?.associations.some(
+        (member) =>
+          member.basis === "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY",
       );
-    if (
-      !namedPickup ||
-      ambiguousEnvelope ||
-      (period?.scope !== "LABELLED_SUMMON" &&
-        period?.scope !== "ARTICLE_ENVELOPE")
-    )
-      issues.push("INDIVIDUAL_PICKUP_NOT_ESTABLISHED");
-    if (period?.issues.length || window?.issues.length)
-      issues.push("PICKUP_EVIDENCE_UNRESOLVED");
+      const ambiguousEnvelope =
+        period?.scope === "ARTICLE_ENVELOPE" &&
+        inspection?.schedule.pendingEvidence.some(
+          (issue) =>
+            issue === "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED" ||
+            issue === "IMAGE_SCHEDULE_UNINTERPRETED",
+        );
+      if (
+        !namedPickup ||
+        ambiguousEnvelope ||
+        (period?.scope !== "LABELLED_SUMMON" &&
+          period?.scope !== "ARTICLE_ENVELOPE")
+      )
+        issues.push("INDIVIDUAL_PICKUP_NOT_ESTABLISHED");
+      if (period?.issues.length || window?.issues.length)
+        issues.push("PICKUP_EVIDENCE_UNRESOLVED");
+    }
     const knownServantIds = [
-      ...new Set(window?.associations.map((member) => member.servantId) ?? []),
+      ...new Set(
+        isSection
+          ? (section?.names.flatMap((member) =>
+              member.identityStatus === "MATCHED" &&
+              member.catalogueIdentity?.servantId != null
+                ? [member.catalogueIdentity.servantId]
+                : [],
+            ) ?? [])
+          : (window?.associations.map((member) => member.servantId) ?? []),
+      ),
     ].sort((a, b) => a - b);
-    if (!knownServantIds.length) issues.push("NO_VERIFIED_PICKUP_MEMBERSHIP");
+    if (!knownServantIds.length)
+      issues.push(
+        isSection
+          ? "NO_RESOLVED_SECTION_NAMES"
+          : "NO_VERIFIED_PICKUP_MEMBERSHIP",
+      );
     const target = targets.get(mapping.targetSourceKey);
     const targetContentHash = target
       ? jpBannerIdentityTargetHash(target)
@@ -179,12 +297,27 @@ export function previewJpBannerIdentityMap(
       mapping.sourceKey !== mapping.targetSourceKey
     )
       issues.push("PICKUP_IDENTITY_ALREADY_USED_BY_OTHER_TARGET");
-    const projection = inspection?.naProjection?.windows.find(
-      (candidate) =>
-        candidate.periodEvidenceHash === mapping.periodEvidenceHash,
-    );
+    const projection = isSection
+      ? inspection?.naProjection?.htmlSectionWindows.find(
+          (candidate) =>
+            candidate.sectionId === mapping.htmlSection!.sectionId &&
+            candidate.sectionEvidenceHash ===
+              mapping.htmlSection!.sectionEvidenceHash,
+        )
+      : inspection?.naProjection?.windows.find(
+          (candidate) =>
+            candidate.periodEvidenceHash === mapping.periodEvidenceHash,
+        );
     return {
       sourceKey: mapping.sourceKey,
+      sourceEvidenceKind: isSection
+        ? ("HTML_PICKUP_SECTION" as const)
+        : ("PARAGRAPH_PICKUP" as const),
+      ...(mapping.htmlSection ? { htmlSection: mapping.htmlSection } : {}),
+      registrationHolds: isSection
+        ? ["HTML_SECTION_REGISTRATION_UNSUPPORTED"]
+        : [],
+      sectionNames: section?.names ?? [],
       sourceUrl: mapping.sourceUrl,
       periodEvidenceHash: mapping.periodEvidenceHash,
       targetSourceKey: mapping.targetSourceKey,
@@ -199,7 +332,7 @@ export function previewJpBannerIdentityMap(
       status: issues.length
         ? ("HELD" as const)
         : ("CONSISTENT_REVIEW_REQUIRED" as const),
-      issues,
+      issues: [...new Set(issues)],
       knownServantIds,
       countedRosterReview: window?.countedRosterReview
         ? {
@@ -214,6 +347,12 @@ export function previewJpBannerIdentityMap(
       sourcePendingEvidence: inspection?.schedule.pendingEvidence ?? [],
       timingPreview: projection ?? null,
       unresolvedEvidence: [
+        ...(isSection
+          ? [
+              "PICKUP_MEMBERSHIP_UNVERIFIED",
+              "HTML_SECTION_PUBLICATION_UNSUPPORTED",
+            ]
+          : []),
         "ROSTER_COMPLETENESS_UNVERIFIED",
         "FAMILY_IDENTITY_UNVERIFIED",
         "DATABASE_TARGET_ID_AND_OWNERSHIP_UNVERIFIED",
