@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
-import { extractJpBannerSchedule } from "./jp-banner-schedule";
+import {
+  extractJpBannerSchedule,
+  parseJpBannerSectionDate,
+  JP_BANNER_HTML_SECTION_LIMITS,
+  type JpBannerHtmlPickupSection,
+} from "./jp-banner-schedule";
 import { previewJpBannerProjection } from "./jp-banner-projection";
 import {
   jpBannerImageUrl,
@@ -357,6 +362,176 @@ function articleScheduleBlocks(blockText: Map<Node, string>, root: Node) {
   return blocks;
 }
 
+function htmlPickupSections(
+  nodes: Node[],
+  root: Node,
+  sourceUrl: string,
+  kind: string,
+) {
+  const limits = JP_BANNER_HTML_SECTION_LIMITS;
+  if (!nodes.some((node) => hasClass(node, "pu_day_tx")))
+    return {
+      observedAnchors: 0,
+      sections: [] as JpBannerHtmlPickupSection[],
+      issues: [],
+      publicationAllowed: false as const,
+    };
+  const digest = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const idCounts = new Map<string, number>();
+  for (const node of nodes) {
+    const id = attribute(node, "id");
+    if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+  }
+  const anchors = nodes.flatMap((node, index) => {
+    const id = attribute(node, "id");
+    return id && /^ttl\d+$/u.test(id) && hasClass(node, "heading_ttl")
+      ? [{ node, index, id }]
+      : [];
+  });
+  const commonIssues =
+    anchors.length > limits.maxSections ? ["HTML_SECTION_COUNT_LIMIT"] : [];
+  if (kind !== "SUMMON_CONTENT")
+    commonIssues.push(
+      kind === "RESTRICTED_SUMMON_CONTENT"
+        ? "RESTRICTED_SUMMON_NOTICE"
+        : "NOTICE_EVIDENCE_UNRESOLVED",
+    );
+  const containerEnds = new Map<Node, number>();
+  const sections = anchors
+    .slice(0, limits.maxSections)
+    .map((anchor, index): JpBannerHtmlPickupSection => {
+      const issues = [...commonIssues];
+      if (idCounts.get(anchor.id) !== 1)
+        issues.push("DUPLICATE_HTML_SECTION_ID");
+      // This format uses sibling section headings, not arbitrary document proximity.
+      const container =
+        "parentNode" in anchor.node ? anchor.node.parentNode : null;
+      const supportedContainer =
+        container &&
+        (container === root ||
+          (hasClass(container, "wrap") &&
+            "parentNode" in container &&
+            container.parentNode === root));
+      if (!supportedContainer) issues.push("HTML_SECTION_SCOPE_UNSUPPORTED");
+      let end = anchor.index + 1;
+      if (supportedContainer) {
+        let containerEnd = containerEnds.get(container);
+        if (containerEnd === undefined) {
+          containerEnd =
+            container === root
+              ? nodes.length
+              : nodes.indexOf(container) + walk(container).length;
+          containerEnds.set(container, containerEnd);
+        }
+        end = Math.min(containerEnd, anchors[index + 1]?.index ?? nodes.length);
+      }
+      const sectionNodes = nodes.slice(anchor.index + 1, end);
+      const rawDates: string[] = [];
+      const names: JpBannerHtmlPickupSection["names"] = [];
+      let role: string | null = null;
+      for (const node of sectionNodes) {
+        // Named non-pickup headings and separators end the supported section.
+        if (
+          attribute(node, "id") ||
+          ["hr", "h2", "h3", "h4"].includes(node.nodeName)
+        )
+          break;
+        if (hasClass(node, "pu_day_tx")) {
+          if (role !== null || names.length)
+            issues.push("HTML_SECTION_DATE_AFTER_MEMBERS");
+          const date = text(node);
+          if (rawDates.length >= limits.maxDateBlocksPerSection) {
+            issues.push("HTML_SECTION_DATE_COUNT_LIMIT");
+            continue;
+          }
+          if (date.length > limits.maxDateCharacters)
+            issues.push("HTML_SECTION_DATE_LIMIT");
+          rawDates.push(date.slice(0, limits.maxDateCharacters));
+        }
+        if (hasClass(node, "tips")) {
+          const label = text(node).normalize("NFKC").replace(/\s+/gu, "");
+          if (!/^(?:期間限定|ストーリー召喚|恒常)?サーヴァント$/u.test(label))
+            break;
+          role = label;
+        }
+        if (hasClass(node, "hd_text")) {
+          if (!role) {
+            issues.push("HTML_SECTION_SERVANT_ROLE_MISSING");
+            continue;
+          }
+          const name = text(node);
+          if (!name || name.length > limits.maxNameCharacters) {
+            issues.push("HTML_SECTION_NAME_INVALID");
+            continue;
+          }
+          if (names.length >= limits.maxNamesPerSection) {
+            issues.push("HTML_SECTION_NAME_LIMIT");
+            continue;
+          }
+          if (
+            names.some(
+              (member) =>
+                member.name.normalize("NFKC") === name.normalize("NFKC"),
+            )
+          )
+            issues.push("DUPLICATE_HTML_SECTION_MEMBER");
+          names.push({
+            name,
+            role,
+            evidenceHash: digest([
+              sourceUrl,
+              anchor.id,
+              "HTML_SERVANT_NAME",
+              role,
+              name,
+            ]),
+            rarity: null,
+            className: null,
+            identityStatus: "UNRESOLVED",
+          });
+        }
+      }
+      if (!names.length) issues.push("HTML_SECTION_SERVANT_NAMES_MISSING");
+      if (rawDates.length !== 1)
+        issues.push(
+          rawDates.length
+            ? "MULTIPLE_HTML_SECTION_DATES"
+            : "HTML_SECTION_DATE_MISSING",
+        );
+      const parsed =
+        rawDates.length === 1 && !issues.includes("HTML_SECTION_DATE_LIMIT")
+          ? parseJpBannerSectionDate(rawDates[0]!, sourceUrl)
+          : { period: null, issues: [] };
+      issues.push(...parsed.issues);
+      const uniqueIssues = [...new Set(issues)];
+      return {
+        sectionId: anchor.id,
+        sourceUrl,
+        evidenceHash: digest([
+          sourceUrl,
+          "HTML_PICKUP_SECTION",
+          anchor.id,
+          rawDates,
+          names,
+        ]),
+        rawDates,
+        names,
+        period: parsed.period,
+        issues: uniqueIssues,
+        status: uniqueIssues.length ? "HELD" : "CONSISTENT_REVIEW_REQUIRED",
+        rosterComplete: false,
+        publicationAllowed: false,
+      };
+    });
+  return {
+    observedAnchors: anchors.length,
+    sections,
+    issues: commonIssues,
+    publicationAllowed: false as const,
+  };
+}
+
 export function parseJpBannerArticle(body: string, sourceUrl: string) {
   const url = articleUrl(sourceUrl);
   if (Buffer.byteLength(body) > LIMITS.maxBodyBytes)
@@ -510,6 +685,7 @@ export function parseJpBannerArticle(body: string, sourceUrl: string) {
     evidenceBlocks,
     imageReferences,
     linkedArticles: linkedArticles.slice(0, LIMITS.maxLinkedArticles),
+    htmlPickupSections: htmlPickupSections(nodes, roots[0]!, url, kind),
     naProjection: null as ReturnType<typeof previewJpBannerProjection> | null,
     imageEvidence: null as ReturnType<typeof jpBannerImageEvidence> | null,
     servantIdentities: null as ReturnType<
@@ -765,6 +941,7 @@ export async function inventoryJpBannerAnnouncements(
         inspection.naProjection = previewJpBannerProjection(
           inspection.schedule,
           inspection.kind,
+          inspection.htmlPickupSections.sections,
         );
       entry.inspection = inspection;
       entry.inspectionStatus =

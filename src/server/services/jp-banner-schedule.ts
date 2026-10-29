@@ -26,6 +26,73 @@ type PeriodCandidate = {
   issues: string[];
 };
 
+export const JP_BANNER_HTML_SECTION_LIMITS = {
+  maxSections: 100,
+  maxNamesPerSection: 20,
+  maxNameCharacters: 200,
+  maxDateCharacters: 4_000,
+  maxDateBlocksPerSection: 2,
+} as const;
+
+export type JpBannerHtmlPickupSection = {
+  sectionId: string;
+  sourceUrl: string;
+  evidenceHash: string;
+  rawDates: string[];
+  names: {
+    name: string;
+    role: string;
+    evidenceHash: string;
+    rarity: null;
+    className: null;
+    identityStatus: "UNRESOLVED";
+  }[];
+  period: PeriodCandidate | null;
+  issues: string[];
+  status: "HELD" | "CONSISTENT_REVIEW_REQUIRED";
+  rosterComplete: false;
+  publicationAllowed: false;
+};
+
+/** Reuse source clock validation; only the DOM adapter can supply section scope. */
+export function parseJpBannerSectionDate(context: string, sourceUrl: string) {
+  if (context.length > JP_BANNER_HTML_SECTION_LIMITS.maxDateCharacters)
+    return { period: null, issues: ["HTML_SECTION_DATE_LIMIT"] };
+  const parsed = extractJpBannerSchedule({
+    sourceUrl,
+    title: null,
+    blocks: [context],
+    images: [],
+    summonContent: false,
+    evidenceComplete: true,
+  });
+  if (parsed.periods.length !== 1)
+    return {
+      period: null,
+      issues: [
+        parsed.periods.length
+          ? "MULTIPLE_HTML_SECTION_RANGES"
+          : "HTML_SECTION_DATE_UNPARSED",
+      ],
+    };
+  const period = parsed.periods[0]!;
+  return {
+    period,
+    issues: [
+      ...period.issues.filter((issue) => issue !== "SUBJECT_LABEL_MISSING"),
+      ...(period.scope === "OTHER_PERIOD" ||
+      /(?:クエスト|ミッション|ログイン|交換|受取|配布|メンテナンス|イベント)(?:の)?(?:開催|開放|実施)?(?:期間|日時|日程)/u.test(
+        context.normalize("NFKC").replace(/\s+/gu, ""),
+      )
+        ? ["NON_PICKUP_HTML_SECTION_PERIOD"]
+        : []),
+      ...(/場合|一例|例として|たとえば|例えば/u.test(context)
+        ? ["CONDITIONAL_HTML_SECTION_DATE"]
+        : []),
+    ],
+  };
+}
+
 // These are displayed source minutes, not exclusive ends or projected NA times.
 const RANGE =
   /(?<!\d)(?<sy>20\d{2})年\s*(?<sm>\d{1,2})月\s*(?<sd>\d{1,2})日(?:\s*\([^)]{1,12}\))?(?:\s*(?<sh>\d{1,2}):(?<sn>\d{2})(?::(?<ss>\d{2}))?)?\s*[~～〜–—-]\s*(?:(?<ey>20\d{2})年\s*)?(?<em>\d{1,2})月\s*(?<ed>\d{1,2})日(?:\s*\([^)]{1,12}\))?(?:\s*(?<eh>\d{1,2}):(?<en>\d{2})(?::(?<es>\d{2}))?)?(?![\d:])/gu;

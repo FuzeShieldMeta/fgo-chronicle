@@ -1,5 +1,8 @@
 import { GLOBAL_CAMPAIGN_IDENTITY_LIMITS } from "../../shared/global-reconciliation-config";
-import type { extractJpBannerSchedule } from "./jp-banner-schedule";
+import type {
+  extractJpBannerSchedule,
+  JpBannerHtmlPickupSection,
+} from "./jp-banner-schedule";
 
 // JP: news.fate-go.jp/2026/10/grand_substitute_cp/ (daily login at 04:00).
 // NA: webview.fate-go.us/iframe/2026/0901_25mdl/ (21:00 PDT = 04:00 UTC).
@@ -94,7 +97,11 @@ export function projectJpBannerPeriods(
 }
 
 /** Notice-scoped estimates are previews, not verified persistent family anchors. */
-export function previewJpBannerProjection(schedule: Schedule, kind: Kind) {
+export function previewJpBannerProjection(
+  schedule: Schedule,
+  kind: Kind,
+  htmlSections: readonly JpBannerHtmlPickupSection[] = [],
+) {
   const issues: string[] = [];
   if (kind === "RESTRICTED_SUMMON_CONTENT")
     issues.push("RESTRICTED_SUMMON_NOTICE");
@@ -133,21 +140,83 @@ export function previewJpBannerProjection(schedule: Schedule, kind: Kind) {
   const periods = schedule.periods.filter((period) =>
     ["ARTICLE_ENVELOPE", "LABELLED_SUMMON"].includes(period.scope),
   );
-  const windows =
-    jpAnchorDay && naAnchorDay && !issues.length
-      ? projectJpBannerPeriods(periods, jpAnchorDay, naAnchorDay)
+  const visiblePeriods = issues.length ? [] : periods;
+  const sectionSources = htmlSections.map((section) => ({
+    section,
+    issues: [...new Set([...issues, ...section.issues])],
+  }));
+  const htmlPeriods = sectionSources.flatMap(({ section, issues }) =>
+    section.period
+      ? [
+          {
+            section,
+            period: {
+              ...section.period,
+              // Scope comes from the HTML adapter, never a fabricated source title.
+              scope: "LABELLED_SUMMON" as const,
+              subject: null,
+              evidenceHash: section.evidenceHash,
+              issues,
+            },
+          },
+        ]
+      : [],
+  );
+  // Normalize both evidence formats before the one clock-projection pass.
+  const projections =
+    jpAnchorDay && naAnchorDay
+      ? projectJpBannerPeriods(
+          [...visiblePeriods, ...htmlPeriods.map(({ period }) => period)],
+          jpAnchorDay,
+          naAnchorDay,
+        )
       : [];
+  // Projection results retain the normalized input order and source association.
+  const windows = projections.slice(0, visiblePeriods.length);
+  const bySection = new Map(
+    htmlPeriods.map(({ section }, index) => [
+      section,
+      projections[visiblePeriods.length + index],
+    ]),
+  );
   const projectedCount = windows.filter(
     (window) => window.status === "PROJECTED",
   ).length;
+  const htmlSectionWindows = sectionSources.map(
+    ({ section, issues: sectionIssues }) => {
+      const period = section.period;
+      const projection = bySection.get(section);
+      return {
+        sectionId: section.sectionId,
+        sourceUrl: section.sourceUrl,
+        sectionEvidenceHash: section.evidenceHash,
+        names: section.names,
+        sourceStartsAt: period?.startsAt ?? null,
+        sourceEndsAt: period?.endsAt ?? null,
+        status: projection?.status ?? "HELD",
+        projectedStartsAt: projection?.projectedStartsAt ?? null,
+        projectedEndsAt: projection?.projectedEndsAt ?? null,
+        startOffsetMs: projection?.startOffsetMs ?? null,
+        endOffsetMs: projection?.endOffsetMs ?? null,
+        issues: projection?.issues ?? sectionIssues,
+        identityStatus: "UNRESOLVED" as const,
+        rosterComplete: false as const,
+        publicationAllowed: false as const,
+      };
+    },
+  );
+  const projectedHtmlCount = htmlSectionWindows.filter(
+    (window) => window.status === "PROJECTED",
+  ).length;
+  const totalProjectedCount = projectedCount + projectedHtmlCount;
   return {
     scope: "NOTICE_PERIOD_TIMING_PREVIEW" as const,
     scheduleCompleteness: "UNVERIFIED" as const,
     rule: JP_BANNER_PROJECTION_RULE,
     status:
-      issues.length || !projectedCount
+      issues.length || !totalProjectedCount
         ? ("HELD" as const)
-        : projectedCount === windows.length
+        : totalProjectedCount === windows.length + htmlSectionWindows.length
           ? ("PROJECTED" as const)
           : ("PARTIAL" as const),
     anchorBasis: "NOTICE_ENVELOPE_RESET_ESTIMATE" as const,
@@ -168,9 +237,11 @@ export function previewJpBannerProjection(schedule: Schedule, kind: Kind) {
             jpBannerResetAnchors(naAnchorDay, naAnchorDay).na,
           ).toISOString(),
     unprojectedPeriodCount: periods.length - projectedCount,
+    unprojectedHtmlSectionCount: htmlSectionWindows.length - projectedHtmlCount,
     unparsedSourcePeriodCount: schedule.unparsedPeriods.length,
     issues,
     windows,
+    htmlSectionWindows,
     sourcePendingEvidence: schedule.pendingEvidence,
     confirmation: "PROJECTED_NOT_CONFIRMED" as const,
     publicationAllowed: false as const,
