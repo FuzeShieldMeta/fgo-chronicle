@@ -13,6 +13,67 @@ export const JP_BANNER_COMPARISON_LIMITS = {
   maxMatchesPerWindow: 10,
 } as const;
 
+type Inspection = NonNullable<
+  Awaited<
+    ReturnType<typeof inventoryJpBannerAnnouncements>
+  >["articles"][number]["inspection"]
+>;
+
+/** Normalize review inputs only; HTML name identity does not prove pickup membership. */
+function comparisonEvidence(inspection: Inspection) {
+  const paragraphs = (inspection.pickupEvidence?.windows ?? []).map(
+    (window) => ({
+      evidenceKind: "PARAGRAPH_PICKUP" as const,
+      periodEvidenceHash: window.periodEvidenceHash,
+      sectionId: null as string | null,
+      sectionEvidenceHash: null as string | null,
+      subject: window.subject,
+      knownIds: window.associations.map((member) => member.servantId),
+      names:
+        [] as Inspection["htmlPickupSections"]["sections"][number]["names"],
+      issues: window.issues,
+      projected: inspection.naProjection?.windows.find(
+        (period) =>
+          period.periodEvidenceHash === window.periodEvidenceHash &&
+          period.status === "PROJECTED",
+      ),
+      basis: "KNOWN_SERVANT_OVERLAP_ONLY" as const,
+    }),
+  );
+  const sections = inspection.htmlPickupSections.sections.map((section) => ({
+    evidenceKind: "HTML_PICKUP_SECTION" as const,
+    periodEvidenceHash: section.period?.evidenceHash ?? null,
+    sectionId: section.sectionId,
+    sectionEvidenceHash: section.evidenceHash,
+    subject: null,
+    knownIds: section.names.flatMap((member) =>
+      member.identityStatus === "MATCHED" &&
+      member.catalogueIdentity?.servantId != null
+        ? [member.catalogueIdentity.servantId]
+        : [],
+    ),
+    names: section.names,
+    issues: [
+      ...section.issues,
+      ...(!section.names.length ? ["NO_SECTION_NAMES"] : []),
+      ...(section.names.some(
+        (member) =>
+          member.identityStatus !== "MATCHED" ||
+          member.catalogueIdentity?.servantId == null,
+      )
+        ? ["SECTION_NAME_IDENTITIES_UNRESOLVED"]
+        : []),
+    ],
+    projected: inspection.naProjection?.htmlSectionWindows.find(
+      (window) =>
+        window.sectionId === section.sectionId &&
+        window.sectionEvidenceHash === section.evidenceHash,
+    ),
+    basis: "CATALOGUE_NAME_OVERLAP_ONLY" as const,
+  }));
+  return [...paragraphs, ...sections];
+}
+
 /** Overlap is a review aid, never a persistent identity or proof of complete membership. */
 export function compareJpBannerEvidence(
   report: Awaited<ReturnType<typeof inventoryJpBannerAnnouncements>>,
@@ -46,17 +107,14 @@ export function compareJpBannerEvidence(
   )) {
     const inspection = article.inspection;
     if (!inspection) continue;
-    for (const window of inspection.pickupEvidence?.windows ?? []) {
+    for (const window of comparisonEvidence(inspection)) {
       if (examinedWindows >= JP_BANNER_COMPARISON_LIMITS.maxWindows) {
         unexaminedWindows++;
         continue;
       }
       examinedWindows++;
-      const projected = inspection.naProjection?.windows.find(
-        (period) =>
-          period.periodEvidenceHash === window.periodEvidenceHash &&
-          period.status === "PROJECTED",
-      );
+      const projected =
+        window.projected?.status === "PROJECTED" ? window.projected : undefined;
       const issues = [...window.issues];
       if (
         inspection.kind !== "SUMMON_CONTENT" ||
@@ -65,10 +123,13 @@ export function compareJpBannerEvidence(
         issues.push("NOTICE_NOT_ELIGIBLE_FOR_COMPARISON");
       if (!projected?.projectedStartsAt || !projected.projectedEndsAt)
         issues.push("PROJECTED_TIME_UNAVAILABLE");
-      const knownIds = [
-        ...new Set(window.associations.map((member) => member.servantId)),
-      ].sort((a, b) => a - b);
-      if (!knownIds.length) issues.push("NO_VERIFIED_PICKUP_MEMBERSHIP");
+      const knownIds = [...new Set(window.knownIds)].sort((a, b) => a - b);
+      if (!knownIds.length)
+        issues.push(
+          window.evidenceKind === "PARAGRAPH_PICKUP"
+            ? "NO_VERIFIED_PICKUP_MEMBERSHIP"
+            : "NO_RESOLVED_SECTION_NAMES",
+        );
       const matches = issues.length
         ? []
         : baseline
@@ -84,7 +145,7 @@ export function compareJpBannerEvidence(
                   baselineName: banner.name,
                   baselineStatus: banner.status,
                   baselineSourceSchedule: banner.sourceSchedule,
-                  basis: "KNOWN_SERVANT_OVERLAP_ONLY" as const,
+                  basis: window.basis,
                   sharedServantIds: shared,
                   knownServantIdsAbsentFromBaseline: knownIds.filter(
                     (id) => !banner.servantIds.includes(id),
@@ -129,6 +190,11 @@ export function compareJpBannerEvidence(
       retainedMatches += retained.length;
       windows.push({
         sourceUrl: article.url,
+        articleContentHash: inspection.contentHash,
+        evidenceKind: window.evidenceKind,
+        sectionId: window.sectionId,
+        sectionEvidenceHash: window.sectionEvidenceHash,
+        names: window.names,
         periodEvidenceHash: window.periodEvidenceHash,
         subject: window.subject,
         knownServantIds: knownIds,
@@ -154,7 +220,8 @@ export function compareJpBannerEvidence(
     articlesWithoutPickupEvidence: report.articles.filter(
       (article) =>
         article.inspectionStatus !== "NOT_RELEVANT" &&
-        !article.inspection?.pickupEvidence,
+        !article.inspection?.pickupEvidence?.windows.length &&
+        !article.inspection?.htmlPickupSections.sections.length,
     ).length,
     examinedWindows,
     unexaminedWindows,
