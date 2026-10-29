@@ -45,7 +45,23 @@ export type JpBannerHtmlPickupSection = {
     evidenceHash: string;
     rarity: null;
     className: null;
-    identityStatus: "UNRESOLVED";
+    identityStatus: "UNRESOLVED" | "MATCHED" | "AMBIGUOUS" | "NOT_FOUND";
+    catalogueIdentity?: {
+      servantId: number | null;
+      candidates: {
+        servantId: number;
+        name: string;
+        rarity: number;
+        className: string;
+      }[];
+      classHint: { label: string; className: string } | null;
+      matchingRule:
+        | "EXACT_NORMALIZED_JP_NAME_UNIQUE_CATALOGUE"
+        | "EXACT_NORMALIZED_JP_NAME_AND_CLASS_UNIQUE_CATALOGUE";
+      sourceUrl: string;
+      contentHash: string;
+      pickupMembershipConfirmed: false;
+    };
   }[];
   period: PeriodCandidate | null;
   issues: string[];

@@ -18,6 +18,7 @@ import {
   resolveJpBannerServantMentions,
   JP_BANNER_SERVANT_SOURCE,
   associateJpBannerPickupEvidence,
+  resolveJpBannerHtmlSectionNames,
 } from "./jp-banner-servants";
 
 const ORIGIN = "https://news.fate-go.jp";
@@ -937,12 +938,6 @@ export async function inventoryJpBannerAnnouncements(
     }
     try {
       const inspection = parseJpBannerArticle(body, entry.url);
-      if (options.projectNa)
-        inspection.naProjection = previewJpBannerProjection(
-          inspection.schedule,
-          inspection.kind,
-          inspection.htmlPickupSections.sections,
-        );
       entry.inspection = inspection;
       entry.inspectionStatus =
         inspection.kind === "UNRESOLVED"
@@ -995,7 +990,11 @@ export async function inventoryJpBannerAnnouncements(
   };
   if (options.resolveServants) {
     const inspections = [...articles.values()].flatMap((entry) =>
-      entry.inspection?.schedule.servantMentions.length
+      entry.inspection &&
+      (entry.inspection.schedule.servantMentions.length ||
+        entry.inspection.htmlPickupSections.sections.some(
+          (section) => section.names.length,
+        ))
         ? [entry.inspection]
         : [],
     );
@@ -1019,11 +1018,25 @@ export async function inventoryJpBannerAnnouncements(
               matches,
               inspection.kind,
             ),
+            htmlSections: resolveJpBannerHtmlSectionNames(
+              inspection.htmlPickupSections.sections,
+              catalogue.servants,
+              {
+                sourceUrl: catalogue.sourceUrl,
+                contentHash: catalogue.contentHash,
+              },
+            ),
           };
         });
-        for (const { inspection, matches, pickupEvidence } of resolutions) {
+        for (const {
+          inspection,
+          matches,
+          pickupEvidence,
+          htmlSections,
+        } of resolutions) {
           inspection.servantIdentities = matches;
           inspection.pickupEvidence = pickupEvidence;
+          inspection.htmlPickupSections.sections = htmlSections;
         }
         servantCatalogue.status = "SUCCEEDED";
         servantCatalogue.contentHash = catalogue.contentHash;
@@ -1033,6 +1046,15 @@ export async function inventoryJpBannerAnnouncements(
       }
     }
   }
+  if (options.projectNa)
+    for (const entry of articles.values()) {
+      if (entry.inspection)
+        entry.inspection.naProjection = previewJpBannerProjection(
+          entry.inspection.schedule,
+          entry.inspection.kind,
+          entry.inspection.htmlPickupSections.sections,
+        );
+    }
   const imageCandidates = [
     ...new Set(
       [...articles.values()].flatMap(
@@ -1077,6 +1099,12 @@ export async function inventoryJpBannerAnnouncements(
   const linkedInspectionLimited =
     followLinks > 0 && (linkedDiscoveryLimited || uninspectedLinked);
   const selectedArticles = [...articles.values()];
+  const htmlSectionNames = selectedArticles.flatMap(
+    (entry) =>
+      entry.inspection?.htmlPickupSections.sections.flatMap(
+        (section) => section.names,
+      ) ?? [],
+  );
   const nextPage = startPage + indices.length;
   const contiguousPages =
     indices.every(
@@ -1332,6 +1360,14 @@ export async function inventoryJpBannerAnnouncements(
           ).length ?? 0),
         0,
       ),
+      matchedHtmlSectionNames: htmlSectionNames.filter(
+        (member) => member.identityStatus === "MATCHED",
+      ).length,
+      unresolvedHtmlSectionNames: options.resolveServants
+        ? htmlSectionNames.filter(
+            (member) => member.identityStatus !== "MATCHED",
+          ).length
+        : 0,
       pickupPeriodsWithNameAssociations: [...articles.values()].reduce(
         (count, entry) =>
           count +

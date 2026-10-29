@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import type { extractJpBannerSchedule } from "./jp-banner-schedule";
+import {
+  JP_BANNER_HTML_SECTION_LIMITS,
+  type extractJpBannerSchedule,
+  type JpBannerHtmlPickupSection,
+} from "./jp-banner-schedule";
 
 export const JP_BANNER_SERVANT_SOURCE =
   "https://api.atlasacademy.io/export/JP/basic_servant.json";
@@ -139,12 +143,7 @@ export async function fetchJpBannerServantCatalogue(
   };
 }
 
-export function resolveJpBannerServantMentions(
-  mentions: readonly Mention[],
-  catalogue: readonly Servant[],
-) {
-  if (mentions.length > 2_000 || catalogue.length > MAX_RECORDS)
-    throw new Error("JP servant matching limit exceeded.");
+function servantNameIndex(catalogue: readonly Servant[]) {
   const names = new Map<string, Servant[]>();
   for (const servant of catalogue) {
     for (const name of new Set([
@@ -161,21 +160,48 @@ export function resolveJpBannerServantMentions(
       names.set(name, group);
     }
   }
-  return mentions.map((mention) => {
-    const normalized = normalize(mention.name);
-    let named = names.get(normalized) ?? [];
-    let classHint: { label: string; className: string } | null = null;
-    // An exact full name wins. Never turn an unknown costume/variant into a base name.
-    if (!named.length) {
-      const suffix = /^(.*)\(([^()]+)\)$/u.exec(normalized);
-      const className = suffix ? CLASS_SUFFIXES.get(suffix[2]!) : undefined;
-      if (suffix && className) {
-        classHint = { label: suffix[2]!, className };
-        named = (names.get(suffix[1]!) ?? []).filter(
-          (servant) => servant.className === className,
-        );
-      }
+  return names;
+}
+
+function lookupServantName(
+  name: string,
+  names: ReturnType<typeof servantNameIndex>,
+) {
+  const normalized = normalize(name);
+  let named = names.get(normalized) ?? [];
+  let classHint: { label: string; className: string } | null = null;
+  // An exact full name wins. Never turn an unknown costume/variant into a base name.
+  if (!named.length) {
+    const suffix = /^(.*)\(([^()]+)\)$/u.exec(normalized);
+    const className = suffix ? CLASS_SUFFIXES.get(suffix[2]!) : undefined;
+    if (suffix && className) {
+      classHint = { label: suffix[2]!, className };
+      named = (names.get(suffix[1]!) ?? []).filter(
+        (servant) => servant.className === className,
+      );
     }
+  }
+  return { named, classHint };
+}
+
+function catalogueCandidates(servants: readonly Servant[]) {
+  return servants.map(({ collectionNo, name, rarity, className }) => ({
+    servantId: collectionNo,
+    name,
+    rarity,
+    className,
+  }));
+}
+
+export function resolveJpBannerServantMentions(
+  mentions: readonly Mention[],
+  catalogue: readonly Servant[],
+) {
+  if (mentions.length > 2_000 || catalogue.length > MAX_RECORDS)
+    throw new Error("JP servant matching limit exceeded.");
+  const names = servantNameIndex(catalogue);
+  return mentions.map((mention) => {
+    const { named, classHint } = lookupServantName(mention.name, names);
     const candidates = named.filter(
       (servant) => servant.rarity === mention.rarity,
     );
@@ -192,20 +218,62 @@ export function resolveJpBannerServantMentions(
       classHint,
       // Project IDs are collection numbers, not Atlas's internal servant IDs.
       servantId: status === "MATCHED" ? candidates[0]!.collectionNo : null,
-      candidates: (candidates.length ? candidates : named).map(
-        ({ collectionNo, name, rarity, className }) => ({
-          servantId: collectionNo,
-          name,
-          rarity,
-          className,
-        }),
-      ),
+      candidates: catalogueCandidates(candidates.length ? candidates : named),
       matchingRule: classHint
         ? ("EXACT_NORMALIZED_JP_NAME_RARITY_AND_CLASS" as const)
         : ("EXACT_NORMALIZED_JP_NAME_AND_RARITY" as const),
       pickupMembershipConfirmed: false as const,
     };
   });
+}
+
+/** Catalogue identity evidence only: source rarity/class and banner authority stay unchanged. */
+export function resolveJpBannerHtmlSectionNames(
+  sections: readonly JpBannerHtmlPickupSection[],
+  catalogue: readonly Servant[],
+  provenance: Pick<
+    Awaited<ReturnType<typeof fetchJpBannerServantCatalogue>>,
+    "sourceUrl" | "contentHash"
+  >,
+): JpBannerHtmlPickupSection[] {
+  if (
+    catalogue.length > MAX_RECORDS ||
+    sections.length > JP_BANNER_HTML_SECTION_LIMITS.maxSections ||
+    sections.some(
+      (section) =>
+        section.names.length > JP_BANNER_HTML_SECTION_LIMITS.maxNamesPerSection,
+    )
+  )
+    throw new Error("JP section identity matching limit exceeded.");
+  if (!sections.length) return [];
+  const names = servantNameIndex(catalogue);
+  return sections.map((section) => ({
+    ...section,
+    names: section.names.map((member) => {
+      const { named, classHint } = lookupServantName(member.name, names);
+      const identityStatus = !named.length
+        ? ("NOT_FOUND" as const)
+        : named.length > 1
+          ? ("AMBIGUOUS" as const)
+          : ("MATCHED" as const);
+      return {
+        ...member,
+        identityStatus,
+        catalogueIdentity: {
+          servantId:
+            identityStatus === "MATCHED" ? named[0]!.collectionNo : null,
+          candidates: catalogueCandidates(named),
+          classHint,
+          matchingRule: classHint
+            ? ("EXACT_NORMALIZED_JP_NAME_AND_CLASS_UNIQUE_CATALOGUE" as const)
+            : ("EXACT_NORMALIZED_JP_NAME_UNIQUE_CATALOGUE" as const),
+          sourceUrl: provenance.sourceUrl,
+          contentHash: provenance.contentHash,
+          pickupMembershipConfirmed: false as const,
+        },
+      };
+    }),
+  }));
 }
 
 /** Partial source associations only: neither a complete roster nor a publishable banner. */
