@@ -33,9 +33,7 @@ function comparisonEvidence(inspection: Inspection) {
         [] as Inspection["htmlPickupSections"]["sections"][number]["names"],
       issues: window.issues,
       projected: inspection.naProjection?.windows.find(
-        (period) =>
-          period.periodEvidenceHash === window.periodEvidenceHash &&
-          period.status === "PROJECTED",
+        (period) => period.periodEvidenceHash === window.periodEvidenceHash,
       ),
       basis: "KNOWN_SERVANT_OVERLAP_ONLY" as const,
     }),
@@ -85,7 +83,7 @@ export function* jpBannerComparisonWindows(
     for (const window of comparisonEvidence(inspection)) {
       const projected =
         window.projected?.status === "PROJECTED" ? window.projected : undefined;
-      const issues = [...window.issues];
+      const issues = [...window.issues, ...(window.projected?.issues ?? [])];
       if (
         inspection.kind !== "SUMMON_CONTENT" ||
         inspection.restrictionEvidence
@@ -112,6 +110,8 @@ export function* jpBannerComparisonWindows(
         knownServantIds: knownIds,
         projectedStartsAt: projected?.projectedStartsAt ?? null,
         projectedEndsAt: projected?.projectedEndsAt ?? null,
+        startBoundary: window.projected?.startBoundary ?? null,
+        endBoundary: window.projected?.endBoundary ?? null,
         sourcePendingEvidence: inspection.schedule.pendingEvidence,
         issues: [...new Set(issues)],
         basis: window.basis,

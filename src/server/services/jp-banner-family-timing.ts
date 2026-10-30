@@ -14,6 +14,8 @@ import {
   JP_BANNER_PROJECTION_RULE,
   jpBannerResetAnchors,
   projectJpBannerPeriods,
+  projectJpBannerBoundary,
+  jpBannerLaunchHour,
 } from "./jp-banner-projection";
 import {
   effectiveBanner,
@@ -253,14 +255,24 @@ export async function loadJpBannerFamilyTiming(
     const resets = anchor
       ? jpBannerResetAnchors(anchor.jpResetDay, anchor.naResetDay)
       : null;
-    const eventOffsetMs =
-      event?.sourceStartsAt && resets
-        ? event.sourceStartsAt.getTime() - resets.jp
+    const launchHourJst = jpBannerLaunchHour(
+      event?.sourceStartsAt?.toISOString() ?? null,
+    );
+    const eventBoundary =
+      anchor && event?.sourceStartsAt
+        ? projectJpBannerBoundary(
+            event.sourceStartsAt.toISOString(),
+            anchor.jpResetDay,
+            anchor.naResetDay,
+            "START",
+            launchHourJst,
+          )
         : null;
-    const projectedEventStart =
-      eventOffsetMs !== null && resets
-        ? new Date(resets.na + eventOffsetMs)
-        : null;
+    const eventOffsetMs = eventBoundary?.offsetMs ?? null;
+    const projectedEventStart = eventBoundary?.projectedAt
+      ? new Date(eventBoundary.projectedAt)
+      : null;
+    if (eventBoundary?.issues.length) issues.push(...eventBoundary.issues);
     const eventStartDifferenceMs =
       projectedEventStart && effective?.startsAtPrecision === "EXACT"
         ? projectedEventStart.getTime() - effective.startsAt.getTime()
@@ -284,6 +296,7 @@ export async function loadJpBannerFamilyTiming(
             [period],
             anchor.jpResetDay,
             anchor.naResetDay,
+            launchHourJst,
           )[0]!
         : null;
     if (projection?.issues.length) issues.push(...projection.issues);
@@ -388,6 +401,8 @@ export async function loadJpBannerFamilyTiming(
                 ? "OFFICIAL_EVENT_ALIGNMENT_REQUIRES_REVIEW"
                 : "PROPOSED_RESET_PAIR",
             eventStartOffsetMs: eventOffsetMs,
+            eventStartBoundary: eventBoundary?.boundary ?? null,
+            launchHourJst,
             eventStartDifferenceMs,
           }
         : null,

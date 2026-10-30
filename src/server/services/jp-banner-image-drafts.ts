@@ -204,8 +204,10 @@ export function validateJpBannerImageDrafts(
                 ],
                 anchor.jpAnchorDay,
                 anchor.naAnchorDay,
+                anchor.launchHourJst,
               )[0]!
             : null;
+        if (projection?.issues.length) issues.push(...projection.issues);
         return {
           draftRowId: row.rowId,
           label: row.label,
