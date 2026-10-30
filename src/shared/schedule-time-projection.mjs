@@ -59,19 +59,23 @@ export function jpScheduleLaunchHour(value) {
 
 /** Map one endpoint using its standard JP transition, never a player timezone. */
 /** @param {string | null} value @param {string} jpAnchorDay @param {string} naAnchorDay
- * @param {"START" | "END"} endpoint @param {number} [launchHourJst] */
+ * @param {"START" | "END"} endpoint @param {number} [launchHourJst]
+ * @param {"LAUNCH" | "LOGIN"} [startBoundaryKind] */
 export function projectJpScheduleBoundary(
   value,
   jpAnchorDay,
   naAnchorDay,
   endpoint,
   launchHourJst = JP_NA_SCHEDULE_RULE.jpLaunchHour,
+  startBoundaryKind = "LAUNCH",
 ) {
   if (
     launchHourJst !== JP_NA_SCHEDULE_RULE.jpLaunchHour &&
     launchHourJst !== JP_NA_SCHEDULE_RULE.jpLateLaunchHour
   )
     throw new Error("Unsupported JP launch anchor.");
+  if (!["LAUNCH", "LOGIN"].includes(startBoundaryKind))
+    throw new Error("Unsupported JP start boundary.");
   const anchors = scheduleResetAnchors(jpAnchorDay, naAnchorDay);
   const instant = sourceInstant(value);
   if (instant === null)
@@ -98,7 +102,10 @@ export function projectJpScheduleBoundary(
   let kind;
   let boundaryHour;
   if (endpoint === "START") {
-    if (
+    if (startBoundaryKind === "LOGIN" && hour === rule.jpLoginHour) {
+      kind = "LOGIN";
+      boundaryHour = rule.jpLoginHour;
+    } else if (
       hour === rule.jpResetHour &&
       jst.getUTCMinutes() === 0 &&
       jst.getUTCSeconds() === 0

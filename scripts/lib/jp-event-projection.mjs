@@ -16,8 +16,10 @@ const TIMED_EVENT_TYPES = new Set([
   "MAIN_EVENT",
   "CAMPAIGN",
   "PRE_RELEASE_CAMPAIGN",
+  "LOGIN_BONUS",
 ]);
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = DAY_MS / 24;
 
 /** @param {string} value */
 function sourceDay(value) {
@@ -61,6 +63,7 @@ export function projectJpEventTiming(event) {
           naDay,
           "START",
           launchHour,
+          event.type === "LOGIN_BONUS" ? "LOGIN" : "LAUNCH",
         )
       : null;
   const end =
@@ -121,14 +124,29 @@ export function projectEventRelativeReward(
   let expectedAt;
   if (sourceType === "LOGIN_BONUS") {
     // Login rewards follow server days, not the main event's launch hour.
-    const rewardDay = sourceDay(sourceExpectedAt ?? reward.expectedAt);
-    const eventDay = sourceDay(new Date(oldStart).toISOString());
-    const days = (Date.parse(rewardDay) - Date.parse(eventDay)) / DAY_MS;
+    const sourceAnchor = sourceExpectedAt
+      ? event.sourceStartsAt
+      : new Date(oldStart).toISOString();
     const targetDay = event.startsAt.slice(0, 10);
-    const reset =
-      Date.parse(`${targetDay}T00:00:00.000Z`) +
-      JP_NA_SCHEDULE_RULE.naResetHourUtc * (DAY_MS / 24);
-    expectedAt = new Date(reset + days * DAY_MS).toISOString();
+    const boundary = projectJpScheduleBoundary(
+      sourceExpectedAt ?? reward.expectedAt,
+      sourceDay(sourceAnchor),
+      targetDay,
+      "START",
+      jpScheduleLaunchHour(event.sourceStartsAt),
+      "LOGIN",
+    );
+    if (boundary.projectedAt) expectedAt = boundary.projectedAt;
+    else {
+      // Calendar-only login rows still establish server days, not exact clocks.
+      const rewardDay = sourceDay(sourceExpectedAt ?? reward.expectedAt);
+      const days =
+        (Date.parse(rewardDay) - Date.parse(sourceDay(sourceAnchor))) / DAY_MS;
+      const reset =
+        Date.parse(`${targetDay}T00:00:00.000Z`) +
+        JP_NA_SCHEDULE_RULE.naResetHourUtc * HOUR_MS;
+      expectedAt = new Date(reset + days * DAY_MS).toISOString();
+    }
   } else {
     expectedAt = new Date(
       Date.parse(event.startsAt) +
