@@ -1,3 +1,4 @@
+import { EVENT_PROJECTION_METHODS } from "./jp-event-projection.mjs";
 import {
   eventRewardChangeBreakdown,
   rewardDateBasisChanged,
@@ -311,7 +312,7 @@ export async function reconcileProjectedFandomEvents(
     where: {
       sourceKey: { startsWith: "fandom:JP:" },
       sourceRegion: "JP",
-      projectionMethod: "TWO_CALENDAR_YEARS",
+      projectionMethod: { in: EVENT_PROJECTION_METHODS },
       sourceStartsAt: { lte: options.asOf },
       sourceEndsAt: { gte: sourceFrom },
     },

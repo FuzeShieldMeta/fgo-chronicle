@@ -1,3 +1,11 @@
+import { addCalendarYears } from "../../src/shared/schedule-time-projection.mjs";
+export { addCalendarYears } from "../../src/shared/schedule-time-projection.mjs";
+import {
+  projectJpEventTiming,
+  projectEventRelativeReward,
+  eventTimingIssues,
+  unknownRewardTimingIssues,
+} from "./jp-event-projection.mjs";
 import { z } from "zod";
 import { eventSourcePrecisionChanged } from "./event-source-precision.mjs";
 
@@ -143,28 +151,6 @@ export function parseAtlasEventExport(value) {
 /** @param {unknown} value */
 export function parseAtlasWarExport(value) {
   return atlasWarExportSchema.parse(value);
-}
-
-/**
- * Add calendar years while keeping the UTC month, time, and the nearest valid
- * day of that month.
- * @param {Date} value
- * @param {number} years
- */
-export function addCalendarYears(value, years) {
-  const result = new Date(value);
-  const month = value.getUTCMonth();
-  const day = value.getUTCDate();
-
-  result.setUTCDate(1);
-  result.setUTCFullYear(value.getUTCFullYear() + years);
-  result.setUTCMonth(month);
-
-  const lastDay = new Date(
-    Date.UTC(result.getUTCFullYear(), month + 1, 0),
-  ).getUTCDate();
-  result.setUTCDate(Math.min(day, lastDay));
-  return result;
 }
 
 /** @param {number} value */
@@ -461,6 +447,58 @@ export function buildProjectedEventDataset(rawEvents, options) {
       }),
     );
 
+    const sourceTimes = {
+      type: eventType ?? "OTHER",
+      sourceStartsAt: dateFromUnix(scheduleRaw.startedAt).toISOString(),
+      sourceStartsAtPrecision: result.event.startsAtPrecision,
+      sourceEndsAt: result.event.endsAt,
+      sourceEndsAtPrecision: result.event.endsAtPrecision,
+    };
+    const timing = projectJpEventTiming(sourceTimes);
+    const { issues: timingIssues, ...projectedTiming } = timing;
+
+    const projectedRewards = [
+      ...result.rewardSources,
+      ...warResults.flatMap(({ rewardSources }) => rewardSources),
+    ].map((source) => {
+      const sourceKey = projectedKey(source.sourceKey);
+      return {
+        ...source,
+        sourceKey,
+        eventSourceKey,
+        status: "PROJECTED",
+        rewards: source.rewards.map((reward) => {
+          // Only finite event quest openings and end estimates establish a
+          // relation. Independent mission/shop periods remain unclassified.
+          const dateBasis =
+            projectedTiming.projectionMethod === "TWO_CALENDAR_YEARS"
+              ? "UNKNOWN"
+              : reward.expectedAt &&
+                  reward.expectedAt === sourceTimes.sourceEndsAt
+                ? "EVENT_END"
+                : ["QUEST_CLEAR", "CHALLENGE_QUEST"].includes(source.type) &&
+                    reward.expectedAt !== null &&
+                    reward.expectedAt >= sourceTimes.sourceStartsAt &&
+                    sourceTimes.sourceEndsAt !== null &&
+                    reward.expectedAt <= sourceTimes.sourceEndsAt
+                  ? "START_RELATIVE"
+                  : "UNKNOWN";
+          return projectEventRelativeReward(
+            {
+              ...reward,
+              dateBasis,
+              sourceKey: projectedKey(reward.sourceKey),
+              expectedAt: projectIso(reward.expectedAt),
+              reviewedAt: null,
+            },
+            source.type,
+            { ...sourceTimes, ...projectedTiming },
+            reward.expectedAt ?? undefined,
+          );
+        }),
+      };
+    });
+
     return {
       source: result.source,
       family: {
@@ -472,10 +510,7 @@ export function buildProjectedEventDataset(rawEvents, options) {
         sourceKey: eventSourceKey,
         familySourceKey,
         type: eventType,
-        startsAt: projectIso(result.event.startsAt),
-        startsAtPrecision: "DATE_ONLY",
-        endsAt: projectIso(result.event.endsAt),
-        endsAtPrecision: "DATE_ONLY",
+        ...projectedTiming,
         status: "PROJECTED",
         sourceStartsAt: result.event.startsAt,
         sourceStartsAtPrecision: result.event.startsAtPrecision,
@@ -483,30 +518,25 @@ export function buildProjectedEventDataset(rawEvents, options) {
         sourceEndsAtPrecision: result.event.endsAt
           ? result.event.endsAtPrecision
           : null,
-        projectionMethod: "TWO_CALENDAR_YEARS",
         lastSyncedAt: options.retrievedAt,
         sourceContentHash: options.contentHash,
       },
       sources: [result.source, ...warResults.map(({ source }) => source)],
-      rewardSources: [
-        ...result.rewardSources,
-        ...warResults.flatMap(({ rewardSources }) => rewardSources),
-      ].map((source) => {
-        const sourceKey = projectedKey(source.sourceKey);
-        return {
-          ...source,
-          sourceKey,
-          eventSourceKey,
-          status: "PROJECTED",
-          rewards: source.rewards.map((reward) => ({
-            ...reward,
-            sourceKey: projectedKey(reward.sourceKey),
-            expectedAt: projectIso(reward.expectedAt),
-            reviewedAt: null,
-          })),
-        };
-      }),
+      rewardSources: projectedRewards,
       issues: [
+        ...unknownRewardTimingIssues(
+          {
+            ...sourceTimes,
+            ...projectedTiming,
+            sourceKey: eventSourceKey,
+            name: result.event.name,
+          },
+          projectedRewards,
+        ),
+        ...eventTimingIssues(
+          { sourceKey: eventSourceKey, name: result.event.name },
+          timingIssues,
+        ),
         ...result.issues.map((issue) => ({
           ...issue,
           sourceKey: projectedKey(issue.sourceKey),

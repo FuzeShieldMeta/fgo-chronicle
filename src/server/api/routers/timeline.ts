@@ -421,7 +421,7 @@ type RelatedScheduleEntry = {
   sourceRegion: string;
   sourceStartsAt?: Date | null;
   sourceEndsAt?: Date | null;
-  projectionMethod?: "TWO_CALENDAR_YEARS" | null;
+  projectionMethod?: "TWO_CALENDAR_YEARS" | "JP_NA_SCHEDULE_BOUNDARIES" | null;
   lastSyncedAt?: Date | null;
   updatedAt: Date;
   curation?: Prisma.EventCurationGetPayload<Record<string, never>> | null;

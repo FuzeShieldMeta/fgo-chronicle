@@ -1,28 +1,23 @@
-import { GLOBAL_CAMPAIGN_IDENTITY_LIMITS } from "../../shared/global-reconciliation-config";
 import type {
   extractJpBannerSchedule,
   JpBannerHtmlPickupSection,
 } from "./jp-banner-schedule";
 
-// JP and Global schedule transitions are distinct from login reset. Map launch,
-// maintenance and midnight boundaries independently; preserve offsets from each.
-// JP: news.fate-go.jp/2024/christmas2024_pu{,2}/ (18:00 / 23:59 / 12:59).
-// Global: daily pickups change at 20:00 PST / 21:00 PDT = 04:00 UTC.
+import {
+  JP_NA_SCHEDULE_RULE,
+  JST_OFFSET_MS,
+  dayInstant,
+  sourceInstant,
+  scheduleResetAnchors,
+  jpScheduleLaunchHour,
+  projectJpScheduleBoundary,
+} from "../../shared/schedule-time-projection.mjs";
+
+// Preserve reviewed banner anchor fingerprints while sharing the clock engine.
 export const JP_BANNER_PROJECTION_RULE = {
+  ...JP_NA_SCHEDULE_RULE,
   version: "jp-na-banner-boundaries-v3",
-  jpResetHour: 0,
-  jpLaunchHour: 18,
-  jpLateLaunchHour: 20,
-  jpMaintenanceHour: 13,
-  jpLoginHour: 4,
-  naResetHourUtc: 4,
-  projectionYears: 2,
 } as const;
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-const JST_OFFSET_MS =
-  GLOBAL_CAMPAIGN_IDENTITY_LIMITS.jstOffsetMinutes * MINUTE_MS;
 type Schedule = ReturnType<typeof extractJpBannerSchedule>;
 type Period = Schedule["periods"][number];
 type Kind =
@@ -31,47 +26,11 @@ type Kind =
   | "NOT_RELEVANT"
   | "UNRESOLVED";
 
-function dayInstant(value: string) {
-  if (!/^20\d{2}-\d{2}-\d{2}$/u.test(value)) return null;
-  const time = Date.parse(`${value}T00:00:00.000Z`);
-  return Number.isFinite(time) &&
-    new Date(time).toISOString().slice(0, 10) === value
-    ? time
-    : null;
-}
 function minuteInstant(value: string | null) {
-  if (
-    value === null ||
-    !/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/u.test(value)
-  )
-    return null;
-  const time = Date.parse(value);
-  return Number.isFinite(time) && new Date(time).toISOString() === value
-    ? time
-    : null;
+  return value?.match(/:00\.000Z$/u) ? sourceInstant(value) : null;
 }
-export function jpBannerResetAnchors(jpDay: string, naDay: string) {
-  const jp = dayInstant(jpDay),
-    na = dayInstant(naDay);
-  if (jp === null || na === null)
-    throw new Error("Invalid projection anchor day.");
-  return {
-    jp: jp + JP_BANNER_PROJECTION_RULE.jpResetHour * HOUR_MS - JST_OFFSET_MS,
-    na: na + JP_BANNER_PROJECTION_RULE.naResetHourUtc * HOUR_MS,
-  };
-}
-
-/** A notice/family's explicit standard launch determines offsets for its children. */
-export function jpBannerLaunchHour(value: string | null) {
-  const instant = minuteInstant(value);
-  if (instant === null) return JP_BANNER_PROJECTION_RULE.jpLaunchHour;
-  const hour = new Date(instant + JST_OFFSET_MS).getUTCHours();
-  return hour === JP_BANNER_PROJECTION_RULE.jpLateLaunchHour
-    ? JP_BANNER_PROJECTION_RULE.jpLateLaunchHour
-    : JP_BANNER_PROJECTION_RULE.jpLaunchHour;
-}
-
-/** Map one endpoint using its standard JP transition, never a player timezone. */
+export const jpBannerResetAnchors = scheduleResetAnchors;
+export const jpBannerLaunchHour = jpScheduleLaunchHour;
 export function projectJpBannerBoundary(
   value: string | null,
   jpAnchorDay: string,
@@ -79,91 +38,13 @@ export function projectJpBannerBoundary(
   endpoint: "START" | "END",
   launchHourJst: number = JP_BANNER_PROJECTION_RULE.jpLaunchHour,
 ) {
-  if (
-    launchHourJst !== JP_BANNER_PROJECTION_RULE.jpLaunchHour &&
-    launchHourJst !== JP_BANNER_PROJECTION_RULE.jpLateLaunchHour
-  )
-    throw new Error("Unsupported JP launch anchor.");
-  const anchors = jpBannerResetAnchors(jpAnchorDay, naAnchorDay);
-  const instant = minuteInstant(value);
-  if (instant === null)
-    return {
-      projectedAt: null,
-      offsetMs: null,
-      boundary: null,
-      issues: ["SOURCE_TIME_UNRESOLVED"],
-    };
-  const jst = new Date(instant + JST_OFFSET_MS);
-  const sourceDay = dayInstant(jst.toISOString().slice(0, 10));
-  if (sourceDay === null)
-    return {
-      projectedAt: null,
-      offsetMs: null,
-      boundary: null,
-      issues: ["SOURCE_TIME_UNRESOLVED"],
-    };
-  const hour = jst.getUTCHours();
-  const referenceDay = dayInstant(jpAnchorDay)!;
-  const calendarDayOffset = (sourceDay - referenceDay) / DAY_MS;
-  const rule = JP_BANNER_PROJECTION_RULE;
-  let kind: "MIDNIGHT" | "LAUNCH" | "MAINTENANCE" | "LOGIN";
-  let boundaryHour: number;
-  if (endpoint === "START") {
-    if (hour === rule.jpResetHour && jst.getUTCMinutes() === 0) {
-      kind = "MIDNIGHT";
-      boundaryHour = rule.jpResetHour;
-    } else if (hour >= rule.jpLaunchHour) {
-      kind = "LAUNCH";
-      boundaryHour = launchHourJst;
-    } else {
-      return {
-        projectedAt: null,
-        offsetMs: null,
-        boundary: null,
-        issues: ["NONSTANDARD_JP_START_REQUIRES_REVIEW"],
-      };
-    }
-  } else {
-    // Recognise the final hour before a known transition. Other clocks are held,
-    // rather than assigned to whichever boundary happens to be nearest.
-    const transition = [
-      { kind: "MIDNIGHT" as const, hour: 24 },
-      { kind: "MAINTENANCE" as const, hour: rule.jpMaintenanceHour },
-      { kind: "LAUNCH" as const, hour: rule.jpLaunchHour },
-      { kind: "LAUNCH" as const, hour: rule.jpLateLaunchHour },
-      { kind: "LOGIN" as const, hour: rule.jpLoginHour },
-    ].find(
-      (candidate) =>
-        hour === candidate.hour - 1 ||
-        (jst.getUTCMinutes() === 0 && hour === candidate.hour % 24),
-    );
-    if (!transition)
-      return {
-        projectedAt: null,
-        offsetMs: null,
-        boundary: null,
-        issues: ["NONSTANDARD_JP_END_REQUIRES_REVIEW"],
-      };
-    kind = transition.kind;
-    boundaryHour = hour === 0 ? 0 : transition.hour;
-  }
-  const sourceBoundary = sourceDay + boundaryHour * HOUR_MS - JST_OFFSET_MS;
-  const clockOffsetMs = instant - sourceBoundary;
-  const boundaryDayOffset = calendarDayOffset + (boundaryHour === 24 ? 1 : 0);
-  const targetBoundary = anchors.na + boundaryDayOffset * DAY_MS;
-  const offsetMs = boundaryDayOffset * DAY_MS + clockOffsetMs;
-  return {
-    projectedAt: new Date(targetBoundary + clockOffsetMs).toISOString(),
-    offsetMs,
-    boundary: {
-      kind,
-      sourceBoundaryAt: new Date(sourceBoundary).toISOString(),
-      targetBoundaryAt: new Date(targetBoundary).toISOString(),
-      calendarDayOffset: boundaryDayOffset,
-      clockOffsetMs,
-    },
-    issues: [],
-  };
+  return projectJpScheduleBoundary(
+    minuteInstant(value) === null ? null : value,
+    jpAnchorDay,
+    naAnchorDay,
+    endpoint,
+    launchHourJst,
+  );
 }
 
 /** Shared calendar anchors retain sibling day spacing; each endpoint keeps its boundary offset. */
@@ -256,11 +137,7 @@ export function previewJpBannerProjection(
     issues.push("NO_UNAMBIGUOUS_NOTICE_ANCHOR");
   else {
     const source = minuteInstant(envelopes[0]!.startsAt)!;
-    jpAnchorDay = new Date(
-      source + GLOBAL_CAMPAIGN_IDENTITY_LIMITS.jstOffsetMinutes * 60_000,
-    )
-      .toISOString()
-      .slice(0, 10);
+    jpAnchorDay = new Date(source + JST_OFFSET_MS).toISOString().slice(0, 10);
     const shifted = `${Number(jpAnchorDay.slice(0, 4)) + JP_BANNER_PROJECTION_RULE.projectionYears}${jpAnchorDay.slice(4)}`;
     if (dayInstant(shifted) === null)
       issues.push("UNSUPPORTED_CALENDAR_YEAR_SHIFT");

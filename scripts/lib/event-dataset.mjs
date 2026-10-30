@@ -57,7 +57,10 @@ const eventSchema = z
       .nullable()
       .optional()
       .default(null),
-    projectionMethod: z.enum(["TWO_CALENDAR_YEARS"]).nullable().optional(),
+    projectionMethod: z
+      .enum(["TWO_CALENDAR_YEARS", "JP_NA_SCHEDULE_BOUNDARIES"])
+      .nullable()
+      .optional(),
     lastSyncedAt: nullableDate.optional(),
     sourceContentHash: z.string().trim().min(1).nullable().optional(),
   })

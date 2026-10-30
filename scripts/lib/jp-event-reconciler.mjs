@@ -1,3 +1,4 @@
+import { EVENT_PROJECTION_METHODS } from "./jp-event-projection.mjs";
 import {
   countEventRewardChanges,
   rewardDateBasisChanged,
@@ -209,7 +210,7 @@ export async function reconcileProjectedJpEvents(db, inputDataset, options) {
       where: {
         sourceKey: { startsWith: "atlas:JP:event:" },
         sourceRegion: "JP",
-        projectionMethod: "TWO_CALENDAR_YEARS",
+        projectionMethod: { in: EVENT_PROJECTION_METHODS },
         sourceStartsAt: { lte: options.asOf },
         sourceEndsAt: { gte: sourceFrom },
       },

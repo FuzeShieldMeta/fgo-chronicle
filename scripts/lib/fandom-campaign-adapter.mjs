@@ -1,3 +1,10 @@
+import {
+  projectJpEventTiming,
+  projectEventRelativeReward,
+  projectStartRelativeDate,
+  eventTimingIssues,
+  unknownRewardTimingIssues,
+} from "./jp-event-projection.mjs";
 import { createHash } from "node:crypto";
 
 import { addCalendarYears } from "./jp-event-sync.mjs";
@@ -643,7 +650,7 @@ function rewardLabel(itemType, amount) {
 
 /**
  * @param {string} wikitext
- * @param {{pageId: number, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventSourceStartsAt: string, eventEndsAt: string}} options
+ * @param {{pageId: number, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventSourceStartsAt: string, eventEndsAt: string, projectedEvent?: Record<string, any>}} options
  */
 function extractMaintenanceProse(wikitext, options) {
   const results = [];
@@ -687,10 +694,11 @@ function extractMaintenanceProse(wikitext, options) {
         amount: reward.amount,
         expectedAt:
           routine && reward.itemType === "SAINT_QUARTZ"
-            ? addCalendarYears(
+            ? projectStartRelativeDate(
                 new Date(options.eventSourceStartsAt),
-                2,
-              ).toISOString()
+                "MAINTENANCE",
+                options.projectedEvent,
+              )
             : range
               ? addCalendarYears(range.end, 2).toISOString()
               : options.eventEndsAt,
@@ -712,7 +720,7 @@ function extractMaintenanceProse(wikitext, options) {
 
 /**
  * @param {string} wikitext
- * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceEndsAt?: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string, tableCaptions?: boolean}} options
+ * @param {{pageId: number, eventName: string, eventSourceStartsAt: string, eventSourceEndsAt?: string, eventSourceKey: string, evidenceSourceKey: string, evidenceUrl: string, eventEndsAt: string, tableCaptions?: boolean, projectedEvent?: Record<string, any>}} options
  */
 export function extractFandomRewardSources(wikitext, options) {
   /** @param {{start: Date, end: Date} | null | undefined} range */
@@ -1054,7 +1062,11 @@ export function extractFandomRewardSources(wikitext, options) {
               itemType: reward.itemType,
               amount: reward.amount,
               expectedAt: sourceDate
-                ? addCalendarYears(sourceDate, 2).toISOString()
+                ? projectStartRelativeDate(
+                    sourceDate,
+                    "LOGIN_BONUS",
+                    options.projectedEvent,
+                  )
                 : options.eventEndsAt,
               dateBasis: sourceDate
                 ? "START_RELATIVE"
@@ -1189,7 +1201,13 @@ export function extractFandomRewardSources(wikitext, options) {
             ? rowRange?.start
             : (sectionRange?.end ?? rowRange?.end);
         const expectedAt = expectedSourceDate
-          ? addCalendarYears(expectedSourceDate, 2).toISOString()
+          ? type === "LOGIN_BONUS"
+            ? projectStartRelativeDate(
+                expectedSourceDate,
+                type,
+                options.projectedEvent,
+              )
+            : addCalendarYears(expectedSourceDate, 2).toISOString()
           : options.eventEndsAt;
         const baseIdentity = rowIdentity(
           `${table.heading}\n${identityEligibility}\n${rewardCellIndex}`,
@@ -1233,7 +1251,11 @@ export function extractFandomRewardSources(wikitext, options) {
             itemType: reward.itemType,
             amount: reward.amount,
             expectedAt: firstDayMaintenance
-              ? addCalendarYears(sourceStart, 2).toISOString()
+              ? projectStartRelativeDate(
+                  sourceStart,
+                  "MAINTENANCE",
+                  options.projectedEvent,
+                )
               : expectedAt,
             dateBasis: firstDayMaintenance
               ? "START_RELATIVE"
@@ -1383,6 +1405,9 @@ export function normaliseFandomCampaign(page, listEntry, options) {
     lastSyncedAt: options.retrievedAt,
     sourceContentHash: page.contentHash,
   };
+  const { issues: timingIssues, ...timing } = projectJpEventTiming(event);
+  const legacyEnd = event.endsAt;
+  Object.assign(event, timing);
   const extracted = extractFandomRewardSources(page.wikitext, {
     pageId: page.pageId,
     eventName: page.title,
@@ -1391,7 +1416,8 @@ export function normaliseFandomCampaign(page, listEntry, options) {
     eventSourceKey,
     evidenceSourceKey,
     evidenceUrl: page.url,
-    eventEndsAt: event.endsAt,
+    eventEndsAt: legacyEnd,
+    projectedEvent: event,
   });
 
   return {
@@ -1412,8 +1438,20 @@ export function normaliseFandomCampaign(page, listEntry, options) {
       artworkReviewedAt: null,
     },
     event,
-    rewardSources: extracted.rewardSources,
-    issues: [...issues, ...extracted.issues],
+    rewardSources: extracted.rewardSources.map((source) => ({
+      ...source,
+      rewards: source.rewards.map((reward) =>
+        reward.dateBasis === "EVENT_END"
+          ? projectEventRelativeReward(reward, source.type, event)
+          : reward,
+      ),
+    })),
+    issues: [
+      ...issues,
+      ...extracted.issues,
+      ...eventTimingIssues(event, timingIssues),
+      ...unknownRewardTimingIssues(event, extracted.rewardSources),
+    ],
     revision: {
       id: page.revisionId,
       timestamp: page.revisionTimestamp,

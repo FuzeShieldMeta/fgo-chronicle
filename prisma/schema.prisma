@@ -127,6 +127,7 @@ enum RewardDateBasis {
 
 enum ScheduleProjectionMethod {
   TWO_CALENDAR_YEARS
+  JP_NA_SCHEDULE_BOUNDARIES
 }
 
 enum SyncRunStatus {

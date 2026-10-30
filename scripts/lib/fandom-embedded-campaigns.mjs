@@ -1,3 +1,8 @@
+import { addCalendarYears } from "../../src/shared/schedule-time-projection.mjs";
+import {
+  projectEventRelativeReward,
+  unknownRewardTimingIssues,
+} from "./jp-event-projection.mjs";
 import { extractFandomRewardSources } from "./fandom-campaign-adapter.mjs";
 import { extractNestedTemplates, transcludedPageTitles } from "./wikitext.mjs";
 
@@ -95,13 +100,26 @@ export async function embeddedCampaignRewards(
       eventSourceKey: event.sourceKey,
       evidenceSourceKey: `fandom:JP:page:${child.pageId}`,
       evidenceUrl: child.url,
-      eventEndsAt: event.endsAt,
+      // Extraction emits the legacy estimate; retime each declared relation once.
+      eventEndsAt: event.sourceEndsAt
+        ? addCalendarYears(new Date(event.sourceEndsAt), 2).toISOString()
+        : event.endsAt,
       tableCaptions: true,
+      projectedEvent: event,
     });
     issues.push(...result.issues);
-    return result.rewardSources.filter((source) =>
+    const sources = result.rewardSources.filter((source) =>
       SUPPLEMENT_TYPES.has(source.type),
     );
+    issues.push(...unknownRewardTimingIssues(event, sources));
+    return sources.map((source) => ({
+      ...source,
+      rewards: source.rewards.map((reward) =>
+        reward.dateBasis === "EVENT_END"
+          ? projectEventRelativeReward(reward, source.type, event)
+          : reward,
+      ),
+    }));
   });
   return {
     pages: ownedPages,
