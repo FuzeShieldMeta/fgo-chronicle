@@ -91,7 +91,11 @@ export function classifyFandomScheduleEntry(name) {
   if (/pre[- ]?release|countdown campaign/i.test(name)) {
     return { type: "PRE_RELEASE_CAMPAIGN", reason: null };
   }
-  if (/chapter (?:release|preface)|permanent release/i.test(name)) {
+  if (
+    /chapter (?:release|preface)|permanent release|\btrial[ _-]*quests?\b|体験クエスト/i.test(
+      name,
+    )
+  ) {
     return { type: "QUEST_RELEASE", reason: null };
   }
   if (/login bonus/i.test(name)) {

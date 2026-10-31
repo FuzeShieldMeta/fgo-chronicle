@@ -7,6 +7,9 @@ import {
   projectJpScheduleBoundary,
 } from "../../src/shared/schedule-time-projection.mjs";
 
+// Shared with Atlas classification: longer source records are permanent wrappers.
+export const PERMANENT_RECORD_DAYS = 366;
+
 export const EVENT_BOUNDARY_PROJECTION_METHOD = "JP_NA_SCHEDULE_BOUNDARIES";
 export const EVENT_PROJECTION_METHODS = [
   "TWO_CALENDAR_YEARS",
@@ -20,6 +23,7 @@ const EVENT_START_POLICIES = Object.freeze({
   LOGIN_BONUS: "LOGIN",
   EVENT_SHOP: "LAUNCH",
   LIMITED_MISSION: "LAUNCH",
+  QUEST_RELEASE: "LAUNCH",
 });
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = DAY_MS / 24;
@@ -54,6 +58,17 @@ export function projectJpEventTiming(event) {
     ? EVENT_START_POLICIES[event.type]
     : undefined;
   if (!startPolicy) return { ...legacy, issues: [] };
+  if (event.type === "QUEST_RELEASE") {
+    const durationMs =
+      Date.parse(event.sourceEndsAt ?? "") - Date.parse(event.sourceStartsAt);
+    // Release markers and permanent availability are not finite schedule windows.
+    if (
+      !Number.isFinite(durationMs) ||
+      durationMs <= 0 ||
+      durationMs > PERMANENT_RECORD_DAYS * DAY_MS
+    )
+      return { ...legacy, issues: [] };
+  }
   if (
     event.type === "EVENT_SHOP" &&
     event.sourceStartsAt === event.sourceEndsAt

@@ -1,6 +1,7 @@
 import { addCalendarYears } from "../../src/shared/schedule-time-projection.mjs";
 export { addCalendarYears } from "../../src/shared/schedule-time-projection.mjs";
 import {
+  PERMANENT_RECORD_DAYS,
   projectJpEventTiming,
   projectEventRelativeReward,
   eventTimingIssues,
@@ -22,7 +23,6 @@ export const ATLAS_JP_EVENT_EXPORT_URL =
   "https://api.atlasacademy.io/export/JP/nice_event_lang_en.json";
 export const RECENT_UPDATE_DAYS = 90;
 const DAY_SECONDS = 24 * 60 * 60;
-const PERMANENT_RECORD_DAYS = 366;
 const WINDOW_OVERLAP_DAYS = 90;
 
 const atlasGiftSchema = z

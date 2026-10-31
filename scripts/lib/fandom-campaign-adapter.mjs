@@ -1317,6 +1317,7 @@ function eventTypeFromHeader(value) {
     return "EVENT_SHOP";
   if (/^limited\s*(?:master\s*)?missions?(?: campaign)?$/.test(type))
     return "LIMITED_MISSION";
+  if (/^trial\s*quests?$/.test(type)) return "QUEST_RELEASE";
   if (type.includes("login")) return "LOGIN_BONUS";
   if (type.includes("main story") || type.includes("mainstory")) {
     return "QUEST_RELEASE";
