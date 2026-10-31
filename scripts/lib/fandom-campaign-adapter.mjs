@@ -1312,7 +1312,11 @@ export function extractFandomRewardSources(wikitext, options) {
 
 /** @param {string} value */
 function eventTypeFromHeader(value) {
-  const type = value.toLowerCase();
+  const type = value.toLowerCase().replace(/[_-]+/g, " ").trim();
+  if (/^(?:event\s*)?shop$|^mana prism exchange$/.test(type))
+    return "EVENT_SHOP";
+  if (/^limited\s*(?:master\s*)?missions?(?: campaign)?$/.test(type))
+    return "LIMITED_MISSION";
   if (type.includes("login")) return "LOGIN_BONUS";
   if (type.includes("main story") || type.includes("mainstory")) {
     return "QUEST_RELEASE";
@@ -1361,14 +1365,29 @@ export function normaliseFandomCampaign(page, listEntry, options) {
   const eventSourceKey = `fandom:JP:page:${page.pageId}:projection:NA`;
   const familySourceKey = `${eventSourceKey}:family`;
   const evidenceSourceKey = `fandom:JP:page:${page.pageId}`;
-  const type =
-    listEntry.type === "PRE_RELEASE_CAMPAIGN" ||
-    listEntry.type === "QUEST_RELEASE"
-      ? listEntry.type
-      : header
-        ? eventTypeFromHeader(header.sourceType ?? "")
-        : listEntry.type;
+  const headerType = header
+    ? eventTypeFromHeader(header.sourceType ?? "")
+    : null;
+  const type = [
+    "PRE_RELEASE_CAMPAIGN",
+    "QUEST_RELEASE",
+    "EVENT_SHOP",
+    "LIMITED_MISSION",
+  ].includes(listEntry.type)
+    ? listEntry.type
+    : (headerType ?? listEntry.type);
   const issues = [];
+  if (
+    ["EVENT_SHOP", "LIMITED_MISSION"].includes(listEntry.type) &&
+    headerType &&
+    !["MAIN_EVENT", "CAMPAIGN", listEntry.type].includes(headerType)
+  ) {
+    issues.push({
+      sourceKey: `${evidenceSourceKey}:type-review`,
+      severity: "ERROR",
+      message: `${page.title}: event-list type ${listEntry.type} conflicts with detail type ${headerType}. The event requires review.`,
+    });
+  }
 
   if (!header) {
     issues.push({

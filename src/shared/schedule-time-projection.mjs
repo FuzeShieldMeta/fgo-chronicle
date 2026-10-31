@@ -9,6 +9,13 @@ export const JP_NA_SCHEDULE_RULE = {
   naResetHourUtc: 4,
   projectionYears: 2,
 };
+// Event categories select a timing policy; policies name the allowed anchors.
+const START_POLICIES = Object.freeze({
+  LAUNCH: ["MIDNIGHT", "LAUNCH"],
+  LOGIN: ["MIDNIGHT", "LAUNCH", "LOGIN"],
+});
+/** @typedef {keyof typeof START_POLICIES} StartPolicy */
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -60,22 +67,23 @@ export function jpScheduleLaunchHour(value) {
 /** Map one endpoint using its standard JP transition, never a player timezone. */
 /** @param {string | null} value @param {string} jpAnchorDay @param {string} naAnchorDay
  * @param {"START" | "END"} endpoint @param {number} [launchHourJst]
- * @param {"LAUNCH" | "LOGIN"} [startBoundaryKind] */
+ * @param {StartPolicy} [startPolicy] */
 export function projectJpScheduleBoundary(
   value,
   jpAnchorDay,
   naAnchorDay,
   endpoint,
   launchHourJst = JP_NA_SCHEDULE_RULE.jpLaunchHour,
-  startBoundaryKind = "LAUNCH",
+  startPolicy = "LAUNCH",
 ) {
   if (
     launchHourJst !== JP_NA_SCHEDULE_RULE.jpLaunchHour &&
     launchHourJst !== JP_NA_SCHEDULE_RULE.jpLateLaunchHour
   )
     throw new Error("Unsupported JP launch anchor.");
-  if (!["LAUNCH", "LOGIN"].includes(startBoundaryKind))
-    throw new Error("Unsupported JP start boundary.");
+  if (!Object.hasOwn(START_POLICIES, startPolicy))
+    throw new Error("Unsupported JP start policy.");
+  const allowedStartBoundaries = START_POLICIES[startPolicy];
   const anchors = scheduleResetAnchors(jpAnchorDay, naAnchorDay);
   const instant = sourceInstant(value);
   if (instant === null)
@@ -102,17 +110,21 @@ export function projectJpScheduleBoundary(
   let kind;
   let boundaryHour;
   if (endpoint === "START") {
-    if (startBoundaryKind === "LOGIN" && hour === rule.jpLoginHour) {
+    if (allowedStartBoundaries.includes("LOGIN") && hour === rule.jpLoginHour) {
       kind = "LOGIN";
       boundaryHour = rule.jpLoginHour;
     } else if (
+      allowedStartBoundaries.includes("MIDNIGHT") &&
       hour === rule.jpResetHour &&
       jst.getUTCMinutes() === 0 &&
       jst.getUTCSeconds() === 0
     ) {
       kind = "MIDNIGHT";
       boundaryHour = rule.jpResetHour;
-    } else if (hour >= rule.jpLaunchHour) {
+    } else if (
+      allowedStartBoundaries.includes("LAUNCH") &&
+      hour >= rule.jpLaunchHour
+    ) {
       kind = "LAUNCH";
       boundaryHour = launchHourJst;
     } else {

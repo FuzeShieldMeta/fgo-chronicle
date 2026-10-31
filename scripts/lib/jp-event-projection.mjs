@@ -12,12 +12,15 @@ export const EVENT_PROJECTION_METHODS = [
   "TWO_CALENDAR_YEARS",
   EVENT_BOUNDARY_PROJECTION_METHOD,
 ];
-const TIMED_EVENT_TYPES = new Set([
-  "MAIN_EVENT",
-  "CAMPAIGN",
-  "PRE_RELEASE_CAMPAIGN",
-  "LOGIN_BONUS",
-]);
+/** @type {Readonly<Record<string, import("../../src/shared/schedule-time-projection.mjs").StartPolicy>>} */
+const EVENT_START_POLICIES = Object.freeze({
+  MAIN_EVENT: "LAUNCH",
+  CAMPAIGN: "LAUNCH",
+  PRE_RELEASE_CAMPAIGN: "LAUNCH",
+  LOGIN_BONUS: "LOGIN",
+  EVENT_SHOP: "LAUNCH",
+  LIMITED_MISSION: "LAUNCH",
+});
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = DAY_MS / 24;
 
@@ -47,7 +50,15 @@ export function projectJpEventTiming(event) {
     endsAtPrecision: legacyEnd ? "DATE_ONLY" : null,
     projectionMethod: "TWO_CALENDAR_YEARS",
   };
-  if (!TIMED_EVENT_TYPES.has(event.type)) return { ...legacy, issues: [] };
+  const startPolicy = Object.hasOwn(EVENT_START_POLICIES, event.type)
+    ? EVENT_START_POLICIES[event.type]
+    : undefined;
+  if (!startPolicy) return { ...legacy, issues: [] };
+  if (
+    event.type === "EVENT_SHOP" &&
+    event.sourceStartsAt === event.sourceEndsAt
+  )
+    return { ...legacy, issues: ["SHOP_INTERVAL_UNRESOLVED"] };
   const jpDay = sourceDay(event.sourceStartsAt);
   const naDay = addCalendarYears(new Date(`${jpDay}T00:00:00.000Z`), 2)
     .toISOString()
@@ -63,7 +74,7 @@ export function projectJpEventTiming(event) {
           naDay,
           "START",
           launchHour,
-          event.type === "LOGIN_BONUS" ? "LOGIN" : "LAUNCH",
+          startPolicy,
         )
       : null;
   const end =
