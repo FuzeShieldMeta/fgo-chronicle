@@ -30,7 +30,6 @@ export function EventRewardSummary({
 }) {
   const dated = new Map<ForecastResourceType, ResourceTotal>();
   const undated = new Map<ForecastResourceType, ResourceTotal>();
-  let hasPendingChoices = false;
   for (const source of sources) {
     for (const reward of source.rewards) {
       const group = reward.expectedAt ? dated : undated;
@@ -39,13 +38,12 @@ export function EventRewardSummary({
         total = { included: 0, notIncluded: 0 };
         group.set(reward.itemType, total);
       }
-      const { included, inclusionResolved } = resolveRewardInclusion(
+      const { included } = resolveRewardInclusion(
         reward,
         preferences,
         profile,
         catalogue,
       );
-      if (!included && !inclusionResolved) hasPendingChoices = true;
       total[included ? "included" : "notIncluded"] += reward.amount;
     }
   }
@@ -53,14 +51,10 @@ export function EventRewardSummary({
 
   return (
     <div className="timeline-event-reward-summary">
-      <p>Totals cover the whole event, not just unclaimed rewards.</p>
-      {hasPendingChoices ? (
-        <p>Not included also covers rewards awaiting your choice.</p>
-      ) : null}
+      <p>Totals cover the whole event.</p>
       {undated.size ? (
         <p>
-          Rewards without a forecast date are not added to daily balances, even
-          when included.
+          Rewards without a forecast date do not affect daily balances.
         </p>
       ) : null}
       {[
