@@ -2,6 +2,7 @@ import {
   projectJpEventTiming,
   projectEventRelativeReward,
   projectStartRelativeDate,
+  projectScopedRewardDeadline,
   eventTimingIssues,
   unknownRewardTimingIssues,
 } from "./jp-event-projection.mjs";
@@ -25,6 +26,8 @@ const TRACKED_TEMPLATES = new Map([
   ["crystallised lore", "CRYSTALLIZED_LORE"],
   ["holy grail", "HOLY_GRAIL"],
 ]);
+/** @typedef {{start: Date, end: Date, startPrecision?: "EXACT" | "DATE_ONLY", endPrecision?: "EXACT" | "DATE_ONLY"}} SourcePeriod */
+
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const MINUTE_MILLISECONDS = 60 * 1_000;
 const JST_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1_000;
@@ -110,15 +113,28 @@ export function parseJstDate(value) {
 }
 
 /** @param {string} value */
-export function parseJstDateRange(value) {
+function parseJstDateRangeEvidence(value) {
   const parts = value
     .replace(/\s+JST\b/gi, "")
     .split(/\s*[~–—]\s*/)
     .map((part) => part.trim());
   if (parts.length < 2) return null;
-  const start = parseJstDate(parts[0] ?? "");
-  const end = parseJstDate(parts[1] ?? "");
-  return start && end && end >= start ? { start, end } : null;
+  const start = parseJstDateEvidence(parts[0] ?? "");
+  const end = parseJstDateEvidence(parts[1] ?? "");
+  return start && end && end.date >= start.date
+    ? {
+        start: start.date,
+        end: end.date,
+        startPrecision: start.precision,
+        endPrecision: end.precision,
+      }
+    : null;
+}
+
+/** @param {string} value */
+export function parseJstDateRange(value) {
+  const range = parseJstDateRangeEvidence(value);
+  return range ? { start: range.start, end: range.end } : null;
 }
 
 /** @param {string} value */
@@ -301,7 +317,12 @@ function labelledMissionPeriod(value, enclosing) {
           start >= enclosing.start &&
           end <= enclosing.end
         ) {
-          ranges.push({ start, end });
+          ranges.push({
+            start,
+            end,
+            startPrecision: "EXACT",
+            endPrecision: "EXACT",
+          });
         }
       }
     }
@@ -312,7 +333,7 @@ function labelledMissionPeriod(value, enclosing) {
   );
   const unique = new Map(
     ranges.map((range) => [
-      `${range.start.toISOString()}/${range.end.toISOString()}`,
+      `${range.start.toISOString()}/${range.end.toISOString()}/${range.startPrecision}/${range.endPrecision}`,
       range,
     ]),
   );
@@ -357,7 +378,7 @@ function missionPeriodsByRow(rawRows, enclosing) {
       periods
         .filter(({ range }) => range)
         .map(({ range }) => [
-          `${range?.start.toISOString()}/${range?.end.toISOString()}`,
+          `${range?.start.toISOString()}/${range?.end.toISOString()}/${range?.startPrecision}/${range?.endPrecision}`,
           range,
         ]),
     );
@@ -457,7 +478,7 @@ function firstRange(value) {
   return allRanges(value)[0] ?? null;
 }
 
-/** @param {string} value */
+/** @param {string} value @returns {SourcePeriod[]} */
 function allRanges(value) {
   const normalisedValue = value.replace(
     /([A-Za-z]+\s+\d{1,2})\s+(\d{4})/g,
@@ -470,7 +491,7 @@ function allRanges(value) {
   ];
   const ranges = [];
   for (const match of matches) {
-    const range = parseJstDateRange(`${match[1]} ~ ${match[2]}`);
+    const range = parseJstDateRangeEvidence(`${match[1]} ~ ${match[2]}`);
     if (range) ranges.push(range);
   }
   return ranges;
@@ -813,6 +834,7 @@ export function extractFandomRewardSources(wikitext, options) {
     if (headingType === "MASTER_MISSION") {
       let periodLabel = "Mission period";
       let missionRange = sectionRange;
+      let projectionMissionPeriod = sectionMissionPeriod;
       /** @type {string | null} */
       let missionScope =
         extractCells(table.body.split(/\n\|-/)[0] ?? "")
@@ -826,8 +848,9 @@ export function extractFandomRewardSources(wikitext, options) {
        * @param {string[]} rewardCells
        * @param {Array<number | null>} targets
        * @param {string} label
-       * @param {{start: Date, end: Date} | null} range
+       * @param {SourcePeriod | null} range
        * @param {number} rowIndex
+       * @param {{present: boolean, range: SourcePeriod | null}} [missionPeriod]
        */
       const appendMissionMatrixRewards = (
         rewardCells,
@@ -835,6 +858,7 @@ export function extractFandomRewardSources(wikitext, options) {
         label,
         range,
         rowIndex,
+        missionPeriod = { present: false, range: null },
       ) => {
         rewardCells.forEach((rewardCell, rewardIndex) => {
           const rewards = trackedRewards(rewardCell);
@@ -844,13 +868,31 @@ export function extractFandomRewardSources(wikitext, options) {
             `${table.heading}\n${label}\n${range?.start.toISOString() ?? "unknown"}\n${target}\n${rewardCell}\n${rowIndex}:${rewardIndex}`,
           );
           const sourceKey = `fandom:JP:page:${options.pageId}:${stableSlug(table.heading)}:mission-matrix:${identity}:projection:NA`;
-          const expectedAt = range
-            ? addCalendarYears(range.end, 2).toISOString()
-            : options.eventEndsAt;
+          const selectedPeriod = missionPeriod.present
+            ? missionPeriod.range
+            : range;
+          const isPermanentMission = /permanent/i.test(table.headingPath);
+          const scopedDeadline =
+            !isPermanentMission &&
+            missionPeriod.present &&
+            !coversEventPeriod(selectedPeriod)
+              ? projectScopedRewardDeadline(
+                  selectedPeriod,
+                  options.projectedEvent,
+                )
+              : null;
+          const expectedAt =
+            scopedDeadline ??
+            (range
+              ? addCalendarYears(range.end, 2).toISOString()
+              : options.eventEndsAt);
+          if (missionPeriod.present && !selectedPeriod)
+            dateWarnings.add(
+              `${table.heading} has an ambiguous mission period. Its date requires review.`,
+            );
           const condition = missionScope
             ? `Complete ${target} qualifying tasks. Mission scope: ${missionScope}`
             : `Complete ${target} qualifying tasks during ${label}.`;
-          const isPermanentMission = /permanent/i.test(table.headingPath);
           rewardSources.push({
             sourceKey,
             eventSourceKey: options.eventSourceKey,
@@ -866,9 +908,13 @@ export function extractFandomRewardSources(wikitext, options) {
               amount: reward.amount,
               expectedAt,
               dateBasis:
-                !isPermanentMission && (!range || coversEventPeriod(range))
+                !isPermanentMission &&
+                !(missionPeriod.present && !selectedPeriod) &&
+                (!selectedPeriod || coversEventPeriod(selectedPeriod))
                   ? "EVENT_END"
-                  : "UNKNOWN",
+                  : scopedDeadline
+                    ? "START_RELATIVE"
+                    : "UNKNOWN",
               nature: "CONDITIONAL",
               eligibility: condition,
               defaultIncluded: !isPermanentMission,
@@ -882,7 +928,16 @@ export function extractFandomRewardSources(wikitext, options) {
         const firstCell = plainCells[0] ?? "";
         const rowText = plainCells.join(" ");
         const rowRange = firstRange(rowText);
-        if (/^week\s+\d+/i.test(firstCell)) periodLabel = firstCell;
+        if (/^week\s+\d+/i.test(firstCell)) {
+          periodLabel = firstCell;
+          projectionMissionPeriod = sectionMissionPeriod;
+        }
+        const labelledRowPeriod = labelledMissionPeriod(
+          rowText,
+          enclosingPeriod,
+        );
+        if (labelledRowPeriod.present)
+          projectionMissionPeriod = labelledRowPeriod;
         if (/mission duration/i.test(rowText) && rowRange) {
           missionRange = rowRange;
         }
@@ -949,6 +1004,7 @@ export function extractFandomRewardSources(wikitext, options) {
           periodLabel,
           missionRange,
           rowIndex,
+          projectionMissionPeriod,
         );
         targetRow = null;
       }
@@ -1234,6 +1290,31 @@ export function extractFandomRewardSources(wikitext, options) {
         const isPermanentQuestReward =
           type === "QUEST_CLEAR" &&
           /interludes?|strengthening/i.test(table.headingPath);
+        const explicitExchangePeriod =
+          ["EVENT_SHOP", "MANA_PRISM_EXCHANGE"].includes(type) &&
+          !invalidExchangePeriod &&
+          allRanges(table.prelude).length === 1 &&
+          table.prelude
+            .split("\n")
+            .some(
+              (line) =>
+                /^\s*[*:]*\s*(?:(?:exchange|shop|campaign)\s+)?(?:duration|period)\s*:/i.test(
+                  plainWikitext(line),
+                ) && allRanges(line).length === 1,
+            );
+        const scopedPeriod =
+          ["LIMITED_MISSION", "MASTER_MISSION"].includes(type) &&
+          missionDate?.present
+            ? missionDate.range
+            : explicitExchangePeriod
+              ? sectionRange
+              : null;
+        const scopedDeadline =
+          !isPermanentMission &&
+          !isPermanentQuestReward &&
+          !coversEventPeriod(scopedPeriod)
+            ? projectScopedRewardDeadline(scopedPeriod, options.projectedEvent)
+            : null;
         if (type === "SOCIAL_CAMPAIGN" && table.heading === "Other rewards") {
           sourceName = `${options.eventName}: questionnaire completion`;
         }
@@ -1256,22 +1337,26 @@ export function extractFandomRewardSources(wikitext, options) {
                   "MAINTENANCE",
                   options.projectedEvent,
                 )
-              : expectedAt,
+              : (scopedDeadline ?? expectedAt),
             dateBasis: firstDayMaintenance
               ? "START_RELATIVE"
-              : isPermanentMission || invalidExchangePeriod
+              : isPermanentMission ||
+                  invalidExchangePeriod ||
+                  (missionDate?.present && !missionDate.range)
                 ? "UNKNOWN"
                 : type !== "LOGIN_BONUS" &&
                     !isMaintenance &&
                     coversEventPeriod(effectiveRange)
                   ? "EVENT_END"
-                  : expectedSourceDate
-                    ? type === "LOGIN_BONUS"
-                      ? "START_RELATIVE"
-                      : "UNKNOWN"
-                    : isMaintenance
-                      ? "UNKNOWN"
-                      : "EVENT_END",
+                  : scopedDeadline
+                    ? "START_RELATIVE"
+                    : expectedSourceDate
+                      ? type === "LOGIN_BONUS"
+                        ? "START_RELATIVE"
+                        : "UNKNOWN"
+                      : isMaintenance
+                        ? "UNKNOWN"
+                        : "EVENT_END",
             nature: isMaintenance ? "DETERMINISTIC" : "CONDITIONAL",
             eligibility: isMaintenance ? null : eligibility,
             defaultIncluded:

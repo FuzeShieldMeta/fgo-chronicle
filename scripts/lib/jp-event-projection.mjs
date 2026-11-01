@@ -230,3 +230,52 @@ export function projectStartRelativeDate(sourceDate, sourceType, event) {
       ).expectedAt
     : expectedAt;
 }
+
+/**
+ * A sub-period keeps its own deadline while following the family's calendar.
+ * It is start-relative, not tied to later extensions of the parent event.
+ * @param {{start: Date, end: Date, startPrecision?: string, endPrecision?: string} | null | undefined} period
+ * @param {Record<string, any> | undefined} event
+ * @returns {string | null}
+ */
+export function projectScopedRewardDeadline(period, event) {
+  if (
+    !period ||
+    !event ||
+    event.projectionMethod !== EVENT_BOUNDARY_PROJECTION_METHOD ||
+    event.sourceStartsAtPrecision !== "EXACT" ||
+    period.startPrecision !== "EXACT" ||
+    period.endPrecision !== "EXACT" ||
+    period.end <= period.start ||
+    !event.sourceEndsAt ||
+    period.start < new Date(event.sourceStartsAt) ||
+    period.end > new Date(event.sourceEndsAt)
+  )
+    return null;
+  const jpDay = sourceDay(event.sourceStartsAt);
+  const naDay = event.startsAt.slice(0, 10);
+  const launchHour = jpScheduleLaunchHour(event.sourceStartsAt);
+  const start = projectJpScheduleBoundary(
+    period.start.toISOString(),
+    jpDay,
+    naDay,
+    "START",
+    launchHour,
+  );
+  const end = projectJpScheduleBoundary(
+    period.end.toISOString(),
+    jpDay,
+    naDay,
+    "END",
+    launchHour,
+  );
+  if (
+    !start.projectedAt ||
+    !end.projectedAt ||
+    start.issues.length ||
+    end.issues.length ||
+    end.projectedAt < start.projectedAt
+  )
+    return null;
+  return end.projectedAt;
+}
