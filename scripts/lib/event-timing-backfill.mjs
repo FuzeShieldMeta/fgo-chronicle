@@ -183,6 +183,8 @@ export function planEventTimingBackfill(rawSnapshot, pipeline, rawSelection) {
       event.sourceRegion !== "JP" ||
       existing.globalBaseline ||
       existing.dateOverlay ||
+      existing.reviews?.length ||
+      existing.bannerTimingAnchors?.length ||
       (existing.curation?.active &&
         existing.curation.ownedFields.some((/** @type {string} */ field) =>
           ["startsAt", "endsAt", "shiftRewardDates"].includes(field),
@@ -269,6 +271,7 @@ export function planEventTimingBackfill(rawSnapshot, pipeline, rawSelection) {
           before.globalBaseline ||
           before.dateOverlay ||
           before.reviewedAt ||
+          before.reviews?.length ||
           (before.curation?.active &&
             before.curation.ownedFields.includes("expectedAt"))
         )
