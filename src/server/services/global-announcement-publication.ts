@@ -1,3 +1,4 @@
+import { rebaseBannerFamiliesInTransaction } from "./banner-family-timing-sync";
 import { createHash } from "node:crypto";
 import type { GlobalEventCandidate, Prisma } from "../../../generated/prisma";
 import {
@@ -90,8 +91,9 @@ export async function publishAnnouncementFamily(
   // Only a main-event announcement anchors a family move. Campaign and quest
   // sections have their own windows, even when they belong to that family.
   if (assessed.kind !== "EVENT") target.familyId = null;
-  if (target.familyId)
-    await tx.$queryRaw`SELECT "id" FROM "EventFamily" WHERE "id" = ${target.familyId} FOR UPDATE`;
+  // A campaign may be a reviewed anchor even without a main-event family move.
+  // Acquire both possible family scopes before their event rows, in stable order.
+  await tx.$queryRaw`SELECT "id" FROM "EventFamily" WHERE "id" = ${target.familyId} OR "id" IN (SELECT "familyId" FROM "BannerFamilyTimingAnchor" WHERE "anchorEventId" = ${eventId}) ORDER BY "id" FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} OR "familyId" = ${target.familyId} ORDER BY "id" FOR UPDATE`;
   if (target.familyId)
     await tx.$queryRaw`SELECT "id" FROM "Banner" WHERE "familyId" = ${target.familyId} ORDER BY "id" FOR UPDATE`;
@@ -238,7 +240,7 @@ export async function publishAnnouncementFamily(
         take: GLOBAL_SOURCE_LIMITS.maxBatchRecords + 1,
       })
     : [];
-  const heldTimingBannerIds = familyBanners
+  let heldTimingBannerIds = familyBanners
     .filter((banner) =>
       banner.sourcePublication?.ownedFields.includes("TIMING"),
     )
@@ -503,6 +505,11 @@ export async function publishAnnouncementFamily(
     ON CONFLICT ("rewardId") DO UPDATE SET "anchorEventId" = EXCLUDED."anchorEventId", "candidateId" = EXCLUDED."candidateId", "expectedAt" = EXCLUDED."expectedAt", "updatedAt" = CURRENT_TIMESTAMP`;
   if (!anchorUnchanged)
     await tx.eventDateEvidence.create({ data: { eventId, ...evidence } });
+  const reviewedTiming = await rebaseBannerFamiliesInTransaction(tx, actorId, [
+    eventId,
+  ]);
+  const following = new Set(reviewedTiming.followingBannerIds);
+  heldTimingBannerIds = heldTimingBannerIds.filter((id) => !following.has(id));
   await tx.curatorChange.create({
     data: {
       actorId,

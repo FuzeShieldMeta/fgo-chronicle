@@ -83,6 +83,7 @@ async function main() {
         servants: report.servants,
         servantImages: report.servantImages,
         maintenance: report.maintenance,
+        bannerFamilyTiming: report.bannerFamilyTiming,
         ...("banners" in report ? { banners: report.banners } : {}),
       },
       null,

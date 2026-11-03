@@ -1,3 +1,4 @@
+import { bannerAnchorSourceFactsHash } from "./banner-family-timing-reference";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
@@ -352,10 +353,16 @@ export async function loadJpBannerFamilyTiming(
     const anchorFactsHash = anchorFacts
       ? createHash("sha256").update(JSON.stringify(anchorFacts)).digest("hex")
       : null;
+    const sourceFactsHash = event ? bannerAnchorSourceFactsHash(event) : null;
+    const referenceStartsAt =
+      effective?.startsAtPrecision === "EXACT" ? effective.startsAt : null;
     const anchorStatus =
       storedAnchor?.factsHash === anchorFactsHash &&
       storedAnchor?.anchorEventId === event?.id &&
-      storedAnchor?.sourceUrl === event?.sourceUrl
+      storedAnchor?.sourceUrl === event?.sourceUrl &&
+      storedAnchor?.sourceFactsHash === sourceFactsHash &&
+      (storedAnchor?.referenceStartsAt?.getTime() ?? null) ===
+        (referenceStartsAt?.getTime() ?? null)
         ? ("UNCHANGED" as const)
         : ("REVIEW_REQUIRED" as const);
     if (storedAnchor && !suppliedAnchor && anchorStatus !== "UNCHANGED")
@@ -381,6 +388,8 @@ export async function loadJpBannerFamilyTiming(
       storedAnchor: storedAnchor ?? null,
       anchorStatus,
       anchorFactsHash,
+      sourceFactsHash,
+      referenceStartsAt,
       proposedAnchorRevision:
         anchorStatus === "UNCHANGED"
           ? storedAnchor!.revision

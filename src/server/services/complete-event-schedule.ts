@@ -18,6 +18,11 @@ import {
   type ServantImageReport,
 } from "./servant-image-sync";
 
+import {
+  syncBannerFamilyTiming,
+  type BannerFamilyTimingReport,
+} from "./banner-family-timing-sync";
+
 type Options = Parameters<typeof runEventSchedulePipeline>[1] & {
   announcementBackfillDays?: number;
 };
@@ -28,6 +33,7 @@ type Dependencies = {
   syncServants?: typeof syncServantCatalogue;
   syncImages?: typeof syncServantImages;
   syncMaintenance?: typeof syncMaintenanceCompensation;
+  syncBannerFamilies?: typeof syncBannerFamilyTiming;
 };
 
 export async function runCompleteEventSchedule(
@@ -151,7 +157,32 @@ export async function runCompleteEventSchedule(
       }),
     );
   }
+  let bannerFamilyTiming: BannerFamilyTimingReport;
+  try {
+    bannerFamilyTiming = await progress.stage("reviewed_family_timing", () =>
+      (dependencies.syncBannerFamilies ?? syncBannerFamilyTiming)(
+        database,
+        authority,
+        options.dryRun,
+      ),
+    );
+  } catch (error) {
+    bannerFamilyTiming = {
+      status: "failed",
+      examined: 0,
+      changed: 0,
+      unchanged: 0,
+      held: [],
+    };
+    console.warn(
+      JSON.stringify({
+        event: "reviewed_family_timing_failed",
+        error: safeSyncFailure(error),
+      }),
+    );
+  }
   const failed =
+    bannerFamilyTiming.status === "failed" ||
     maintenance.status === "failed" ||
     servants.status === "failed" ||
     servantImages.status === "failed" ||
@@ -164,6 +195,7 @@ export async function runCompleteEventSchedule(
     servantImages,
     globalSources,
     maintenance,
+    bannerFamilyTiming,
     runId: progress.runId,
     importStatus: failed
       ? ("partial_failure" as const)

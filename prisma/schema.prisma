@@ -543,6 +543,9 @@ model BannerSourcePublication {
   publishedContentHash String
   timingAnchorFamilyId String?
   timingAnchorRevision Int?
+  sourceStartsAt       DateTime?
+  sourceEndsAt         DateTime?
+  appliedAnchorStartsAt DateTime?
   timingAnchor         BannerFamilyTimingAnchor? @relation(fields: [timingAnchorFamilyId], references: [familyId], onDelete: Restrict)
   updatedAt            DateTime @updatedAt
   banner               Banner   @relation(fields: [bannerId], references: [id], onDelete: Restrict)
@@ -552,6 +555,8 @@ model BannerSourcePublication {
 }
 
 model BannerFamilyTimingAnchor {
+  referenceStartsAt DateTime?
+  sourceFactsHash    String?
   familyId          String @id
   anchorEventId     String
   jpResetDay        DateTime @db.Date

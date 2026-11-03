@@ -137,6 +137,7 @@ describe("maintenance dates within a family", () => {
           findUniqueOrThrow: vi.fn().mockResolvedValue({ familyId: null }),
           findMany: vi.fn().mockResolvedValue([current]),
         },
+        bannerFamilyTimingAnchor: { findMany: vi.fn().mockResolvedValue([]) },
         eventDateEvidence: { create: vi.fn().mockResolvedValue({}) },
         curatorChange: { create: vi.fn().mockResolvedValue({}) },
       } as unknown as Prisma.TransactionClient;

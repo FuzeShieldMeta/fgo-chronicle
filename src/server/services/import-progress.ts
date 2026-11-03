@@ -11,6 +11,7 @@ type Stage =
   | "servant_catalogue"
   | "servant_images"
   | "maintenance_compensation"
+  | "reviewed_family_timing"
   | "jp_fandom"
   | "atlas_global"
   | "atlas_global_recent"

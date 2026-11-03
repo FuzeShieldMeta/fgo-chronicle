@@ -1,3 +1,4 @@
+import { rebaseBannerFamiliesInTransaction } from "./banner-family-timing-sync";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -106,6 +107,8 @@ export async function saveCuration(
       await requireCurator(tx, actorId);
       const eventTarget = input.targetKind === "EVENT";
       if (eventTarget) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+        await tx.$queryRaw`SELECT "id" FROM "EventFamily" WHERE "id" IN (SELECT "familyId" FROM "BannerFamilyTimingAnchor" WHERE "anchorEventId" = ${input.targetId}) ORDER BY "id" FOR UPDATE`;
         await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${input.targetId} FOR UPDATE`;
       } else {
         await tx.$queryRaw`SELECT "id" FROM "RewardDefinition" WHERE "id" = ${input.targetId} FOR UPDATE`;
@@ -231,6 +234,8 @@ export async function saveCuration(
           after: snapshot({ curation: next }),
         },
       });
+      if (eventTarget)
+        await rebaseBannerFamiliesInTransaction(tx, actorId, [input.targetId]);
       return { revision };
     },
     { maxWait: 5000, timeout: 10000 },

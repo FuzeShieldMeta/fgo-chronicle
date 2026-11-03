@@ -1,3 +1,4 @@
+import { rebaseBannerFamiliesInTransaction } from "./banner-family-timing-sync";
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient, Prisma } from "../../../generated/prisma";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
@@ -33,6 +34,7 @@ export async function publishGlobalEvent(
           message: "This assessment has no verified event target.",
         });
       const eventId = candidate.targetEventId;
+      await tx.$queryRaw`SELECT "id" FROM "EventFamily" WHERE "id" IN (SELECT "familyId" FROM "BannerFamilyTimingAnchor" WHERE "anchorEventId" = ${eventId}) ORDER BY "id" FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "RewardSource" WHERE "eventId" = ${eventId} ORDER BY "id" FOR UPDATE`;
       await tx.$queryRaw`SELECT r."id" FROM "RewardDefinition" r JOIN "RewardSource" s ON s."id" = r."rewardSourceId" WHERE s."eventId" = ${eventId} ORDER BY r."id" FOR UPDATE OF r`;
@@ -232,6 +234,7 @@ export async function publishGlobalEvent(
           })),
         });
       }
+      await rebaseBannerFamiliesInTransaction(tx, actorId, [eventId]);
       return {
         eventId,
         candidateId: candidate.id,

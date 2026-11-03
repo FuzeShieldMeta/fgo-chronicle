@@ -277,6 +277,23 @@ async function publicationRows(
       fields,
     );
     const currentValues = banner ? ownedValues(banner, fields) : null;
+    // Date-only historical event anchors can still be reviewed/published, but
+    // cannot opt into automatic following without an exact reference instant.
+    const sourceStartsAt = familyTiming?.sourceInterval?.startsAt
+      ? new Date(familyTiming.sourceInterval.startsAt)
+      : null;
+    const sourceEndsAt = familyTiming?.sourceInterval?.endsAt
+      ? new Date(familyTiming.sourceInterval.endsAt)
+      : null;
+    const appliedAnchorStartsAt =
+      sourceStartsAt && familyTiming?.sourceFactsHash
+        ? familyTiming.referenceStartsAt
+        : null;
+    const sourceTiming = {
+      sourceStartsAt,
+      sourceEndsAt,
+      appliedAnchorStartsAt,
+    };
     const publishedContentHash = createHash("sha256")
       .update(
         JSON.stringify({
@@ -286,6 +303,7 @@ async function publicationRows(
           periodEvidenceHash: mapping.periodEvidenceHash,
           fields,
           values,
+          ...(familyTiming ? { sourceTiming } : {}),
           ...(familyTiming
             ? {
                 timingAnchor: {
@@ -305,6 +323,12 @@ async function publicationRows(
       JSON.stringify([...ownership.ownedFields].sort()) ===
         JSON.stringify(fields) &&
       JSON.stringify(currentValues) === JSON.stringify(values) &&
+      (ownership.sourceStartsAt?.getTime() ?? null) ===
+        (sourceStartsAt?.getTime() ?? null) &&
+      (ownership.sourceEndsAt?.getTime() ?? null) ===
+        (sourceEndsAt?.getTime() ?? null) &&
+      (ownership.appliedAnchorStartsAt?.getTime() ?? null) ===
+        (appliedAnchorStartsAt?.getTime() ?? null) &&
       (!familyTiming ||
         (familyTiming.anchorStatus === "UNCHANGED" &&
           ownership.timingAnchorFamilyId === familyTiming.familyId &&
@@ -319,6 +343,7 @@ async function publicationRows(
       values,
       currentValues,
       publishedContentHash,
+      sourceTiming,
       issues,
       status: issues.length
         ? ("HELD" as const)
@@ -362,6 +387,8 @@ export async function previewBannerSourcePublication(
       proposedValues: row.values,
       databaseFingerprint: row.databaseFingerprint,
       publicationRevision: row.ownership?.revision ?? null,
+      automaticFamilyTimingEligible:
+        row.sourceTiming.appliedAnchorStartsAt !== null,
       ...(row.familyTiming
         ? {
             timing: {
@@ -497,6 +524,8 @@ export async function publishBannerSourceValues(
               jpResetDay: new Date(`${timing.anchor!.jpResetDay}T00:00:00Z`),
               naResetDay: new Date(`${timing.anchor!.naResetDay}T00:00:00Z`),
               factsHash: timing.anchorFactsHash!,
+              sourceFactsHash: timing.sourceFactsHash,
+              referenceStartsAt: timing.referenceStartsAt,
               sourceUrl: timing.event!.sourceUrl!,
               sourceContentHash: timing.event!.sourceContentHash,
               revision: timing.proposedAnchorRevision,
@@ -519,6 +548,8 @@ export async function publishBannerSourceValues(
                 },
                 after: {
                   ...data,
+                  referenceStartsAt:
+                    data.referenceStartsAt?.toISOString() ?? null,
                   jpResetDay: data.jpResetDay.toISOString(),
                   naResetDay: data.naResetDay.toISOString(),
                   reviewFingerprint: timing.reviewFingerprint,
@@ -542,6 +573,7 @@ export async function publishBannerSourceValues(
           publishedContentHash: row.publishedContentHash,
           timingAnchorFamilyId: timing?.familyId ?? null,
           timingAnchorRevision: timing?.proposedAnchorRevision ?? null,
+          ...row.sourceTiming,
         };
         await tx.bannerSourcePublication.upsert({
           where: { bannerId: banner.id },

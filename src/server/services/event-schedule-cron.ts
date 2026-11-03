@@ -1,3 +1,4 @@
+import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 import { env } from "~/env";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
 import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
@@ -39,6 +40,15 @@ const syncReportSchema = z.object({
     updated: stageCount,
     failed: stageCount,
   }),
+  bannerFamilyTiming: z.object({
+    status: z.enum(["success", "failed"]),
+    examined: stageCount,
+    changed: stageCount,
+    unchanged: stageCount,
+    held: z
+      .array(z.object({ bannerId: z.string(), reason: z.string() }))
+      .max(GLOBAL_SOURCE_LIMITS.maxBatchRecords),
+  }),
   atlas: z.unknown(),
   masterMissions: z.unknown(),
   fandom: z.object({
@@ -62,6 +72,7 @@ type CronDependencies = Pick<
   | "syncServants"
   | "syncImages"
   | "syncMaintenance"
+  | "syncBannerFamilies"
   | "downloadBanners"
   | "importBanners"
 > & {
@@ -131,6 +142,7 @@ export async function handleEventScheduleCron(
         syncServants: dependencies.syncServants,
         syncImages: dependencies.syncImages,
         syncMaintenance: dependencies.syncMaintenance,
+        syncBannerFamilies: dependencies.syncBannerFamilies,
         downloadBanners: dependencies.downloadBanners,
         importBanners: dependencies.importBanners,
       },
@@ -140,6 +152,7 @@ export async function handleEventScheduleCron(
     const report = summariseEventSchedule(parsed);
     const { runId, importStatus, servants, servantImages, banners } = parsed;
     const { globalSources, maintenance } = rawReport;
+    const { bannerFamilyTiming } = parsed;
     stage = "cache";
     let cacheWarmed = true;
     try {
@@ -164,6 +177,7 @@ export async function handleEventScheduleCron(
             globalSources.publisher.coverageLimited ||
             maintenance.coverageLimited ||
             maintenance.unresolved > 0 ||
+            bannerFamilyTiming.held.length > 0 ||
             servantImages.status === "unavailable"
           ? "warning"
           : "success";
@@ -177,6 +191,7 @@ export async function handleEventScheduleCron(
       ...report,
       globalSources,
       maintenance,
+      bannerFamilyTiming,
       servants,
       servantImages,
       banners,
