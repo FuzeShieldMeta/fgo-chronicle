@@ -1,3 +1,8 @@
+import {
+  syncJpBannerInitialization,
+  type collectJpBannerSources,
+  type JpBannerInitializationReport,
+} from "./jp-banner-initialization";
 import type { PrismaClient } from "../../../generated/prisma";
 import { runCompleteEventSchedule } from "./complete-event-schedule";
 import { downloadBannerSpreadsheet } from "./banner-spreadsheet";
@@ -16,6 +21,8 @@ type Dependencies = NonNullable<
 > & {
   downloadBanners?: typeof downloadBannerSpreadsheet;
   importBanners?: typeof importBannerDataset;
+  initializeJpBanners?: typeof syncJpBannerInitialization;
+  collectJpBannerSources?: typeof collectJpBannerSources;
 };
 
 export async function runGeneralSync(
@@ -45,5 +52,38 @@ export async function runGeneralSync(
     ...dependencies,
     progress,
   });
-  return { ...report, banners: { status: "success" as const, ...banners } };
+  let jpBanners: JpBannerInitializationReport;
+  try {
+    jpBanners = await progress.stage("jp_banner_initialization", () =>
+      (dependencies.initializeJpBanners ?? syncJpBannerInitialization)(
+        database,
+        authority,
+        dataset,
+        options.asOf,
+        { collectSources: dependencies.collectJpBannerSources },
+      ),
+    );
+  } catch {
+    jpBanners = {
+      status: "failed",
+      examined: 0,
+      eligible: 0,
+      registered: 0,
+      initialized: 0,
+      unchanged: 0,
+      inspectedArticles: 0,
+      discoveryLimited: false,
+      held: [],
+      failure: { phase: "INITIALIZATION", familyId: null },
+    };
+  }
+  return {
+    ...report,
+    jpBanners,
+    importStatus:
+      report.importStatus === "partial_failure" || jpBanners.status === "failed"
+        ? ("partial_failure" as const)
+        : ("succeeded" as const),
+    banners: { status: "success" as const, ...banners },
+  };
 }

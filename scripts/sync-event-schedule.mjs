@@ -19,6 +19,8 @@ function parseArguments(values) {
     warSourceFile: null,
     masterMissionSourceFile: null,
     outputPath: process.env.FANDOM_COVERAGE_DATA_PATH?.trim() || null,
+    jpBannerCacheDir: /** @type {string | null} */ (null),
+    jpBannerCatalogueFile: /** @type {string | null} */ (null),
     announcementBackfillDays: /** @type {number | undefined} */ (undefined),
   };
   for (const value of values) {
@@ -26,6 +28,18 @@ function parseArguments(values) {
       options.withBanners = true;
     } else if (value === "--dry-run") {
       options.dryRun = true;
+    } else if (value.startsWith("--jp-banner-cache=")) {
+      options.jpBannerCacheDir = value
+        .slice("--jp-banner-cache=".length)
+        .trim();
+      if (!options.jpBannerCacheDir)
+        throw new Error("JP cache path must not be empty.");
+    } else if (value.startsWith("--jp-banner-catalogue=")) {
+      options.jpBannerCatalogueFile = value
+        .slice("--jp-banner-catalogue=".length)
+        .trim();
+      if (!options.jpBannerCatalogueFile)
+        throw new Error("JP catalogue path must not be empty.");
     } else if (value.startsWith("--announcement-backfill-days=")) {
       const days = value.slice("--announcement-backfill-days=".length);
       if (!/^\d+$/.test(days))
@@ -68,9 +82,31 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const { jpBannerCacheDir, jpBannerCatalogueFile } = options;
+  if (jpBannerCacheDir || jpBannerCatalogueFile) {
+    if (process.env.NODE_ENV === "production")
+      throw new Error("Saved JP sources are for local development only.");
+    if (!options.withBanners || !jpBannerCacheDir || !jpBannerCatalogueFile)
+      throw new Error(
+        "Saved JP sources require --with-banners and both cache and catalogue paths.",
+      );
+  }
+  const dependencies =
+    jpBannerCacheDir && jpBannerCatalogueFile
+      ? {
+          collectJpBannerSources: async () => {
+            const { collectCachedJpBannerSources } =
+              await import("./lib/jp-banner-source-cache.mjs");
+            return collectCachedJpBannerSources(
+              jpBannerCacheDir,
+              jpBannerCatalogueFile,
+            );
+          },
+        }
+      : {};
   const report = await (
     options.withBanners ? runGeneralSync : runCompleteEventSchedule
-  )(db, options, cliSourceAuthority());
+  )(db, options, cliSourceAuthority(), dependencies);
   console.log(
     JSON.stringify(
       {
@@ -84,7 +120,9 @@ async function main() {
         servantImages: report.servantImages,
         maintenance: report.maintenance,
         bannerFamilyTiming: report.bannerFamilyTiming,
-        ...("banners" in report ? { banners: report.banners } : {}),
+        ...("banners" in report
+          ? { banners: report.banners, jpBanners: report.jpBanners }
+          : {}),
       },
       null,
       2,

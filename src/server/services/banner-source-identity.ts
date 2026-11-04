@@ -1,8 +1,11 @@
+import {
+  lockSourcePublicationAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
-import { requireCurator } from "~/server/auth/curator";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 import {
   jpBannerIdentityMapSchema,
@@ -181,11 +184,13 @@ export async function previewBannerSourceIdentities(
 /** Source checks run before locks; all DB checks, bindings and audits are atomic. */
 export async function registerBannerSourceIdentities(
   database: PrismaClient,
-  actorId: string,
+  authorization: string | GlobalSourceAuthority,
   report: SourceReport,
   baseline: unknown,
   rawInput: unknown,
 ) {
+  const actorId =
+    typeof authorization === "string" ? authorization : authorization.actorId;
   const input = bannerIdentityAcceptanceSchema.parse(rawInput);
   const map = {
     version: 1,
@@ -212,8 +217,7 @@ export async function registerBannerSourceIdentities(
   );
   return database.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id"=${actorId} FOR SHARE`;
-      await requireCurator(tx, actorId);
+      await lockSourcePublicationAuthority(tx, authorization);
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
       const ids = [
         ...new Set(input.bindings.map((binding) => binding.bannerId)),

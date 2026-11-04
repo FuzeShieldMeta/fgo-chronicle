@@ -1,8 +1,12 @@
+import {
+  lockSourcePublicationAuthority,
+  requireSourceAuthority,
+  type GlobalSourceAuthority,
+} from "./global-source-authority";
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Banner, Prisma, PrismaClient } from "../../../generated/prisma";
-import { requireCurator } from "~/server/auth/curator";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 import { BANNER_SYNC_LIMITS } from "~/shared/banner-sync-config.mjs";
 import {
@@ -111,6 +115,7 @@ async function publicationRows(
   selections: Map<string, Fields>,
   report: SourceReport,
   rawTimingInput?: unknown,
+  reuseAcceptedReference = false,
 ) {
   const { byKey, byIdentity } = await loadBannerIdentityTargets(
     database,
@@ -129,6 +134,7 @@ async function publicationRows(
           ),
         },
         rawTimingInput,
+        reuseAcceptedReference,
       )
     : null;
   const byTiming = new Map(timing?.mappings.map((row) => [row.sourceKey, row]));
@@ -286,8 +292,10 @@ async function publicationRows(
       ? new Date(familyTiming.sourceInterval.endsAt)
       : null;
     const appliedAnchorStartsAt =
-      sourceStartsAt && familyTiming?.sourceFactsHash
-        ? familyTiming.referenceStartsAt
+      sourceStartsAt &&
+      familyTiming?.sourceFactsHash &&
+      familyTiming.referenceStartsAt
+        ? new Date(familyTiming.event!.effective.startsAt)
         : null;
     const sourceTiming = {
       sourceStartsAt,
@@ -363,7 +371,10 @@ export async function previewBannerSourcePublication(
   map: unknown,
   rawFields: unknown,
   rawTimingInput?: unknown,
+  automaticAuthority?: GlobalSourceAuthority,
 ) {
+  if (automaticAuthority)
+    await requireSourceAuthority(database, automaticAuthority);
   const fields = bannerPublicationFieldsSchema.parse(rawFields);
   const source = previewJpBannerIdentityMap(report, baseline, map);
   const rows = await publicationRows(
@@ -372,6 +383,7 @@ export async function previewBannerSourcePublication(
     new Map(source.mappings.map((mapping) => [mapping.sourceKey, fields])),
     report,
     rawTimingInput,
+    Boolean(automaticAuthority),
   );
   return {
     scope: "JP_BANNER_FIELD_PUBLICATION_PREVIEW" as const,
@@ -409,12 +421,25 @@ export async function previewBannerSourcePublication(
 /** Accept only selected values derived from current evidence; never insert a banner. */
 export async function publishBannerSourceValues(
   database: PrismaClient,
-  actorId: string,
+  authorization: string | GlobalSourceAuthority,
   report: SourceReport,
   baseline: unknown,
   rawInput: unknown,
 ) {
+  const actorId =
+    typeof authorization === "string" ? authorization : authorization.actorId;
+  const automatic = typeof authorization !== "string";
   const input = bannerPublicationAcceptanceSchema.parse(rawInput);
+  if (
+    automatic &&
+    input.bindings.some(
+      (binding) => binding.fields.join(",") !== "SOURCE,TIMING",
+    )
+  )
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Automatic initialization may only publish SOURCE and TIMING.",
+    });
   const map = {
     version: 1,
     mappings: input.bindings.map(
@@ -442,8 +467,7 @@ export async function publishBannerSourceValues(
   );
   return database.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id"=${actorId} FOR SHARE`;
-      await requireCurator(tx, actorId);
+      await lockSourcePublicationAuthority(tx, authorization);
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
       if (input.bindings.some((binding) => binding.fields.includes("TIMING"))) {
         const families = [
@@ -464,6 +488,7 @@ export async function publishBannerSourceValues(
             ),
           },
           input.familyAnchors,
+          automatic,
         );
         const eventIds = [
           ...new Set(
@@ -484,6 +509,7 @@ export async function publishBannerSourceValues(
         selections,
         report,
         input.familyAnchors,
+        automatic,
       );
       for (const row of rows) {
         const review = expected.get(row.mapping.sourceKey)!;

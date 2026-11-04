@@ -79,3 +79,16 @@ export async function lockSourceAuthority(
     await requireCurator(tx, authority.actorId);
   }
 }
+
+/** Manual reviews and the authenticated importer share the same publication locks. */
+export async function lockSourcePublicationAuthority(
+  tx: Prisma.TransactionClient,
+  authorization: string | GlobalSourceAuthority,
+) {
+  if (typeof authorization === "string") {
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id"=${authorization} FOR SHARE`;
+    await requireCurator(tx, authorization);
+  } else {
+    await lockSourceAuthority(tx, authorization);
+  }
+}

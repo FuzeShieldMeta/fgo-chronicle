@@ -1,4 +1,7 @@
-import { bannerAnchorSourceFactsHash } from "./banner-family-timing-reference";
+import {
+  bannerAnchorSourceFactsHash,
+  bannerWindowFromEventStart,
+} from "./banner-family-timing-reference";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "../../../generated/prisma";
@@ -123,6 +126,7 @@ export async function loadJpBannerFamilyTiming(
   report: SourceReport,
   source: SourcePreview,
   input?: unknown,
+  reuseAcceptedReference = false,
 ) {
   const anchors =
     input === undefined ? [] : jpBannerFamilyTimingSchema.parse(input).anchors;
@@ -291,7 +295,7 @@ export async function loadJpBannerFamilyTiming(
     const selected = selectJpBannerReviewPeriod(article, mapping);
     const period = selected.period;
     issues.push(...selected.issues);
-    const projection =
+    let projection =
       anchor && period && !issues.length
         ? projectJpBannerPeriods(
             [period],
@@ -300,6 +304,44 @@ export async function loadJpBannerFamilyTiming(
             launchHourJst,
           )[0]!
         : null;
+    const followsAcceptedReference = Boolean(
+      reuseAcceptedReference &&
+      storedAnchor?.referenceStartsAt &&
+      storedAnchor.sourceFactsHash &&
+      event?.sourceStartsAt &&
+      storedAnchor.anchorEventId === event.id &&
+      storedAnchor.sourceFactsHash === bannerAnchorSourceFactsHash(event) &&
+      anchor?.jpResetDay ===
+        storedAnchor.jpResetDay.toISOString().slice(0, 10) &&
+      anchor.naResetDay === storedAnchor.naResetDay.toISOString().slice(0, 10),
+    );
+    if (
+      followsAcceptedReference &&
+      projection &&
+      period?.startsAt &&
+      effective &&
+      event?.sourceStartsAt
+    ) {
+      const moved = bannerWindowFromEventStart(
+        {
+          sourceStartsAt: new Date(period.startsAt),
+          sourceEndsAt: period.endsAt ? new Date(period.endsAt) : null,
+        },
+        {
+          ...storedAnchor!,
+          referenceStartsAt: storedAnchor!.referenceStartsAt!,
+        },
+        event.sourceStartsAt,
+        effective.startsAt,
+      );
+      if (!moved) issues.push("ACCEPTED_SOURCE_WINDOW_NOT_PROJECTABLE");
+      else
+        projection = {
+          ...projection,
+          projectedStartsAt: moved.startsAt.toISOString(),
+          projectedEndsAt: moved.endsAt?.toISOString() ?? null,
+        };
+    }
     if (projection?.issues.length) issues.push(...projection.issues);
     if (projection && banner && current) {
       for (const [endpoint, candidate, value, precision, authority] of [
@@ -350,12 +392,18 @@ export async function loadJpBannerFamilyTiming(
             hidden: eventIsHidden(event),
           }
         : null;
-    const anchorFactsHash = anchorFacts
+    const currentFactsHash = anchorFacts
       ? createHash("sha256").update(JSON.stringify(anchorFacts)).digest("hex")
       : null;
     const sourceFactsHash = event ? bannerAnchorSourceFactsHash(event) : null;
-    const referenceStartsAt =
-      effective?.startsAtPrecision === "EXACT" ? effective.startsAt : null;
+    const referenceStartsAt = followsAcceptedReference
+      ? storedAnchor!.referenceStartsAt
+      : effective?.startsAtPrecision === "EXACT"
+        ? effective.startsAt
+        : null;
+    const anchorFactsHash = followsAcceptedReference
+      ? storedAnchor!.factsHash
+      : currentFactsHash;
     const anchorStatus =
       storedAnchor?.factsHash === anchorFactsHash &&
       storedAnchor?.anchorEventId === event?.id &&
@@ -371,6 +419,7 @@ export async function loadJpBannerFamilyTiming(
       .update(
         JSON.stringify({
           version: 2,
+          ...(reuseAcceptedReference ? { followsAcceptedReference } : {}),
           rule: JP_BANNER_PROJECTION_RULE,
           anchor: anchor ?? null,
           storedAnchor: storedAnchor ?? null,

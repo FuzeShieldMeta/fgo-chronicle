@@ -1,3 +1,4 @@
+import { BANNER_SYNC_LIMITS } from "~/shared/banner-sync-config.mjs";
 import { BANNER_FAMILY_TIMING_LIMITS } from "~/shared/global-reconciliation-config";
 import { env } from "~/env";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
@@ -19,6 +20,31 @@ const stageCount = z.number().int().nonnegative().safe();
 const syncReportSchema = z.object({
   runId: z.string().uuid(),
   importStatus: z.enum(["succeeded", "partial_failure"]),
+  jpBanners: z.object({
+    status: z.enum(["success", "failed"]),
+    examined: stageCount,
+    eligible: stageCount,
+    registered: stageCount,
+    initialized: stageCount,
+    unchanged: stageCount,
+    inspectedArticles: stageCount,
+    discoveryLimited: z.boolean(),
+    held: z
+      .array(
+        z.object({
+          sourceKey: z.string(),
+          bannerId: z.string().nullable(),
+          reasons: z.array(z.string()),
+        }),
+      )
+      .max(BANNER_SYNC_LIMITS.maxBanners),
+    failure: z
+      .object({
+        phase: z.enum(["COLLECTION", "QUALIFICATION", "INITIALIZATION"]),
+        familyId: z.string().nullable(),
+      })
+      .optional(),
+  }),
   banners: z.object({
     status: z.literal("success"),
     examined: stageCount,
@@ -83,6 +109,8 @@ type CronDependencies = Pick<
   | "syncBannerFamilies"
   | "downloadBanners"
   | "importBanners"
+  | "initializeJpBanners"
+  | "collectJpBannerSources"
 > & {
   database?: PrismaClient;
   now?: () => Date;
@@ -153,6 +181,8 @@ export async function handleEventScheduleCron(
         syncBannerFamilies: dependencies.syncBannerFamilies,
         downloadBanners: dependencies.downloadBanners,
         importBanners: dependencies.importBanners,
+        initializeJpBanners: dependencies.initializeJpBanners,
+        collectJpBannerSources: dependencies.collectJpBannerSources,
       },
     );
     stage = "summary";
@@ -160,7 +190,7 @@ export async function handleEventScheduleCron(
     const report = summariseEventSchedule(parsed);
     const { runId, importStatus, servants, servantImages, banners } = parsed;
     const { globalSources, maintenance } = rawReport;
-    const { bannerFamilyTiming } = parsed;
+    const { bannerFamilyTiming, jpBanners } = parsed;
     stage = "cache";
     let cacheWarmed = true;
     try {
@@ -186,6 +216,8 @@ export async function handleEventScheduleCron(
             maintenance.coverageLimited ||
             maintenance.unresolved > 0 ||
             bannerFamilyTiming.held.length > 0 ||
+            jpBanners.held.length > 0 ||
+            jpBanners.discoveryLimited ||
             servantImages.status === "unavailable"
           ? "warning"
           : "success";
@@ -200,6 +232,7 @@ export async function handleEventScheduleCron(
       globalSources,
       maintenance,
       bannerFamilyTiming,
+      jpBanners,
       servants,
       servantImages,
       banners,
