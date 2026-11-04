@@ -33,6 +33,7 @@ type Servant = {
   collectionNo: number;
   name: string;
   originalName: string;
+  aliases?: readonly string[];
   rarity: number;
   className: string;
 };
@@ -73,6 +74,14 @@ export function parseJpBannerServantCatalogue(value: unknown) {
       !/^[a-zA-Z]{1,40}$/.test(row.className)
     )
       throw new Error("Unsupported JP servant catalogue fields.");
+    const aliases: string[] = [];
+    for (const field of ["overwriteName", "originalOverwriteName"] as const) {
+      const alias = row[field];
+      if (alias === undefined) continue;
+      if (typeof alias !== "string" || !alias.trim() || alias.length > MAX_NAME)
+        throw new Error("Unsupported JP servant catalogue alternate name.");
+      if (!aliases.includes(alias.trim())) aliases.push(alias.trim());
+    }
     const existing = servants.find(
       (servant) => servant.collectionNo === row.collectionNo,
     );
@@ -85,6 +94,7 @@ export function parseJpBannerServantCatalogue(value: unknown) {
       collectionNo: row.collectionNo,
       name: row.name.trim(),
       originalName: row.originalName.trim(),
+      ...(aliases.length ? { aliases } : {}),
       rarity: row.rarity,
       className: row.className,
     });
@@ -157,6 +167,7 @@ function servantNameIndex(catalogue: readonly Servant[]) {
     for (const name of new Set([
       normalize(servant.name),
       normalize(servant.originalName),
+      ...(servant.aliases ?? []).map(normalize),
     ])) {
       const group = names.get(name) ?? [];
       if (
@@ -176,26 +187,44 @@ function lookupServantName(
   names: ReturnType<typeof servantNameIndex>,
 ) {
   const normalized = normalize(name);
-  let named = names.get(normalized) ?? [];
-  let classHint: { label: string; className: string } | null = null;
-  // An exact full name wins. Never turn an unknown costume/variant into a base name.
-  if (!named.length) {
-    const suffix = /^(.*)\(([^()]+)\)$/u.exec(normalized);
-    const className = suffix ? CLASS_SUFFIXES.get(suffix[2]!) : undefined;
-    if (suffix && className) {
-      classHint = { label: suffix[2]!, className };
-      named = (names.get(suffix[1]!) ?? []).filter(
-        (servant) => servant.className === className,
-      );
+  const exact = names.get(normalized);
+  if (exact?.length)
+    return { named: exact, classHint: null, nameParts: [normalized] };
+  // Keep the longest exact catalogue prefix, including literal variant suffixes.
+  // Each remaining parenthesis must name the same identity or constrain its class.
+  const openings = [...normalized.matchAll(/\(/gu)].map((match) => match.index);
+  for (const index of openings.reverse()) {
+    const base = normalized.slice(0, index);
+    const suffix = normalized.slice(index);
+    const prefix = names.get(base);
+    if (!prefix?.length || !/^(?:\([^()]+\))+$/u.test(suffix)) continue;
+    let named = prefix;
+    let classHint: { label: string; className: string } | null = null;
+    const nameParts = [base];
+    for (const match of suffix.matchAll(/\(([^()]+)\)/gu)) {
+      const part = match[1]!;
+      const className = CLASS_SUFFIXES.get(part);
+      if (className) {
+        classHint ??= { label: part, className };
+        named = named.filter((servant) => servant.className === className);
+      } else {
+        const aliases = names.get(part);
+        if (!aliases?.length) return { named: [], classHint, nameParts };
+        const ids = new Set(aliases.map((servant) => servant.collectionNo));
+        named = named.filter((servant) => ids.has(servant.collectionNo));
+        nameParts.push(part);
+      }
     }
+    return { named, classHint, nameParts };
   }
-  return { named, classHint };
+  return { named: [], classHint: null, nameParts: [normalized] };
 }
 
 function catalogueCandidates(servants: readonly Servant[]) {
-  return servants.map(({ collectionNo, name, rarity, className }) => ({
+  return servants.map(({ collectionNo, name, rarity, className, aliases }) => ({
     servantId: collectionNo,
     name,
+    ...(aliases?.length ? { aliases } : {}),
     rarity,
     className,
   }));
@@ -209,7 +238,10 @@ export function resolveJpBannerServantMentions(
     throw new Error("JP servant matching limit exceeded.");
   const names = servantNameIndex(catalogue);
   return mentions.map((mention) => {
-    const { named, classHint } = lookupServantName(mention.name, names);
+    const { named, classHint, nameParts } = lookupServantName(
+      mention.name,
+      names,
+    );
     const candidates = named.filter(
       (servant) => servant.rarity === mention.rarity,
     );
@@ -227,9 +259,13 @@ export function resolveJpBannerServantMentions(
       // Project IDs are collection numbers, not Atlas's internal servant IDs.
       servantId: status === "MATCHED" ? candidates[0]!.collectionNo : null,
       candidates: catalogueCandidates(candidates.length ? candidates : named),
-      matchingRule: classHint
-        ? ("EXACT_NORMALIZED_JP_NAME_RARITY_AND_CLASS" as const)
-        : ("EXACT_NORMALIZED_JP_NAME_AND_RARITY" as const),
+      ...(nameParts.length > 1 ? { catalogueNameParts: nameParts } : {}),
+      matchingRule:
+        nameParts.length > 1
+          ? ("EXACT_CATALOGUE_NAME_COMPONENTS_AND_RARITY" as const)
+          : classHint
+            ? ("EXACT_NORMALIZED_JP_NAME_RARITY_AND_CLASS" as const)
+            : ("EXACT_NORMALIZED_JP_NAME_AND_RARITY" as const),
       pickupMembershipConfirmed: false as const,
     };
   });
@@ -258,7 +294,10 @@ export function resolveJpBannerHtmlSectionNames(
   return sections.map((section) => ({
     ...section,
     names: section.names.map((member) => {
-      const { named, classHint } = lookupServantName(member.name, names);
+      const { named, classHint, nameParts } = lookupServantName(
+        member.name,
+        names,
+      );
       const identityStatus = !named.length
         ? ("NOT_FOUND" as const)
         : named.length > 1
@@ -272,9 +311,13 @@ export function resolveJpBannerHtmlSectionNames(
             identityStatus === "MATCHED" ? named[0]!.collectionNo : null,
           candidates: catalogueCandidates(named),
           classHint,
-          matchingRule: classHint
-            ? ("EXACT_NORMALIZED_JP_NAME_AND_CLASS_UNIQUE_CATALOGUE" as const)
-            : ("EXACT_NORMALIZED_JP_NAME_UNIQUE_CATALOGUE" as const),
+          ...(nameParts.length > 1 ? { catalogueNameParts: nameParts } : {}),
+          matchingRule:
+            nameParts.length > 1
+              ? ("EXACT_CATALOGUE_NAME_COMPONENTS_UNIQUE_CATALOGUE" as const)
+              : classHint
+                ? ("EXACT_NORMALIZED_JP_NAME_AND_CLASS_UNIQUE_CATALOGUE" as const)
+                : ("EXACT_NORMALIZED_JP_NAME_UNIQUE_CATALOGUE" as const),
           sourceUrl: provenance.sourceUrl,
           contentHash: provenance.contentHash,
           pickupMembershipConfirmed: false as const,
@@ -331,7 +374,10 @@ export function associateJpBannerPickupEvidence(
       const evidencedNames = [
         identity.name,
         ...(identity.status === "MATCHED"
-          ? identity.candidates.map((candidate) => candidate.name)
+          ? identity.candidates.flatMap((candidate) => [
+              candidate.name,
+              ...(candidate.aliases ?? []),
+            ])
           : []),
       ];
       for (const name of evidencedNames) {
@@ -350,7 +396,9 @@ export function associateJpBannerPickupEvidence(
             names.has(normalize(identity.name)) ||
             (identity.status === "MATCHED" &&
               identity.candidates.some((candidate) =>
-                names.has(normalize(candidate.name)),
+                [candidate.name, ...(candidate.aliases ?? [])].some((name) =>
+                  names.has(normalize(name)),
+                ),
               )),
         )
       : [];

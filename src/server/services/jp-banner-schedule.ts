@@ -99,11 +99,14 @@ export type JpBannerHtmlPickupSection = {
       candidates: {
         servantId: number;
         name: string;
+        aliases?: readonly string[];
         rarity: number;
         className: string;
       }[];
       classHint: { label: string; className: string } | null;
+      catalogueNameParts?: string[];
       matchingRule:
+        | "EXACT_CATALOGUE_NAME_COMPONENTS_UNIQUE_CATALOGUE"
         | "EXACT_NORMALIZED_JP_NAME_UNIQUE_CATALOGUE"
         | "EXACT_NORMALIZED_JP_NAME_AND_CLASS_UNIQUE_CATALOGUE";
       sourceUrl: string;
