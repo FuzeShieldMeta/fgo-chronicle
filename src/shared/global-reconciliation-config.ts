@@ -26,6 +26,14 @@ export const GLOBAL_SOURCE_LIMITS = {
   transactionRetryDelayMs: 25,
 } as const;
 
+// Catalogue size is independent of the amount locked by one timing transaction.
+export const BANNER_FAMILY_TIMING_LIMITS = {
+  familiesPerPage: 25,
+  maxMembersPerTransaction: GLOBAL_SOURCE_LIMITS.maxBatchRecords,
+  maxFamiliesPerRun: 10_000,
+  maxMembersPerRun: 10_000,
+} as const;
+
 export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   maxBodyBytes: 2 * 1_024 * 1_024,
   maxTreeNodes: 100_000,

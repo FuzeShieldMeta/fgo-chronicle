@@ -1,4 +1,4 @@
-import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
+import { BANNER_FAMILY_TIMING_LIMITS } from "~/shared/global-reconciliation-config";
 import { env } from "~/env";
 import { timelineWindows } from "~/app/timeline/_lib/progressive-timeline";
 import { getCachedTimelineWindow } from "~/server/api/routers/timeline";
@@ -45,9 +45,17 @@ const syncReportSchema = z.object({
     examined: stageCount,
     changed: stageCount,
     unchanged: stageCount,
+    failedBatch: z
+      .object({
+        familyIds: z
+          .array(z.string())
+          .max(BANNER_FAMILY_TIMING_LIMITS.familiesPerPage),
+        afterFamilyId: z.string().nullable(),
+      })
+      .optional(),
     held: z
       .array(z.object({ bannerId: z.string(), reason: z.string() }))
-      .max(GLOBAL_SOURCE_LIMITS.maxBatchRecords),
+      .max(BANNER_FAMILY_TIMING_LIMITS.maxMembersPerRun),
   }),
   atlas: z.unknown(),
   masterMissions: z.unknown(),
