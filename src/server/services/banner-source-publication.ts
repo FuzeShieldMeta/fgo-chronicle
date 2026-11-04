@@ -418,6 +418,12 @@ export async function previewBannerSourcePublication(
   };
 }
 
+/** Trusted operator checks and receipts run under the publisher's existing locks. */
+export type BannerPublicationTransactionReview = {
+  beforeWrite: (tx: Prisma.TransactionClient) => Promise<void>;
+  afterWrite: (tx: Prisma.TransactionClient) => Promise<void>;
+};
+
 /** Accept only selected values derived from current evidence; never insert a banner. */
 export async function publishBannerSourceValues(
   database: PrismaClient,
@@ -425,6 +431,7 @@ export async function publishBannerSourceValues(
   report: SourceReport,
   baseline: unknown,
   rawInput: unknown,
+  transactionReview?: BannerPublicationTransactionReview,
 ) {
   const actorId =
     typeof authorization === "string" ? authorization : authorization.actorId;
@@ -536,6 +543,7 @@ export async function publishBannerSourceValues(
               "Publication evidence, ownership or banner state changed. Refresh the preview.",
           });
       }
+      await transactionReview?.beforeWrite(tx);
       let published = 0;
       const acceptedFamilies = new Set<string>();
       for (const row of rows) {
@@ -627,6 +635,7 @@ export async function publishBannerSourceValues(
         });
         published++;
       }
+      await transactionReview?.afterWrite(tx);
       return { published, unchanged: input.bindings.length - published };
     },
     {
