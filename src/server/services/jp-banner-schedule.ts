@@ -223,12 +223,29 @@ function jst(
   ).toISOString();
 }
 
+/** Recognize only explicit servant categories; the triangle is decorative. */
+export function jpBannerPickupRosterHeading(context: string) {
+  const text = context.normalize("NFKC").trim();
+  const marked = text.startsWith("▼");
+  const label = marked ? text.slice(1) : text;
+  const match =
+    /^(?:先行登場)?(期間限定|ストーリー召喚|恒常)サーヴァント(?=\s|・|$)/u.exec(
+      label,
+    );
+  if (match)
+    return { text: `${marked ? "▼" : ""}${match[0]}`, category: match[1]! };
+  // Preserve the existing explicitly marked, unqualified heading format.
+  return marked && /^サーヴァント(?=\s|・|$)/u.test(label)
+    ? { text: "▼サーヴァント", category: "" }
+    : null;
+}
+
 function pickupRosterList(context: string, sourceUrl: string) {
   const normalized = context.normalize("NFKC").trim();
-  const header =
-    /^【ピックアップ対象】\s*▼(期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.exec(
-      normalized,
-    );
+  if (!normalized.startsWith("【ピックアップ対象】")) return null;
+  const header = jpBannerPickupRosterHeading(
+    normalized.slice("【ピックアップ対象】".length),
+  );
   if (!header) return null;
   const issues: string[] = [];
   const evidenceHash = hash([sourceUrl, "PICKUP_ROSTER_LIST", normalized]);
@@ -238,20 +255,19 @@ function pickupRosterList(context: string, sourceUrl: string) {
   for (const section of normalized
     .slice("【ピックアップ対象】".length)
     .trim()
-    .split(/(?=▼)/u)) {
+    .split(
+      /(?=▼)|(?<=\s)(?=(?:先行登場)?(?:期間限定|ストーリー召喚|恒常)サーヴァント(?:\s|・|$))/u,
+    )) {
     if (!section.trim()) continue;
-    const role =
-      /^▼(期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.exec(
-        section.trim(),
-      );
+    const role = jpBannerPickupRosterHeading(section);
     if (!role) {
       issues.push("UNSUPPORTED_PICKUP_ROSTER_ITEM");
       continue;
     }
-    categories.add(role[1] ?? "");
+    categories.add(role.category);
     const pieces = section
       .trim()
-      .slice(role[0].length)
+      .slice(role.text.length)
       .split(/(?=・\s*[★☆])/u)
       .map((piece) => piece.trim())
       .filter(Boolean);
@@ -298,11 +314,11 @@ function pickupRosterList(context: string, sourceUrl: string) {
     subset:
       categories.size > 1
         ? ("MIXED" as const)
-        : header[1] === "期間限定"
+        : header.category === "期間限定"
           ? ("LIMITED" as const)
-          : header[1] === "ストーリー召喚"
+          : header.category === "ストーリー召喚"
             ? ("STORY" as const)
-            : header[1] === "恒常"
+            : header.category === "恒常"
               ? ("PERMANENT" as const)
               : ("UNQUALIFIED" as const),
   };

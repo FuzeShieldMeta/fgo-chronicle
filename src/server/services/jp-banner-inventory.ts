@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import {
   extractJpBannerSchedule,
+  jpBannerPickupRosterHeading,
   boundJpBannerTextEvidence,
   JP_BANNER_TEXT_EVIDENCE_LIMITS,
   parseJpBannerSectionDate,
@@ -312,8 +313,9 @@ function articleScheduleBlocks(blockText: Map<Node, string>, root: Node) {
     let context = value;
     if (
       node.nodeName === "p" &&
-      /^【ピックアップ対象】\s*▼(?:期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.test(
-        value.normalize("NFKC"),
+      value.normalize("NFKC").startsWith("【ピックアップ対象】") &&
+      jpBannerPickupRosterHeading(
+        value.normalize("NFKC").slice("【ピックアップ対象】".length),
       ) &&
       "parentNode" in node &&
       node.parentNode
@@ -337,9 +339,7 @@ function articleScheduleBlocks(blockText: Map<Node, string>, root: Node) {
         if (
           sibling.nodeName !== "p" ||
           !continuation ||
-          !/^▼(?:期間限定|ストーリー召喚|恒常)?サーヴァント(?=\s|・|$)/u.test(
-            continuation.normalize("NFKC"),
-          )
+          !jpBannerPickupRosterHeading(continuation)
         )
           break;
         context += ` ${continuation}`;
