@@ -10,6 +10,13 @@ export const JP_BANNER_SERVANT_SOURCE =
 const MAX_BYTES = 8 * 1_024 * 1_024;
 const MAX_RECORDS = 2_000;
 const MAX_NAME = 200;
+const RARITY_LABELS: Readonly<Record<string, number>> = {
+  ssr: 5,
+  sr: 4,
+  r: 3,
+  uc: 2,
+  c: 1,
+};
 // Only recognized class labels may qualify a name; other variant suffixes stay intact.
 const CLASS_SUFFIXES = new Map([
   ["セイバー", "saber"],
@@ -366,7 +373,7 @@ export function associateJpBannerPickupEvidence(
     );
     // A campaign-qualified title may end in an exact evidenced name after whitespace.
     // Keep every interpretation so overlapping full names remain ambiguous.
-    const qualified = label
+    const qualified = (quotedName ? `${quotedName[1]}ピックアップ召喚` : label)
       .normalize("NFKC")
       .replace(/\s+/gu, " ")
       .toLowerCase();
@@ -386,8 +393,25 @@ export function associateJpBannerPickupEvidence(
           .trim()
           .replace(/\s+/gu, " ")
           .toLowerCase();
-        if (suffix && qualified.endsWith(` ${suffix}ピックアップ召喚`))
+        const ending = `${suffix}ピックアップ召喚`;
+        if (!suffix || !qualified.endsWith(ending)) continue;
+        const prefix = qualified.slice(0, -ending.length);
+        const rarity = /(?:^|\s)[★☆]\s*(\d+)(?:\s*\(([^()]*)\))?\s*$/u.exec(
+          prefix,
+        );
+        if (rarity) {
+          const value = Number(rarity[1]);
+          if (
+            value === identity.rarity &&
+            (rarity[2] === undefined || RARITY_LABELS[rarity[2]] === value)
+          )
+            names.add(normalize(name));
+        } else if (
+          prefix.endsWith(" ") &&
+          !/(?:^|\s)[★☆]/u.test(prefix)
+        ) {
           names.add(normalize(name));
+        }
       }
     }
     const mentioned = names.size
