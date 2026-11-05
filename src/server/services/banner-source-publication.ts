@@ -81,8 +81,10 @@ export const bannerPublicationAcceptanceSchema = bannerIdentityAcceptanceSchema
       });
   });
 type Fields = z.infer<typeof bannerPublicationFieldsSchema>;
-type Values = Pick<Banner, "name" | "sourceUrl" | "sourceRegion" | "status"> &
-  Partial<
+type Featured = { servantId: number; soloRateUp: boolean }[];
+type Values = Pick<Banner, "name" | "sourceUrl" | "sourceRegion" | "status"> & {
+  featured?: Featured;
+} & Partial<
     Pick<
       Banner,
       "startsAt" | "endsAt" | "startsAtPrecision" | "endsAtPrecision"
@@ -106,6 +108,7 @@ function ownedValues(values: Values, fields: readonly string[]) {
           endsAtPrecision: values.endsAtPrecision ?? null,
         }
       : {}),
+    ...(fields.includes("ROSTER") ? { featured: values.featured } : {}),
   };
 }
 
@@ -121,6 +124,23 @@ async function publicationRows(
     database,
     source,
   );
+  const rosterIds = [
+    ...new Set(
+      source.mappings
+        .filter((mapping) =>
+          selections.get(mapping.sourceKey)?.includes("ROSTER"),
+        )
+        .flatMap((mapping) =>
+          mapping.rosterProposal.featured.map((member) => member.servantId),
+        ),
+    ),
+  ];
+  const catalogue = rosterIds.length
+    ? await database.servant.findMany({
+        where: { id: { in: rosterIds } },
+        select: { id: true, rarity: true, className: true },
+      })
+    : [];
   const timing = [...selections.values()].some((fields) =>
     fields.includes("TIMING"),
   )
@@ -199,6 +219,7 @@ async function publicationRows(
       issues.push("REVIEW_ALL_OWNED_FIELDS");
     if (
       banner &&
+      !(fields.includes("ROSTER") && mapping.rosterReviewed) &&
       mapping.knownServantIds.some(
         (id) => !banner.featured.some((member) => member.servantId === id),
       )
@@ -263,8 +284,50 @@ async function publicationRows(
       )
         issues.push("TIMING_ANCHOR_FAMILY_CHANGED");
     }
-    if (fields.includes("ROSTER"))
-      issues.push("COMPLETE_ROSTER_EVIDENCE_REQUIRED");
+    if (fields.includes("ROSTER")) {
+      if (!mapping.rosterReviewed)
+        issues.push("COMPLETE_ROSTER_EVIDENCE_REQUIRED");
+      if (!fields.includes("SOURCE"))
+        issues.push("ROSTER_SOURCE_PROVENANCE_REQUIRED");
+      if (
+        banner &&
+        !banner.featured.some((member) =>
+          mapping.knownServantIds.includes(member.servantId),
+        )
+      )
+        issues.push("ROSTER_TARGET_IDENTITY_REVIEW_REQUIRED");
+      if (
+        banner?.hidden ||
+        banner?.summonLineups.length ||
+        banner?.family?.curation?.active ||
+        banner?.dateOverlay
+      )
+        issues.push("ROSTER_PROTECTED_OR_LINEUP_TARGET");
+      if (
+        mapping.rosterProposal.featured.some(
+          (member) =>
+            !catalogue.some(
+              (servant) =>
+                servant.id === member.servantId &&
+                servant.rarity === member.rarity &&
+                servant.className.toLowerCase() ===
+                  member.className.toLowerCase(),
+            ),
+        )
+      )
+        issues.push("ROSTER_DATABASE_CATALOGUE_REQUIRES_SYNC");
+      if (
+        !mapping.rosterReview?.acknowledgeRemovedTargets &&
+        banner?.featured.some(
+          (member) =>
+            !mapping.rosterProposal.featured.some(
+              (source) => source.servantId === member.servantId,
+            ),
+        )
+      )
+        issues.push("REMOVED_PLAN_TARGETS_REQUIRE_ACKNOWLEDGEMENT");
+    } else if (mapping.rosterReview)
+      issues.push("ROSTER_REVIEW_REQUIRES_ROSTER_PUBLICATION");
     const values = ownedValues(
       {
         name: mapping.sourceSubject ?? "",
@@ -279,10 +342,24 @@ async function publicationRows(
           : null,
         startsAtPrecision: "EXACT",
         endsAtPrecision: "EXACT",
+        featured: mapping.rosterProposal.featured.map(
+          ({ servantId, soloRateUp }) => ({ servantId, soloRateUp }),
+        ),
       },
       fields,
     );
-    const currentValues = banner ? ownedValues(banner, fields) : null;
+    const currentValues = banner
+      ? ownedValues(
+          {
+            ...banner,
+            featured: banner.featured.map(({ servantId, soloRateUp }) => ({
+              servantId,
+              soloRateUp,
+            })),
+          },
+          fields,
+        )
+      : null;
     // Date-only historical event anchors can still be reviewed/published, but
     // cannot opt into automatic following without an exact reference instant.
     const sourceStartsAt = familyTiming?.sourceInterval?.startsAt
@@ -311,6 +388,9 @@ async function publicationRows(
           periodEvidenceHash: mapping.periodEvidenceHash,
           fields,
           values,
+          ...(fields.includes("ROSTER")
+            ? { rosterReview: mapping.rosterReview }
+            : {}),
           ...(familyTiming ? { sourceTiming } : {}),
           ...(familyTiming
             ? {
@@ -397,6 +477,16 @@ export async function previewBannerSourcePublication(
       issues: row.issues,
       currentValues: row.currentValues,
       proposedValues: row.values,
+      rosterProposal: row.mapping.rosterProposal,
+      removedTargetServantIds:
+        row.banner?.featured
+          .filter(
+            (member) =>
+              !row.mapping.rosterProposal.featured.some(
+                (source) => source.servantId === member.servantId,
+              ),
+          )
+          .map((member) => member.servantId) ?? [],
       databaseFingerprint: row.databaseFingerprint,
       publicationRevision: row.ownership?.revision ?? null,
       automaticFamilyTimingEligible:
@@ -510,6 +600,19 @@ export async function publishBannerSourceValues(
         ...new Set(input.bindings.map((binding) => binding.bannerId)),
       ].sort();
       await tx.$queryRaw`SELECT "id" FROM "Banner" WHERE "id" IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)) ORDER BY "id" FOR UPDATE`;
+      const rosterIds = [
+        ...new Set(
+          source.mappings
+            .filter((mapping) =>
+              selections.get(mapping.sourceKey)?.includes("ROSTER"),
+            )
+            .flatMap((mapping) =>
+              mapping.rosterProposal.featured.map((member) => member.servantId),
+            ),
+        ),
+      ].sort((a, b) => a - b);
+      if (rosterIds.length)
+        await tx.$queryRaw`SELECT "id" FROM "Servant" WHERE "id" IN (SELECT jsonb_array_elements_text(${JSON.stringify(rosterIds)}::jsonb)::int) ORDER BY "id" FOR SHARE`;
       const rows = await publicationRows(
         tx,
         source,
@@ -592,11 +695,22 @@ export async function publishBannerSourceValues(
             });
           }
         }
-        if (JSON.stringify(row.currentValues) !== JSON.stringify(row.values))
+        const { featured, ...bannerValues } = row.values;
+        if (row.fields.includes("ROSTER")) {
+          await tx.bannerServant.deleteMany({ where: { bannerId: banner.id } });
+          await tx.bannerServant.createMany({
+            data: featured!.map((member) => ({
+              bannerId: banner.id,
+              ...member,
+            })),
+          });
+        }
+        if (JSON.stringify(row.currentValues) !== JSON.stringify(row.values)) {
           await tx.banner.update({
             where: { id: banner.id },
-            data: row.values,
+            data: bannerValues,
           });
+        }
         const revision = (row.ownership?.revision ?? 0) + 1;
         const data = {
           sourceKey: row.mapping.sourceKey,
@@ -624,10 +738,26 @@ export async function publishBannerSourceValues(
             before: auditJson({
               values: row.currentValues,
               publicationRevision: row.ownership?.revision ?? null,
+              ...(row.fields.includes("ROSTER")
+                ? { publication: row.ownership }
+                : {}),
             }),
             after: auditJson({
               values: row.values,
               ...data,
+              ...(row.fields.includes("ROSTER")
+                ? {
+                    rosterReview: row.mapping.rosterReview,
+                    removedTargetServantIds: row
+                      .banner!.featured.filter(
+                        (member) =>
+                          !row.mapping.rosterProposal.featured.some(
+                            (source) => source.servantId === member.servantId,
+                          ),
+                      )
+                      .map((member) => member.servantId),
+                  }
+                : {}),
               databaseFingerprint: expected.get(row.mapping.sourceKey)!
                 .expectedDatabaseFingerprint,
             }),

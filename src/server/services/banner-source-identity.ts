@@ -129,11 +129,35 @@ async function databasePreview(database: Database, source: SourcePreview) {
     else {
       if (!eligible(banner)) issues.push("DATABASE_TARGET_NOT_PROJECTED_JP");
       if (
+        mapping.rosterReviewed &&
+        !banner.featured.some((member) =>
+          mapping.knownServantIds.includes(member.servantId),
+        )
+      )
+        issues.push("ROSTER_TARGET_IDENTITY_REVIEW_REQUIRED");
+      if (
+        !mapping.rosterReviewed &&
         mapping.knownServantIds.some(
           (id) => !banner.featured.some((member) => member.servantId === id),
         )
       )
         issues.push("DATABASE_PICKUP_MEMBER_ABSENT");
+      if (
+        mapping.rosterReviewed &&
+        (banner.hidden ||
+          banner.summonLineups.length ||
+          banner.family?.curation?.active ||
+          banner.dateOverlay)
+      )
+        issues.push("ROSTER_PROTECTED_OR_LINEUP_TARGET");
+      if (
+        mapping.rosterReviewed &&
+        !mapping.rosterReview?.acknowledgeRemovedTargets &&
+        banner.featured.some(
+          (member) => !mapping.knownServantIds.includes(member.servantId),
+        )
+      )
+        issues.push("REMOVED_PLAN_TARGETS_REQUIRE_ACKNOWLEDGEMENT");
       if (collision && collision.id !== banner.id)
         issues.push("DATABASE_BASE_KEY_COLLISION");
       if (identity && identity.bannerId !== banner.id)
@@ -149,6 +173,15 @@ async function databasePreview(database: Database, source: SourcePreview) {
     return {
       ...mapping,
       bannerId: banner?.id ?? null,
+      removedTargetServantIds:
+        banner?.featured
+          .filter(
+            (member) =>
+              !mapping.rosterProposal.featured.some(
+                (source) => source.servantId === member.servantId,
+              ),
+          )
+          .map((member) => member.servantId) ?? [],
       databaseFingerprint: banner ? bannerDatabaseFingerprint(banner) : null,
       registrationStatus: issues.length
         ? ("HELD" as const)
@@ -192,6 +225,14 @@ export async function registerBannerSourceIdentities(
   const actorId =
     typeof authorization === "string" ? authorization : authorization.actorId;
   const input = bannerIdentityAcceptanceSchema.parse(rawInput);
+  if (
+    typeof authorization !== "string" &&
+    input.bindings.some((binding) => binding.rosterReview)
+  )
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Roster identity adoption requires a curator review.",
+    });
   const map = {
     version: 1,
     mappings: input.bindings.map(
@@ -265,6 +306,12 @@ export async function registerBannerSourceIdentities(
               articleContentHash: identity.articleContentHash,
               periodEvidenceHash: identity.periodEvidenceHash,
               databaseFingerprint: binding.expectedDatabaseFingerprint,
+              ...(mapping.rosterReview
+                ? {
+                    rosterReview: mapping.rosterReview,
+                    proposedRoster: mapping.rosterProposal.featured,
+                  }
+                : {}),
             },
           },
         });

@@ -99,9 +99,27 @@ export async function importBannerDataset(
             : {}),
         };
       });
+      // Catalogue metadata for announcement-owned members must not regress to sheet values.
+      const rosterMembers = await tx.servant.findMany({
+        where: {
+          id: { in: servants.map((servant) => servant.id) },
+          banners: {
+            some: {
+              banner: { sourcePublication: { ownedFields: { has: "ROSTER" } } },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      const ownedMemberIds = new Set(
+        rosterMembers.map((servant) => servant.id),
+      );
+      const sourceServants = servants.filter(
+        (servant) => !ownedMemberIds.has(servant.id),
+      );
       await tx.$executeRaw`INSERT INTO "Servant" ("id","name","className","rarity","faceId")
       SELECT x."id",x."name",x."className",x."rarity",x."faceId"
-      FROM jsonb_to_recordset(${JSON.stringify(servants)}::jsonb) AS x("id" INT,"name" TEXT,"className" TEXT,"rarity" INT,"faceId" INT)
+      FROM jsonb_to_recordset(${JSON.stringify(sourceServants)}::jsonb) AS x("id" INT,"name" TEXT,"className" TEXT,"rarity" INT,"faceId" INT)
       ORDER BY x."id"
       ON CONFLICT ("id") DO UPDATE SET "name"=EXCLUDED."name","className"=EXCLUDED."className","rarity"=EXCLUDED."rarity","faceId"=COALESCE(EXCLUDED."faceId","Servant"."faceId")
       WHERE ("Servant"."name","Servant"."className","Servant"."rarity","Servant"."faceId") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."className",EXCLUDED."rarity",COALESCE(EXCLUDED."faceId","Servant"."faceId"))`;
@@ -129,6 +147,12 @@ export async function importBannerDataset(
       ) =>
         JSON.stringify([...featured].sort((a, b) => a.servantId - b.servantId));
       const changes = banners.flatMap((banner) => {
+        if (
+          owners
+            .get(bannerSourceKey(banner))
+            ?.sourcePublication?.ownedFields.includes("ROSTER")
+        )
+          return [];
         const savedBanner = keyToBanner.get(bannerSourceKey(banner))!;
         const featured = banner.servants.map((servant) => ({
           servantId: servant.id,
@@ -164,7 +188,9 @@ export async function importBannerDataset(
         if (
           owners
             .get(bannerSourceKey(banner))
-            ?.sourcePublication?.ownedFields.includes("TIMING")
+            ?.sourcePublication?.ownedFields.some(
+              (field) => field === "TIMING" || field === "ROSTER",
+            )
         ) {
           const desired = banner.summonLineups.map((lineup) => ({
             ...lineup,
@@ -179,7 +205,11 @@ export async function importBannerDataset(
             heldLineupChanges.push({
               bannerId: savedBanner.id,
               sourceKey: bannerSourceKey(banner),
-              reason: "TIMING_OWNED_LINEUP_REQUIRES_REVIEW",
+              reason: owners
+                .get(bannerSourceKey(banner))
+                ?.sourcePublication?.ownedFields.includes("ROSTER")
+                ? "ROSTER_OWNED_LINEUP_REQUIRES_REVIEW"
+                : "TIMING_OWNED_LINEUP_REQUIRES_REVIEW",
             });
           continue;
         }

@@ -8,6 +8,7 @@ import {
 } from "./banner-dataset";
 import type { inventoryJpBannerAnnouncements } from "./jp-banner-inventory";
 import { JP_BANNER_SERVANT_SOURCE } from "./jp-banner-servants";
+import { previewJpBannerRoster } from "./jp-banner-roster";
 
 const MEBIBYTE = 1_024 * 1_024;
 export const JP_BANNER_IDENTITY_LIMITS = {
@@ -32,6 +33,15 @@ export const jpBannerIdentityMapSchema = z
             sourceUrl: z.url().max(BANNER_SYNC_LIMITS.maxTextCharacters),
             articleContentHash: digest,
             periodEvidenceHash: digest,
+            rosterReview: z
+              .object({
+                evidenceHash: digest,
+                confirmCompleteRoster: z.literal(true),
+                rateRule: z.literal("STANDARD_RATE_UP"),
+                acknowledgeRemovedTargets: z.boolean(),
+              })
+              .strict()
+              .optional(),
             htmlSection: z
               .object({
                 sectionId: z
@@ -199,6 +209,19 @@ export function previewJpBannerIdentityMap(
     const { period, section } = selected;
     issues.push(...selected.issues);
     const isSection = Boolean(mapping.htmlSection);
+    const rosterProposal = previewJpBannerRoster(
+      report,
+      inspection,
+      mapping.periodEvidenceHash,
+    );
+    const rosterReviewed = Boolean(
+      mapping.rosterReview &&
+      !isSection &&
+      rosterProposal.status === "REQUIRES_ROSTER_REVIEW" &&
+      mapping.rosterReview.evidenceHash === rosterProposal.evidenceHash,
+    );
+    if (mapping.rosterReview && !rosterReviewed)
+      issues.push("ROSTER_REVIEW_EVIDENCE_CHANGED_OR_UNSUPPORTED");
     const windows =
       inspection?.pickupEvidence?.windows.filter(
         (window) => window.periodEvidenceHash === mapping.periodEvidenceHash,
@@ -286,6 +309,12 @@ export function previewJpBannerIdentityMap(
       if (target.sourceSchedule !== "JP" || target.status !== "PROJECTED")
         issues.push("TARGET_NOT_PROJECTED_JP");
       if (
+        rosterReviewed &&
+        !target.servants.some((member) => knownServantIds.includes(member.id))
+      )
+        issues.push("ROSTER_TARGET_IDENTITY_REVIEW_REQUIRED");
+      if (
+        !rosterReviewed &&
         knownServantIds.some(
           (id) => !target.servants.some((member) => member.id === id),
         )
@@ -297,6 +326,21 @@ export function previewJpBannerIdentityMap(
       mapping.sourceKey !== mapping.targetSourceKey
     )
       issues.push("PICKUP_IDENTITY_ALREADY_USED_BY_OTHER_TARGET");
+    const removedTargetServantIds =
+      target?.servants
+        .filter(
+          (member) =>
+            !rosterProposal.featured.some(
+              (source) => source.servantId === member.id,
+            ),
+        )
+        .map((member) => member.id) ?? [];
+    if (
+      rosterReviewed &&
+      removedTargetServantIds.length &&
+      !mapping.rosterReview?.acknowledgeRemovedTargets
+    )
+      issues.push("REMOVED_PLAN_TARGETS_REQUIRE_ACKNOWLEDGEMENT");
     const projection = isSection
       ? inspection?.naProjection?.htmlSectionWindows.find(
           (candidate) =>
@@ -318,6 +362,10 @@ export function previewJpBannerIdentityMap(
         ? ["HTML_SECTION_REGISTRATION_UNSUPPORTED"]
         : [],
       sectionNames: section?.names ?? [],
+      rosterProposal,
+      rosterReviewed,
+      ...(mapping.rosterReview ? { rosterReview: mapping.rosterReview } : {}),
+      removedTargetServantIds,
       sourceUrl: mapping.sourceUrl,
       periodEvidenceHash: mapping.periodEvidenceHash,
       targetSourceKey: mapping.targetSourceKey,
