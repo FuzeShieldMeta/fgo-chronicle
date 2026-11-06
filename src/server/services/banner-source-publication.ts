@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { Banner, Prisma, PrismaClient } from "../../../generated/prisma";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
 import { BANNER_SYNC_LIMITS } from "~/shared/banner-sync-config.mjs";
+import { servantClassKey } from "~/shared/servant-class.mjs";
 import {
   JP_BANNER_IDENTITY_LIMITS,
   previewJpBannerIdentityMap,
@@ -310,8 +311,8 @@ async function publicationRows(
               (servant) =>
                 servant.id === member.servantId &&
                 servant.rarity === member.rarity &&
-                servant.className.toLowerCase() ===
-                  member.className.toLowerCase(),
+                servantClassKey(servant.className) ===
+                  servantClassKey(member.className),
             ),
         )
       )

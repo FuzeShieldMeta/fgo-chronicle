@@ -45,6 +45,7 @@ export async function syncServantImages(
   // Unconfigured deployments continue to use Atlas and do not need Storage queries.
   if (!store) return report;
   const servants = await database.servant.findMany({
+    where: { OR: [{ banners: { some: {} } }, { lineups: { some: {} } }] },
     select: { id: true, faceId: true, thumbnailPath: true },
   });
   report.examined = servants.length;

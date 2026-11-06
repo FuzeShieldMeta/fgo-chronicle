@@ -99,20 +99,27 @@ export async function importBannerDataset(
             : {}),
         };
       });
-      // Catalogue metadata for announcement-owned members must not regress to sheet values.
-      const rosterMembers = await tx.servant.findMany({
+      // NA availability is resolved only by catalogue sync; false is also catalogue-backed.
+      const metadataOwners = await tx.servant.findMany({
         where: {
           id: { in: servants.map((servant) => servant.id) },
-          banners: {
-            some: {
-              banner: { sourcePublication: { ownedFields: { has: "ROSTER" } } },
+          OR: [
+            { atlasNaAvailable: { not: null } },
+            {
+              banners: {
+                some: {
+                  banner: {
+                    sourcePublication: { ownedFields: { has: "ROSTER" } },
+                  },
+                },
+              },
             },
-          },
+          ],
         },
         select: { id: true },
       });
       const ownedMemberIds = new Set(
-        rosterMembers.map((servant) => servant.id),
+        metadataOwners.map((servant) => servant.id),
       );
       const sourceServants = servants.filter(
         (servant) => !ownedMemberIds.has(servant.id),
@@ -122,7 +129,8 @@ export async function importBannerDataset(
       FROM jsonb_to_recordset(${JSON.stringify(sourceServants)}::jsonb) AS x("id" INT,"name" TEXT,"className" TEXT,"rarity" INT,"faceId" INT)
       ORDER BY x."id"
       ON CONFLICT ("id") DO UPDATE SET "name"=EXCLUDED."name","className"=EXCLUDED."className","rarity"=EXCLUDED."rarity","faceId"=COALESCE(EXCLUDED."faceId","Servant"."faceId")
-      WHERE ("Servant"."name","Servant"."className","Servant"."rarity","Servant"."faceId") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."className",EXCLUDED."rarity",COALESCE(EXCLUDED."faceId","Servant"."faceId"))`;
+      WHERE "Servant"."atlasNaAvailable" IS NULL
+        AND ("Servant"."name","Servant"."className","Servant"."rarity","Servant"."faceId") IS DISTINCT FROM (EXCLUDED."name",EXCLUDED."className",EXCLUDED."rarity",COALESCE(EXCLUDED."faceId","Servant"."faceId"))`;
       const changedBanners =
         await tx.$executeRaw`INSERT INTO "Banner" ("id","sourceKey","name","startsAt","endsAt","startsAtPrecision","endsAtPrecision","status","sourceRegion","sourceUrl","updatedAt")
       SELECT x."id",x."sourceKey",x."name",x."startsAt",x."endsAt",x."startsAtPrecision"::"ScheduleTimePrecision",x."endsAtPrecision"::"ScheduleTimePrecision",x."status"::"ScheduleStatus",x."sourceRegion",x."sourceUrl",CURRENT_TIMESTAMP

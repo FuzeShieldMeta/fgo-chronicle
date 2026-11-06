@@ -1,10 +1,15 @@
+import { servantClassLabel } from "../../src/shared/servant-class.mjs";
+
+const MAX_DATABASE_INTEGER = 2_147_483_647;
+const MAX_NAME_CHARACTERS = 200;
+
 export const atlasJpServantCatalogueUrl =
   "https://api.atlasacademy.io/export/JP/basic_servant_lang_en.json";
 export const atlasNaServantCatalogueUrl =
   "https://api.atlasacademy.io/export/NA/basic_servant.json";
 
 /**
- * @typedef {{ name: string, rarity: number, faceId: number | null }} AtlasServantSummary
+ * @typedef {{ name: string, className: string, rarity: number, faceId: number | null }} AtlasServantSummary
  */
 
 /**
@@ -23,13 +28,31 @@ export function parseAtlasServantCatalogue(value) {
     const record = /** @type {Record<string, unknown>} */ (item);
     const collectionNo = record.collectionNo;
     const rarity = record.rarity;
-    if (
-      typeof collectionNo !== "number" ||
-      !Number.isSafeInteger(collectionNo) ||
-      collectionNo <= 0
-    ) {
+    if (typeof collectionNo !== "number" || collectionNo <= 0) {
       continue;
     }
+    if (
+      !Number.isSafeInteger(collectionNo) ||
+      collectionNo > MAX_DATABASE_INTEGER
+    )
+      throw new TypeError(
+        "Atlas returned an invalid servant collection number.",
+      );
+    if (
+      typeof record.name !== "string" ||
+      !record.name.trim() ||
+      record.name.length > MAX_NAME_CHARACTERS
+    )
+      throw new TypeError(`Atlas Servant ${collectionNo} has an invalid name.`);
+    if (
+      typeof record.className !== "string" ||
+      !/^[a-zA-Z][a-zA-Z0-9]{0,39}$/u.test(record.className)
+    )
+      throw new TypeError(
+        `Atlas Servant ${collectionNo} has an invalid class.`,
+      );
+    const name = record.name.trim();
+    const className = servantClassLabel(record.className);
     if (
       typeof rarity !== "number" ||
       !Number.isInteger(rarity) ||
@@ -52,7 +75,7 @@ export function parseAtlasServantCatalogue(value) {
       parsedFace !== null &&
       Number.isInteger(parsedFace) &&
       parsedFace > 0 &&
-      parsedFace <= 2_147_483_647
+      parsedFace <= MAX_DATABASE_INTEGER
         ? parsedFace
         : null;
     const existing = catalogue.get(collectionNo);
@@ -61,6 +84,13 @@ export function parseAtlasServantCatalogue(value) {
         `Atlas Servant ${collectionNo} has conflicting rarities.`,
       );
     }
+    if (
+      existing &&
+      (existing.name !== name || existing.className !== className)
+    )
+      throw new Error(
+        `Atlas Servant ${collectionNo} has conflicting identity metadata.`,
+      );
     if (existing?.faceId && faceId && existing.faceId !== faceId) {
       throw new Error(
         `Atlas Servant ${collectionNo} has conflicting thumbnails.`,
@@ -68,10 +98,8 @@ export function parseAtlasServantCatalogue(value) {
     }
     catalogue.set(collectionNo, {
       faceId: faceId ?? existing?.faceId ?? null,
-      name:
-        typeof record.name === "string" && record.name.trim()
-          ? record.name.trim()
-          : `Servant ${collectionNo}`,
+      name,
+      className,
       rarity,
     });
   }

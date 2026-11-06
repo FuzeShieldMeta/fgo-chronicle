@@ -1,7 +1,7 @@
 import { Prisma } from "../../../generated/prisma";
 import { downloadAtlasServantCatalogues } from "../../../scripts/lib/atlas-servant-catalogue.mjs";
 
-// Banner imports own names/classes. Missing entries never remove saved faces.
+// A resolved NA flag (including false) identifies catalogue-backed metadata to banner imports.
 export async function syncServantCatalogue(
   database: { $executeRaw: (query: Prisma.Sql) => PromiseLike<number> },
   dryRun: boolean,
@@ -11,20 +11,24 @@ export async function syncServantCatalogue(
   if (!catalogue.size)
     throw new Error("Atlas returned an empty servant catalogue.");
   if (dryRun) return { examined: catalogue.size, updated: 0 };
-  const values = [...catalogue].map(
-    ([id, servant]) =>
-      Prisma.sql`(${id}::integer, ${servant.rarity}::integer, ${servant.faceId}::integer, ${servant.atlasNaAvailable}::boolean)`,
-  );
+  const values = [...catalogue]
+    .sort(([a], [b]) => a - b)
+    .map(
+      ([id, servant]) =>
+        Prisma.sql`(${id}::integer, ${servant.name}::text, ${servant.className}::text, ${servant.rarity}::integer, ${servant.faceId}::integer, ${servant.atlasNaAvailable}::boolean)`,
+    );
   const updated = await database.$executeRaw(Prisma.sql`
-    UPDATE "public"."Servant" AS servant
-    SET "rarity" = incoming.rarity,
-        "faceId" = COALESCE(incoming.face_id, servant."faceId"),
-        "atlasNaAvailable" = incoming.na_available
-    FROM (VALUES ${Prisma.join(values)}) AS incoming(id, rarity, face_id, na_available)
-    WHERE servant.id = incoming.id
-      AND (servant."rarity" IS DISTINCT FROM incoming.rarity
-        OR servant."faceId" IS DISTINCT FROM COALESCE(incoming.face_id, servant."faceId")
-        OR servant."atlasNaAvailable" IS DISTINCT FROM incoming.na_available)
+    INSERT INTO "public"."Servant" AS servant ("id", "name", "className", "rarity", "faceId", "atlasNaAvailable")
+    SELECT * FROM (VALUES ${Prisma.join(values)}) AS incoming(id, name, class_name, rarity, face_id, na_available)
+    ORDER BY id
+    ON CONFLICT ("id") DO UPDATE
+    SET "name" = EXCLUDED."name",
+        "className" = EXCLUDED."className",
+        "rarity" = EXCLUDED."rarity",
+        "faceId" = COALESCE(EXCLUDED."faceId", servant."faceId"),
+        "atlasNaAvailable" = EXCLUDED."atlasNaAvailable"
+    WHERE (servant."name", servant."className", servant."rarity", servant."faceId", servant."atlasNaAvailable")
+      IS DISTINCT FROM (EXCLUDED."name", EXCLUDED."className", EXCLUDED."rarity", COALESCE(EXCLUDED."faceId", servant."faceId"), EXCLUDED."atlasNaAvailable")
   `);
   return { examined: catalogue.size, updated };
 }
