@@ -14,6 +14,7 @@ const MEBIBYTE = 1_024 * 1_024;
 export const JP_BANNER_IDENTITY_LIMITS = {
   maxFileBytes: MEBIBYTE,
   maxMappings: 200,
+  maxRegistryIdentities: 20_000,
   maxTargetKeyCharacters:
     BANNER_SYNC_LIMITS.maxTextCharacters + ":YYYY-MM-DD:YYYY-MM-DD".length,
 } as const;
@@ -153,6 +154,146 @@ export function jpBannerIdentityTargetHash(
     .digest("hex");
 }
 
+export const jpBannerSourceSelectionSchema =
+  jpBannerIdentityMapSchema.shape.mappings.element.omit({
+    targetSourceKey: true,
+    targetContentHash: true,
+  });
+type SourceSelection = z.infer<typeof jpBannerSourceSelectionSchema>;
+
+/** Source-only checks shared by baseline review and database-ID adoption. */
+export function inspectJpBannerIdentitySource(
+  report: Awaited<ReturnType<typeof inventoryJpBannerAnnouncements>>,
+  mapping: SourceSelection,
+) {
+  const issues: string[] = [];
+  const articles = report.articles.filter(
+    (article) => article.url === mapping.sourceUrl,
+  );
+  const inspection = articles.length === 1 ? articles[0]!.inspection : null;
+  if (!inspection) issues.push("SOURCE_NOT_UNIQUELY_INSPECTED");
+  else {
+    if (inspection.contentHash !== mapping.articleContentHash)
+      issues.push("ARTICLE_CONTENT_CHANGED");
+    if (inspection.kind !== "SUMMON_CONTENT" || inspection.restrictionEvidence)
+      issues.push("SOURCE_NOT_ELIGIBLE");
+  }
+  const selected = selectJpBannerReviewPeriod(inspection, mapping);
+  const { period, section } = selected;
+  issues.push(...selected.issues);
+  const isSection = Boolean(mapping.htmlSection);
+  const rosterProposal = previewJpBannerRoster(
+    report,
+    inspection,
+    mapping.periodEvidenceHash,
+  );
+  const rosterReviewed = Boolean(
+    mapping.rosterReview &&
+    !isSection &&
+    rosterProposal.status === "REQUIRES_ROSTER_REVIEW" &&
+    mapping.rosterReview.evidenceHash === rosterProposal.evidenceHash,
+  );
+  if (mapping.rosterReview && !rosterReviewed)
+    issues.push("ROSTER_REVIEW_EVIDENCE_CHANGED_OR_UNSUPPORTED");
+  const windows =
+    inspection?.pickupEvidence?.windows.filter(
+      (window) => window.periodEvidenceHash === mapping.periodEvidenceHash,
+    ) ?? [];
+  const window = !isSection && windows.length === 1 ? windows[0] : null;
+  if (!period || (!isSection && !window))
+    issues.push("PICKUP_EVIDENCE_NOT_UNIQUE_OR_UNAVAILABLE");
+  if (isSection) {
+    if (!section?.names.length) issues.push("NO_RESOLVED_SECTION_NAMES");
+    if (section?.issues.length) issues.push("PICKUP_EVIDENCE_UNRESOLVED");
+    if (
+      section?.names.some(
+        (member) =>
+          member.identityStatus !== "MATCHED" ||
+          member.catalogueIdentity?.servantId == null,
+      )
+    )
+      issues.push("SECTION_NAME_IDENTITIES_UNRESOLVED");
+    if (
+      report.servantCatalogue.status !== "SUCCEEDED" ||
+      report.servantCatalogue.contentHash !==
+        mapping.htmlSection!.catalogueContentHash ||
+      section?.names.some(
+        (member) =>
+          member.catalogueIdentity?.contentHash !==
+            mapping.htmlSection!.catalogueContentHash ||
+          member.catalogueIdentity?.sourceUrl !== JP_BANNER_SERVANT_SOURCE,
+      )
+    )
+      issues.push("SECTION_CATALOGUE_EVIDENCE_CHANGED");
+    if (
+      inspection?.schedule.pendingEvidence.includes(
+        "INCOMPLETE_ARTICLE_EVIDENCE",
+      )
+    )
+      issues.push("INCOMPLETE_ARTICLE_EVIDENCE");
+  } else {
+    const namedPickup = window?.associations.some(
+      (member) =>
+        member.basis === "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY",
+    );
+    const ambiguousEnvelope =
+      period?.scope === "ARTICLE_ENVELOPE" &&
+      inspection?.schedule.pendingEvidence.some(
+        (issue) =>
+          issue === "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED" ||
+          issue === "IMAGE_SCHEDULE_UNINTERPRETED",
+      );
+    if (
+      !namedPickup ||
+      ambiguousEnvelope ||
+      (period?.scope !== "LABELLED_SUMMON" &&
+        period?.scope !== "ARTICLE_ENVELOPE")
+    )
+      issues.push("INDIVIDUAL_PICKUP_NOT_ESTABLISHED");
+    if (period?.issues.length || window?.issues.length)
+      issues.push("PICKUP_EVIDENCE_UNRESOLVED");
+  }
+  const knownServantIds = [
+    ...new Set(
+      isSection
+        ? (section?.names.flatMap((member) =>
+            member.identityStatus === "MATCHED" &&
+            member.catalogueIdentity?.servantId != null
+              ? [member.catalogueIdentity.servantId]
+              : [],
+          ) ?? [])
+        : (window?.associations.map((member) => member.servantId) ?? []),
+    ),
+  ].sort((a, b) => a - b);
+  if (!knownServantIds.length)
+    issues.push(
+      isSection ? "NO_RESOLVED_SECTION_NAMES" : "NO_VERIFIED_PICKUP_MEMBERSHIP",
+    );
+  const projection = isSection
+    ? inspection?.naProjection?.htmlSectionWindows.find(
+        (candidate) =>
+          candidate.sectionId === mapping.htmlSection!.sectionId &&
+          candidate.sectionEvidenceHash ===
+            mapping.htmlSection!.sectionEvidenceHash,
+      )
+    : inspection?.naProjection?.windows.find(
+        (candidate) =>
+          candidate.periodEvidenceHash === mapping.periodEvidenceHash,
+      );
+  return {
+    inspection,
+    period,
+    section,
+    isSection,
+    rosterProposal,
+    rosterReviewed,
+    window,
+    knownServantIds,
+    projection,
+    issues,
+  };
+}
+
 /** Explicit proposed bindings only. No fuzzy matching, fetching, rekeying or publication. */
 export function previewJpBannerIdentityMap(
   report: Awaited<ReturnType<typeof inventoryJpBannerAnnouncements>>,
@@ -191,113 +332,19 @@ export function previewJpBannerIdentityMap(
     if (duplicateIdentity(mapping)) issues.push("DUPLICATE_PICKUP_IDENTITY");
     if (duplicateTarget(mapping)) issues.push("DUPLICATE_TARGET_ASSIGNMENT");
     if (duplicateSource(mapping)) issues.push("DUPLICATE_SOURCE_ASSIGNMENT");
-    const articles = report.articles.filter(
-      (article) => article.url === mapping.sourceUrl,
-    );
-    const inspection = articles.length === 1 ? articles[0]!.inspection : null;
-    if (!inspection) issues.push("SOURCE_NOT_UNIQUELY_INSPECTED");
-    else {
-      if (inspection.contentHash !== mapping.articleContentHash)
-        issues.push("ARTICLE_CONTENT_CHANGED");
-      if (
-        inspection.kind !== "SUMMON_CONTENT" ||
-        inspection.restrictionEvidence
-      )
-        issues.push("SOURCE_NOT_ELIGIBLE");
-    }
-    const selected = selectJpBannerReviewPeriod(inspection, mapping);
-    const { period, section } = selected;
-    issues.push(...selected.issues);
-    const isSection = Boolean(mapping.htmlSection);
-    const rosterProposal = previewJpBannerRoster(
-      report,
+    const evidence = inspectJpBannerIdentitySource(report, mapping);
+    const {
       inspection,
-      mapping.periodEvidenceHash,
-    );
-    const rosterReviewed = Boolean(
-      mapping.rosterReview &&
-      !isSection &&
-      rosterProposal.status === "REQUIRES_ROSTER_REVIEW" &&
-      mapping.rosterReview.evidenceHash === rosterProposal.evidenceHash,
-    );
-    if (mapping.rosterReview && !rosterReviewed)
-      issues.push("ROSTER_REVIEW_EVIDENCE_CHANGED_OR_UNSUPPORTED");
-    const windows =
-      inspection?.pickupEvidence?.windows.filter(
-        (window) => window.periodEvidenceHash === mapping.periodEvidenceHash,
-      ) ?? [];
-    const window = !isSection && windows.length === 1 ? windows[0] : null;
-    if (!period || (!isSection && !window))
-      issues.push("PICKUP_EVIDENCE_NOT_UNIQUE_OR_UNAVAILABLE");
-    if (isSection) {
-      if (!section?.names.length) issues.push("NO_RESOLVED_SECTION_NAMES");
-      if (section?.issues.length) issues.push("PICKUP_EVIDENCE_UNRESOLVED");
-      if (
-        section?.names.some(
-          (member) =>
-            member.identityStatus !== "MATCHED" ||
-            member.catalogueIdentity?.servantId == null,
-        )
-      )
-        issues.push("SECTION_NAME_IDENTITIES_UNRESOLVED");
-      if (
-        report.servantCatalogue.status !== "SUCCEEDED" ||
-        report.servantCatalogue.contentHash !==
-          mapping.htmlSection!.catalogueContentHash ||
-        section?.names.some(
-          (member) =>
-            member.catalogueIdentity?.contentHash !==
-              mapping.htmlSection!.catalogueContentHash ||
-            member.catalogueIdentity?.sourceUrl !== JP_BANNER_SERVANT_SOURCE,
-        )
-      )
-        issues.push("SECTION_CATALOGUE_EVIDENCE_CHANGED");
-      if (
-        inspection?.schedule.pendingEvidence.includes(
-          "INCOMPLETE_ARTICLE_EVIDENCE",
-        )
-      )
-        issues.push("INCOMPLETE_ARTICLE_EVIDENCE");
-    } else {
-      const namedPickup = window?.associations.some(
-        (member) =>
-          member.basis === "EXACT_NAMED_PICKUP_PERIOD_AND_CATALOGUE_IDENTITY",
-      );
-      const ambiguousEnvelope =
-        period?.scope === "ARTICLE_ENVELOPE" &&
-        inspection?.schedule.pendingEvidence.some(
-          (issue) =>
-            issue === "INDIVIDUAL_PICKUP_WINDOWS_UNRESOLVED" ||
-            issue === "IMAGE_SCHEDULE_UNINTERPRETED",
-        );
-      if (
-        !namedPickup ||
-        ambiguousEnvelope ||
-        (period?.scope !== "LABELLED_SUMMON" &&
-          period?.scope !== "ARTICLE_ENVELOPE")
-      )
-        issues.push("INDIVIDUAL_PICKUP_NOT_ESTABLISHED");
-      if (period?.issues.length || window?.issues.length)
-        issues.push("PICKUP_EVIDENCE_UNRESOLVED");
-    }
-    const knownServantIds = [
-      ...new Set(
-        isSection
-          ? (section?.names.flatMap((member) =>
-              member.identityStatus === "MATCHED" &&
-              member.catalogueIdentity?.servantId != null
-                ? [member.catalogueIdentity.servantId]
-                : [],
-            ) ?? [])
-          : (window?.associations.map((member) => member.servantId) ?? []),
-      ),
-    ].sort((a, b) => a - b);
-    if (!knownServantIds.length)
-      issues.push(
-        isSection
-          ? "NO_RESOLVED_SECTION_NAMES"
-          : "NO_VERIFIED_PICKUP_MEMBERSHIP",
-      );
+      period,
+      section,
+      isSection,
+      rosterProposal,
+      rosterReviewed,
+      window,
+      knownServantIds,
+      projection,
+    } = evidence;
+    issues.push(...evidence.issues);
     const target = targets.get(mapping.targetSourceKey);
     const targetContentHash = target
       ? jpBannerIdentityTargetHash(target)
@@ -341,17 +388,6 @@ export function previewJpBannerIdentityMap(
       !mapping.rosterReview?.acknowledgeRemovedTargets
     )
       issues.push("REMOVED_PLAN_TARGETS_REQUIRE_ACKNOWLEDGEMENT");
-    const projection = isSection
-      ? inspection?.naProjection?.htmlSectionWindows.find(
-          (candidate) =>
-            candidate.sectionId === mapping.htmlSection!.sectionId &&
-            candidate.sectionEvidenceHash ===
-              mapping.htmlSection!.sectionEvidenceHash,
-        )
-      : inspection?.naProjection?.windows.find(
-          (candidate) =>
-            candidate.periodEvidenceHash === mapping.periodEvidenceHash,
-        );
     return {
       sourceKey: mapping.sourceKey,
       sourceEvidenceKind: isSection

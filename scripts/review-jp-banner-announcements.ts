@@ -22,6 +22,10 @@ import {
 } from "../src/server/services/jp-banner-identity";
 import {
   bannerIdentityAcceptanceSchema,
+  bannerSourceAdoptionMapSchema,
+  bannerSourceAdoptionAcceptanceSchema,
+  previewBannerSourceAdoptions,
+  adoptBannerSourceIdentities,
   previewBannerSourceIdentities,
   registerBannerSourceIdentities,
 } from "../src/server/services/banner-source-identity";
@@ -85,6 +89,9 @@ try {
       "Database discovery: --discover-database --resolve-servants --project-na requires DATABASE_URL and enumerates current banners, including hidden/official/curated records, without a spreadsheet. Registered evidence takes precedence; source changes and overlap remain review hints. Unmatched does not authorise creation. It runs in a read-only snapshot and cannot be combined with baseline, identity or publication modes. No writes or cron activation.",
     );
     console.log(
+      "Database adoption: --adoption-map=LOCAL_MAP.json --resolve-servants reviews existing banner IDs without --compare or CSV target hashes. Bindings pin source hashes and require explicit rosterReview. The preview returns database fingerprints; --accept-adoptions=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID registers only those reviewed bindings with native locks and audits. Acceptance must match the selected map and current database state. No public fields, plans, creation or cron changes. Cannot combine with other database modes; review URLs never select source requests.",
+    );
+    console.log(
       "Database identity review: --database-preview requires --identity-map and an explicitly configured DATABASE_URL. It reads current target IDs and database fingerprints without writes. --accept-identities=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID additionally registers only reviewed bindings in one audited transaction. Acceptance requires --database-preview and an exact matching identity map, including current source/baseline evidence. No banner fields, lineups or publication ownership are changed. Never run acceptance from cron.",
     );
     console.log(
@@ -100,6 +107,8 @@ try {
     let identityMapFile: string | null = null;
     let databasePreview = false;
     let discoverDatabase = false;
+    let adoptionMapFile: string | null = null;
+    let adoptionAcceptanceFile: string | null = null;
     let acceptanceFile: string | null = null;
     let actorId: string | null = null;
     let publicationFields: ReturnType<
@@ -109,6 +118,17 @@ try {
     let familyTimingFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      const adoptionArgument = /^--(adoption-map|accept-adoptions)=(.+)$/u.exec(
+        argument,
+      );
+      if (adoptionArgument) {
+        const flag = adoptionArgument[1]!;
+        if (seen.has(flag)) throw new Error("Duplicate adoption argument.");
+        seen.add(flag);
+        if (flag === "adoption-map") adoptionMapFile = adoptionArgument[2]!;
+        else adoptionAcceptanceFile = adoptionArgument[2]!;
+        continue;
+      }
       if (argument === "--discover-database") {
         if (discoverDatabase)
           throw new Error("Duplicate database discovery flag.");
@@ -223,18 +243,39 @@ try {
         publicationFields ||
         publicationFile ||
         familyTimingFile ||
-        actorId)
+        actorId ||
+        adoptionMapFile ||
+        adoptionAcceptanceFile)
     )
       throw new Error(
         "Database discovery requires resolution, projection and DATABASE_URL; it cannot be combined with baseline or write modes.",
       );
+    if (
+      adoptionMapFile &&
+      (!options.resolveServants ||
+        !process.env.DATABASE_URL ||
+        databasePreview ||
+        discoverDatabase ||
+        baselineFile ||
+        identityMapFile ||
+        acceptanceFile ||
+        publicationFields ||
+        publicationFile ||
+        familyTimingFile)
+    )
+      throw new Error(
+        "Adoption requires source resolution and DATABASE_URL, without baseline or other database modes.",
+      );
+    if (adoptionAcceptanceFile && !adoptionMapFile)
+      throw new Error("Adoption acceptance requires an explicit adoption map.");
     if (baselineFile && (!options.resolveServants || !options.projectNa))
       throw new Error("Comparison requires identity and projection evidence.");
     if (identityMapFile && !baselineFile)
       throw new Error("Identity preview requires a comparison baseline.");
     if (
       (databasePreview && !identityMapFile) ||
-      Boolean(acceptanceFile ?? publicationFile) !== Boolean(actorId) ||
+      Boolean(acceptanceFile ?? publicationFile ?? adoptionAcceptanceFile) !==
+        Boolean(actorId) ||
       (acceptanceFile && !databasePreview) ||
       (acceptanceFile && (publicationFile || publicationFields)) ||
       (publicationFields && !databasePreview) ||
@@ -256,6 +297,35 @@ try {
       throw new Error(
         "Image drafts require current image evidence and projection.",
       );
+    const adoptionMap = adoptionMapFile
+      ? bannerSourceAdoptionMapSchema.parse(
+          await localJson(
+            adoptionMapFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
+    const adoptionAcceptance = adoptionAcceptanceFile
+      ? bannerSourceAdoptionAcceptanceSchema.parse(
+          await localJson(
+            adoptionAcceptanceFile,
+            JP_BANNER_IDENTITY_LIMITS.maxFileBytes,
+          ),
+        )
+      : null;
+    if (adoptionAcceptance) {
+      const acceptedMap = bannerSourceAdoptionMapSchema.parse({
+        version: 1,
+        bindings: adoptionAcceptance.bindings.map(
+          ({ expectedDatabaseFingerprint: _fingerprint, ...binding }) =>
+            binding,
+        ),
+      });
+      if (JSON.stringify(acceptedMap) !== JSON.stringify(adoptionMap))
+        throw new Error(
+          "Adoption acceptance must match the explicitly selected map.",
+        );
+    }
     const familyTimingInput = familyTimingFile
       ? jpBannerFamilyTimingSchema.parse(
           await localJson(
@@ -360,6 +430,35 @@ try {
         await database.$disconnect();
       }
     }
+    let databaseAdoptionPreview: Awaited<
+      ReturnType<typeof previewBannerSourceAdoptions>
+    > | null = null;
+    let identityAdoption: Awaited<
+      ReturnType<typeof adoptBannerSourceIdentities>
+    > | null = null;
+    if (adoptionMap) {
+      const { PrismaClient } = await import("../generated/prisma/index.js");
+      const database = new PrismaClient({
+        datasourceUrl: process.env.DATABASE_URL,
+        log: [],
+      });
+      try {
+        databaseAdoptionPreview = await previewBannerSourceAdoptions(
+          database,
+          report,
+          adoptionMap,
+        );
+        if (adoptionAcceptance && actorId)
+          identityAdoption = await adoptBannerSourceIdentities(
+            database,
+            actorId,
+            report,
+            adoptionAcceptance,
+          );
+      } finally {
+        await database.$disconnect();
+      }
+    }
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
       : null;
@@ -438,6 +537,9 @@ try {
       ? compareJpBannerEvidence(report, baseline)
       : null;
     const status =
+      databaseAdoptionPreview?.mappings.some(
+        (mapping) => mapping.registrationStatus === "HELD",
+      ) ||
       comparison?.comparisonLimited ||
       draftValidation?.heldRows ||
       identityPreview?.heldMappings ||
@@ -457,6 +559,8 @@ try {
           status,
           ...(comparison ? { comparison } : {}),
           ...(databaseDiscovery ? { databaseDiscovery } : {}),
+          ...(databaseAdoptionPreview ? { databaseAdoptionPreview } : {}),
+          ...(identityAdoption ? { identityAdoption } : {}),
           ...(draftValidation ? { imageDrafts: draftValidation } : {}),
           ...(identityPreview ? { identityMap: identityPreview } : {}),
           ...(databaseIdentityPreview ? { databaseIdentityPreview } : {}),
