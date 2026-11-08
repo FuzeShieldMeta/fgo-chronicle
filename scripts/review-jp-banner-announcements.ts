@@ -1,3 +1,4 @@
+import { previewJpBannerDatabaseDiscovery } from "../src/server/services/jp-banner-discovery";
 import {
   inventoryJpBannerAnnouncements,
   type JpBannerInventoryOptions,
@@ -81,6 +82,9 @@ try {
       "Identity preview: --identity-map=LOCAL_MAP.json requires --compare, --resolve-servants and --project-na. Explicit reviewer-assigned pickup identities are checked against current article/period evidence and baseline target fingerprints. An optional htmlSection selector pins sectionId, sectionEvidenceHash and catalogueContentHash for read-only section identity/family-timing review. It cannot register or publish section-backed evidence; catalogue name identity does not confirm pickup membership. With servant resolution, countedRosterReview compares explicit named totals with pickup lists and retains catalogue/list/declaration hashes. Agreement remains a review candidate, not complete-roster approval or probability evidence. rosterProposal derives members from one explicit pickup list; rosterReview pins its evidenceHash and requires confirmCompleteRoster:true, rateRule:STANDARD_RATE_UP and acknowledgeRemovedTargets. Explicit roster review permits adopting a differing legacy roster; ordinary automatic matching remains unchanged. Draft URLs never select sources. Conflicts or stale evidence hold the proposal; consistency is not identity confirmation, full roster evidence, database-ID verification or publication approval. No rekeying or writes.",
     );
     console.log(
+      "Database discovery: --discover-database --resolve-servants --project-na requires DATABASE_URL and enumerates current banners, including hidden/official/curated records, without a spreadsheet. Registered evidence takes precedence; source changes and overlap remain review hints. Unmatched does not authorise creation. It runs in a read-only snapshot and cannot be combined with baseline, identity or publication modes. No writes or cron activation.",
+    );
+    console.log(
       "Database identity review: --database-preview requires --identity-map and an explicitly configured DATABASE_URL. It reads current target IDs and database fingerprints without writes. --accept-identities=LOCAL_ACCEPTANCE.json --actor-id=CURATOR_ID additionally registers only reviewed bindings in one audited transaction. Acceptance requires --database-preview and an exact matching identity map, including current source/baseline evidence. No banner fields, lineups or publication ownership are changed. Never run acceptance from cron.",
     );
     console.log(
@@ -95,6 +99,7 @@ try {
     let imageDraftFile: string | null = null;
     let identityMapFile: string | null = null;
     let databasePreview = false;
+    let discoverDatabase = false;
     let acceptanceFile: string | null = null;
     let actorId: string | null = null;
     let publicationFields: ReturnType<
@@ -104,6 +109,12 @@ try {
     let familyTimingFile: string | null = null;
     const seen = new Set<string>();
     for (const argument of process.argv.slice(2)) {
+      if (argument === "--discover-database") {
+        if (discoverDatabase)
+          throw new Error("Duplicate database discovery flag.");
+        discoverDatabase = true;
+        continue;
+      }
       if (argument === "--database-preview") {
         if (databasePreview)
           throw new Error("Duplicate database preview flag.");
@@ -200,6 +211,23 @@ try {
                 : "startPage"
       ] = Number(match[2]);
     }
+    if (
+      discoverDatabase &&
+      (!options.resolveServants ||
+        !options.projectNa ||
+        !process.env.DATABASE_URL ||
+        databasePreview ||
+        baselineFile ||
+        identityMapFile ||
+        acceptanceFile ||
+        publicationFields ||
+        publicationFile ||
+        familyTimingFile ||
+        actorId)
+    )
+      throw new Error(
+        "Database discovery requires resolution, projection and DATABASE_URL; it cannot be combined with baseline or write modes.",
+      );
     if (baselineFile && (!options.resolveServants || !options.projectNa))
       throw new Error("Comparison requires identity and projection evidence.");
     if (identityMapFile && !baselineFile)
@@ -315,6 +343,23 @@ try {
         "Publication acceptance must match the selected family anchors.",
       );
     const report = await inventoryJpBannerAnnouncements(options);
+    let databaseDiscovery: Awaited<
+      ReturnType<typeof previewJpBannerDatabaseDiscovery>
+    > | null = null;
+    if (discoverDatabase) {
+      const { PrismaClient } = await import("../generated/prisma/index.js");
+      const database = new PrismaClient({
+        datasourceUrl: process.env.DATABASE_URL,
+        log: [],
+      });
+      try {
+        databaseDiscovery = await previewJpBannerDatabaseDiscovery(database, [
+          report,
+        ]);
+      } finally {
+        await database.$disconnect();
+      }
+    }
     const draftValidation = imageDrafts
       ? validateJpBannerImageDrafts(report, imageDrafts)
       : null;
@@ -411,6 +456,7 @@ try {
           ...report,
           status,
           ...(comparison ? { comparison } : {}),
+          ...(databaseDiscovery ? { databaseDiscovery } : {}),
           ...(draftValidation ? { imageDrafts: draftValidation } : {}),
           ...(identityPreview ? { identityMap: identityPreview } : {}),
           ...(databaseIdentityPreview ? { databaseIdentityPreview } : {}),
