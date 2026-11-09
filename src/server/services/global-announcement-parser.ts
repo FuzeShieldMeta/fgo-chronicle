@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 
-import { GLOBAL_ANNOUNCEMENT_LIMITS as LIMITS } from "~/shared/global-reconciliation-config";
+import {
+  GLOBAL_ANNOUNCEMENT_LIMITS as LIMITS,
+  GLOBAL_SUMMON_SECTION_LIMITS,
+  SERVANT_RARITY_BY_LABEL,
+} from "~/shared/global-reconciliation-config";
 
 type Node = DefaultTreeAdapterMap["node"];
 export const PUBLISHER_ORIGIN = "https://webview.fate-go.us";
@@ -289,6 +293,224 @@ function periodKind(label: string): AnnouncementPeriodKind {
   return kinds.length === 1 ? kinds[0]! : "OTHER";
 }
 
+function summonSections(
+  article: Node | undefined,
+  periods: readonly AnnouncementPeriod[],
+  sourceUrl: string,
+  articleContentHash: string,
+) {
+  const normalize = (value: string) => value.replace(/\s+/gu, " ").trim();
+  const label = /^Pickup Summon Period\s*:/i;
+  const columns = ["class", "rarity", "servant"] as const;
+  const selected = periods.filter(
+    (period) =>
+      period.kind === "SUMMON" &&
+      normalize(period.context)
+        .toLowerCase()
+        .endsWith(
+          normalize(`pickup summon period: ${period.rawPeriod}`).toLowerCase(),
+        ),
+  );
+  if (!article || !selected.length) return [];
+  const nodes = walk(article);
+  const text = new Map<Node, string>();
+  const value = (node: Node) => {
+    let result = text.get(node);
+    if (result === undefined) {
+      result = normalize(plainText(node).join(" "));
+      text.set(node, result);
+    }
+    return result;
+  };
+  const blocks = nodes.filter(
+    (node) => /^(?:p|h[1-6])$/u.test(node.nodeName) && label.test(value(node)),
+  );
+  const headings = nodes.filter(
+    (node) =>
+      /^(?:p|h[1-6])$/u.test(node.nodeName) &&
+      /^Pickup Servants\s*:\s*$/i.test(value(node)),
+  );
+  const tables = nodes.filter((node) => {
+    if (node.nodeName !== "table") return false;
+    const header = walk(node).find((child) => child.nodeName === "tr");
+    const cells =
+      header && "childNodes" in header
+        ? header.childNodes
+            .filter((child) => child.nodeName === "th")
+            .map(value)
+        : [];
+    return (
+      cells.length === columns.length &&
+      cells.map((cell) => cell.toLowerCase()).join("|") === columns.join("|")
+    );
+  });
+  const order = new Map(nodes.map((node, index) => [node, index]));
+  const cache = new Map<
+    Node,
+    { nodes: Node[]; dates: Node[]; tables: Node[]; headings: Node[] }
+  >();
+  const scope = (node: Node) => {
+    let entry = cache.get(node);
+    if (!entry) {
+      const children = walk(node),
+        members = new Set(children);
+      entry = {
+        nodes: children,
+        dates: blocks.filter((child) => members.has(child)),
+        tables: tables.filter((child) => members.has(child)),
+        headings: headings.filter((child) => members.has(child)),
+      };
+      cache.set(node, entry);
+    }
+    return entry;
+  };
+  const sections = selected.map((period, index) => {
+    const issues = [...period.issues];
+    const block = blocks[index];
+    const rawServants: { name: string; className: string; rarity: number }[] =
+      [];
+    let container: ReturnType<typeof scope> | null = null;
+    if (
+      !block ||
+      blocks.length !== selected.length ||
+      !value(block).endsWith(normalize(period.rawPeriod))
+    )
+      issues.push("PICKUP_DATE_BLOCK_UNRESOLVED");
+    else {
+      let ancestor: Node | null = block;
+      for (
+        let depth = 0;
+        ancestor && depth < GLOBAL_SUMMON_SECTION_LIMITS.maxScopeDepth;
+        depth++
+      ) {
+        // An article-wide date/table association would cross sibling sections.
+        if (ancestor === article) break;
+        const current = scope(ancestor);
+        if (current.dates.length > 1) break;
+        if (
+          current.dates.length === 1 &&
+          current.tables.length === 1 &&
+          current.headings.length === 1 &&
+          order.get(block)! < order.get(current.headings[0]!)! &&
+          order.get(current.headings[0]!)! < order.get(current.tables[0]!)!
+        ) {
+          container = current;
+          break;
+        }
+        ancestor = "parentNode" in ancestor ? ancestor.parentNode : null;
+      }
+      if (!container) issues.push("PICKUP_SECTION_SCOPE_UNRESOLVED");
+    }
+    const table = container?.tables[0];
+    if (table) {
+      const tableNodes = walk(table);
+      if (
+        tableNodes.some((node) => node !== table && node.nodeName === "table")
+      )
+        issues.push("NESTED_PICKUP_TABLE_UNSUPPORTED");
+      const rows = tableNodes.filter((node) => node.nodeName === "tr");
+      if (rows.length - 1 > GLOBAL_SUMMON_SECTION_LIMITS.maxMembers)
+        issues.push("PICKUP_MEMBER_LIMIT_EXCEEDED");
+      else
+        for (const row of rows.slice(1)) {
+          const cells =
+            "childNodes" in row
+              ? row.childNodes.filter((node) => node.nodeName === "td")
+              : [];
+          const values = cells.map(value).filter(Boolean);
+          if (
+            values.length !== columns.length ||
+            cells.some(
+              (cell) =>
+                attribute(cell, "rowspan") &&
+                attribute(cell, "rowspan") !== "1",
+            )
+          ) {
+            issues.push("PICKUP_ROW_UNRESOLVED");
+            continue;
+          }
+          const [className, stars, name] = values as [string, string, string];
+          const match =
+            /^(★{1,5})(?:\s*(?:\((SSR|SR|R|UC|C)\)|(SSR|SR|R|UC|C)))?$/u.exec(
+              stars,
+            );
+          const rarity = match?.[1]?.length ?? 0;
+          const rankLabel = match?.[2] ?? match?.[3];
+          if (
+            !rarity ||
+            (rankLabel &&
+              SERVANT_RARITY_BY_LABEL[rankLabel.toLowerCase()] !== rarity) ||
+            name.length > GLOBAL_SUMMON_SECTION_LIMITS.maxLabelCharacters ||
+            className.length > GLOBAL_SUMMON_SECTION_LIMITS.maxLabelCharacters
+          ) {
+            issues.push("PICKUP_ROW_UNRESOLVED");
+            continue;
+          }
+          rawServants.push({ name, className, rarity });
+        }
+    }
+    if (!rawServants.length) issues.push("PICKUP_ROSTER_UNAVAILABLE");
+    if (
+      new Set(rawServants.map((member) => JSON.stringify(member))).size !==
+      rawServants.length
+    )
+      issues.push("DUPLICATE_PICKUP_MEMBER");
+    const sectionId = container?.nodes
+      .filter(
+        (node) =>
+          order.get(node)! <= order.get(block!)! && attribute(node, "id"),
+      )
+      .at(-1);
+    let sourceSectionId = sectionId ? attribute(sectionId, "id")! : null;
+    if (
+      sourceSectionId &&
+      sourceSectionId.length > GLOBAL_SUMMON_SECTION_LIMITS.maxLabelCharacters
+    ) {
+      issues.push("SOURCE_SECTION_ID_TOO_LONG");
+      sourceSectionId = null;
+    }
+    const evidence = {
+      version: 1,
+      sourceUrl,
+      articleContentHash,
+      sourceSectionId,
+      periodSourceRecordId: period.sourceRecordId,
+      startsAt: period.startsAt,
+      endsAt: period.endsAt,
+      rawPeriod: period.rawPeriod,
+      rawServants,
+    };
+    return {
+      ...evidence,
+      evidenceHash: createHash("sha256")
+        .update(JSON.stringify(evidence))
+        .digest("hex"),
+      status: issues.length
+        ? ("HELD" as const)
+        : ("EXTRACTED_REVIEW_REQUIRED" as const),
+      issues: [...new Set(issues)],
+      identityConfirmed: false as const,
+      publicationAllowed: false as const,
+    };
+  });
+  const counts = new Map<string, number>();
+  for (const section of sections)
+    if (section.sourceSectionId)
+      counts.set(
+        section.sourceSectionId,
+        (counts.get(section.sourceSectionId) ?? 0) + 1,
+      );
+  return sections.map((section) =>
+    section.sourceSectionId && counts.get(section.sourceSectionId)! > 1
+      ? {
+          ...section,
+          status: "HELD" as const,
+          issues: [...section.issues, "DUPLICATE_SOURCE_SECTION_ID"],
+        }
+      : section,
+  );
+}
+
 export function parsePublisherAnnouncement(
   body: string,
   sourceUrl: string,
@@ -454,13 +676,16 @@ export function parsePublisherAnnouncement(
   }
   if (!periods.length) issues.push("NO_SUPPORTED_DATE_RANGES");
   if (unsupportedDateContexts.length) issues.push("UNEXTRACTED_DATE_CONTEXT");
+  const contentHash = `sha256:${createHash("sha256").update(body).digest("hex")}`;
+  const pickups = summonSections(article, periods, url, contentHash);
   return {
     sourceKind: "PUBLISHER_ANNOUNCEMENT" as const,
     sourceUrl: url,
     sourceRecordId: new URL(url).pathname,
     name,
     retrievedAt: retrievedAt.toISOString(),
-    contentHash: `sha256:${createHash("sha256").update(body).digest("hex")}`,
+    contentHash,
+    ...(pickups.length ? { summonSections: pickups } : {}),
     periods,
     unsupportedDateContexts,
     issues,

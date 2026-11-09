@@ -59,7 +59,7 @@ type CampaignMissionSource = {
 };
 
 export function announcementCandidateRows(
-  report: Report,
+  report: Pick<Report, "articles"> & Partial<Report>,
   events?: readonly AnnouncementMatchEvent[],
   regionalProofs: ReadonlyMap<string, CampaignIdentityProof> = new Map(),
   missionSources: ReadonlyMap<string, CampaignMissionSource> = new Map(),
@@ -106,8 +106,12 @@ export function announcementCandidateRows(
             source.verifiedNames,
           )
         : null;
+      const pickupSection = article.summonSections?.find(
+        (section) => section.periodSourceRecordId === period.sourceRecordId,
+      );
       const snapshot = {
         ...period,
+        ...(pickupSection ? { pickupSection } : {}),
         articleName: article.name,
         parserRevision: GLOBAL_ANNOUNCEMENT_LIMITS.parserRevision,
         targetEventId: null,

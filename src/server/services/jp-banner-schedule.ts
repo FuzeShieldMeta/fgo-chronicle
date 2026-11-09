@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { GLOBAL_CAMPAIGN_IDENTITY_LIMITS } from "../../shared/global-reconciliation-config";
+import {
+  GLOBAL_CAMPAIGN_IDENTITY_LIMITS,
+  SERVANT_RARITY_BY_LABEL,
+} from "../../shared/global-reconciliation-config";
 
 type ScheduleSource = {
   sourceUrl: string;
@@ -253,7 +256,6 @@ function pickupRosterList(context: string, sourceUrl: string) {
   const issues: string[] = [];
   const evidenceHash = hash([sourceUrl, "PICKUP_ROSTER_LIST", normalized]);
   const members: { name: string; rarity: number; evidenceHash: string }[] = [];
-  const labels: Record<string, number> = { SSR: 5, SR: 4, R: 3, UC: 2, C: 1 };
   const categories = new Set<string>();
   for (const section of normalized
     .slice("【ピックアップ対象】".length)
@@ -286,7 +288,7 @@ function pickupRosterList(context: string, sourceUrl: string) {
       }
       const rarity = Number(item[1]),
         name = item[3]!.trim();
-      if (item[2] && labels[item[2]] !== rarity)
+      if (item[2] && SERVANT_RARITY_BY_LABEL[item[2].toLowerCase()] !== rarity)
         issues.push("ROSTER_RARITY_LABEL_MISMATCH");
       if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
         issues.push("EMPTY_PICKUP_ROSTER_NAME");
@@ -348,7 +350,6 @@ function countedPickupRoster(context: string, sourceUrl: string) {
   if (/[「『]\s*[★☆]/u.test(normalized.slice(0, statement.index)))
     issues.push("INCOMPLETE_COUNTED_ENUMERATION");
   const members: { name: string; rarity: number; evidenceHash: string }[] = [];
-  const labels: Record<string, number> = { SSR: 5, SR: 4, R: 3, UC: 2, C: 1 };
   for (const token of statement[1]!.matchAll(
     /「([^「」『』]+)」|『([^「」『』]+)』/gu,
   )) {
@@ -364,7 +365,10 @@ function countedPickupRoster(context: string, sourceUrl: string) {
       name = member[3]!.trim();
     if (!name || /^\((?:SSR|SR|R|UC|C)\)$/u.test(name))
       issues.push("EMPTY_COUNTED_ROSTER_NAME");
-    if (member[2] && labels[member[2]] !== rarity)
+    if (
+      member[2] &&
+      SERVANT_RARITY_BY_LABEL[member[2].toLowerCase()] !== rarity
+    )
       issues.push("COUNTED_ROSTER_RARITY_MISMATCH");
     if (
       members.some(

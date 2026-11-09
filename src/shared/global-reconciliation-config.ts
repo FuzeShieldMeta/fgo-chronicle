@@ -49,6 +49,20 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   maxIndexPages: 3,
 } as const;
 
+export const GLOBAL_SUMMON_SECTION_LIMITS = {
+  maxMembers: 100,
+  maxLabelCharacters: 200,
+  maxScopeDepth: 24,
+} as const;
+
+export const SERVANT_RARITY_BY_LABEL: Readonly<Record<string, number>> = {
+  ssr: 5,
+  sr: 4,
+  r: 3,
+  uc: 2,
+  c: 1,
+};
+
 export const GLOBAL_ANNOUNCEMENT_MATCHING = {
   windowDays: [30, 60, 90],
   revision: 6,

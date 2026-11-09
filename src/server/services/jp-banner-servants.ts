@@ -5,18 +5,13 @@ import {
   type JpBannerHtmlPickupSection,
 } from "./jp-banner-schedule";
 
+import { SERVANT_RARITY_BY_LABEL } from "../../shared/global-reconciliation-config";
+
 export const JP_BANNER_SERVANT_SOURCE =
   "https://api.atlasacademy.io/export/JP/basic_servant.json";
 const MAX_BYTES = 8 * 1_024 * 1_024;
 const MAX_RECORDS = 2_000;
 const MAX_NAME = 200;
-const RARITY_LABELS: Readonly<Record<string, number>> = {
-  ssr: 5,
-  sr: 4,
-  r: 3,
-  uc: 2,
-  c: 1,
-};
 // Only recognized class labels may qualify a name; other variant suffixes stay intact.
 const CLASS_SUFFIXES = new Map([
   ["セイバー", "saber"],
@@ -403,13 +398,11 @@ export function associateJpBannerPickupEvidence(
           const value = Number(rarity[1]);
           if (
             value === identity.rarity &&
-            (rarity[2] === undefined || RARITY_LABELS[rarity[2]] === value)
+            (rarity[2] === undefined ||
+              SERVANT_RARITY_BY_LABEL[rarity[2]] === value)
           )
             names.add(normalize(name));
-        } else if (
-          prefix.endsWith(" ") &&
-          !/(?:^|\s)[★☆]/u.test(prefix)
-        ) {
+        } else if (prefix.endsWith(" ") && !/(?:^|\s)[★☆]/u.test(prefix)) {
           names.add(normalize(name));
         }
       }
