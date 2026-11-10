@@ -1,3 +1,9 @@
+import {
+  servantNameIndex,
+  lookupServantName,
+  normalizeServantName as normalize,
+  type ServantCatalogueEntry as Servant,
+} from "./servant-name-lookup";
 import { createHash } from "node:crypto";
 import {
   JP_BANNER_HTML_SECTION_LIMITS,
@@ -5,49 +11,22 @@ import {
   type JpBannerHtmlPickupSection,
 } from "./jp-banner-schedule";
 
-import { SERVANT_RARITY_BY_LABEL } from "../../shared/global-reconciliation-config";
+import {
+  SERVANT_RARITY_BY_LABEL,
+  SERVANT_CATALOGUE_LIMITS,
+} from "../../shared/global-reconciliation-config";
 
 export const JP_BANNER_SERVANT_SOURCE =
   "https://api.atlasacademy.io/export/JP/basic_servant.json";
 const MAX_BYTES = 8 * 1_024 * 1_024;
-const MAX_RECORDS = 2_000;
+const MAX_RECORDS = SERVANT_CATALOGUE_LIMITS.maxRecords;
 const MAX_NAME = 200;
-// Only recognized class labels may qualify a name; other variant suffixes stay intact.
-const CLASS_SUFFIXES = new Map([
-  ["セイバー", "saber"],
-  ["アーチャー", "archer"],
-  ["ランサー", "lancer"],
-  ["ライダー", "rider"],
-  ["キャスター", "caster"],
-  ["アサシン", "assassin"],
-  ["バーサーカー", "berserker"],
-  ["ルーラー", "ruler"],
-  ["アヴェンジャー", "avenger"],
-  ["ムーンキャンサー", "moonCancer"],
-  ["アルターエゴ", "alterEgo"],
-  ["フォーリナー", "foreigner"],
-  ["プリテンダー", "pretender"],
-  ["シールダー", "shielder"],
-  ["ビースト", "beast"],
-]);
-
-type Servant = {
-  collectionNo: number;
-  name: string;
-  originalName: string;
-  aliases?: readonly string[];
-  rarity: number;
-  className: string;
-};
 type Mention = {
   name: string;
   rarity: number;
   context: string;
   evidenceHash: string;
 };
-const normalize = (name: string) =>
-  name.normalize("NFKC").replace(/\s+/gu, "").toLowerCase();
-
 export function parseJpBannerServantCatalogue(value: unknown) {
   if (!Array.isArray(value) || !value.length || value.length > MAX_RECORDS)
     throw new Error("Unsupported JP servant catalogue size.");
@@ -163,65 +142,6 @@ export async function fetchJpBannerServantCatalogue(
   };
 }
 
-function servantNameIndex(catalogue: readonly Servant[]) {
-  const names = new Map<string, Servant[]>();
-  for (const servant of catalogue) {
-    for (const name of new Set([
-      normalize(servant.name),
-      normalize(servant.originalName),
-      ...(servant.aliases ?? []).map(normalize),
-    ])) {
-      const group = names.get(name) ?? [];
-      if (
-        !group.some(
-          (candidate) => candidate.collectionNo === servant.collectionNo,
-        )
-      )
-        group.push(servant);
-      names.set(name, group);
-    }
-  }
-  return names;
-}
-
-function lookupServantName(
-  name: string,
-  names: ReturnType<typeof servantNameIndex>,
-) {
-  const normalized = normalize(name);
-  const exact = names.get(normalized);
-  if (exact?.length)
-    return { named: exact, classHint: null, nameParts: [normalized] };
-  // Keep the longest exact catalogue prefix, including literal variant suffixes.
-  // Each remaining parenthesis must name the same identity or constrain its class.
-  const openings = [...normalized.matchAll(/\(/gu)].map((match) => match.index);
-  for (const index of openings.reverse()) {
-    const base = normalized.slice(0, index);
-    const suffix = normalized.slice(index);
-    const prefix = names.get(base);
-    if (!prefix?.length || !/^(?:\([^()]+\))+$/u.test(suffix)) continue;
-    let named = prefix;
-    let classHint: { label: string; className: string } | null = null;
-    const nameParts = [base];
-    for (const match of suffix.matchAll(/\(([^()]+)\)/gu)) {
-      const part = match[1]!;
-      const className = CLASS_SUFFIXES.get(part);
-      if (className) {
-        classHint ??= { label: part, className };
-        named = named.filter((servant) => servant.className === className);
-      } else {
-        const aliases = names.get(part);
-        if (!aliases?.length) return { named: [], classHint, nameParts };
-        const ids = new Set(aliases.map((servant) => servant.collectionNo));
-        named = named.filter((servant) => ids.has(servant.collectionNo));
-        nameParts.push(part);
-      }
-    }
-    return { named, classHint, nameParts };
-  }
-  return { named: [], classHint: null, nameParts: [normalized] };
-}
-
 function catalogueCandidates(servants: readonly Servant[]) {
   return servants.map(({ collectionNo, name, rarity, className, aliases }) => ({
     servantId: collectionNo,
@@ -236,7 +156,7 @@ export function resolveJpBannerServantMentions(
   mentions: readonly Mention[],
   catalogue: readonly Servant[],
 ) {
-  if (mentions.length > 2_000 || catalogue.length > MAX_RECORDS)
+  if (mentions.length > MAX_RECORDS || catalogue.length > MAX_RECORDS)
     throw new Error("JP servant matching limit exceeded.");
   const names = servantNameIndex(catalogue);
   return mentions.map((mention) => {

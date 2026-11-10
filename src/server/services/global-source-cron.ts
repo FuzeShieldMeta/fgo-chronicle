@@ -14,6 +14,7 @@ import { collectGlobalCandidatesWithAuthority } from "./global-candidate-queue";
 import { collectAnnouncementsWithAuthority } from "./global-announcement-collection";
 import { createImportProgress, type ImportProgress } from "./import-progress";
 import { boundedGlobalExportLoader } from "./global-export-source";
+import type { GlobalSummonCatalogue } from "./global-summon-servants";
 
 type Dependencies = {
   collectAtlas?: typeof collectGlobalCandidatesWithAuthority;
@@ -30,6 +31,7 @@ export async function collectDailyGlobalSources(
     dryRun?: boolean;
     progress?: ImportProgress;
     announcementBackfillDays?: number;
+    servantCatalogue?: GlobalSummonCatalogue;
   } = {},
 ) {
   const authority = cronSourceAuthority(request, secret);
@@ -51,6 +53,7 @@ export async function collectGlobalSourcesWithAuthority(
     dryRun?: boolean;
     progress?: ImportProgress;
     announcementBackfillDays?: number;
+    servantCatalogue?: GlobalSummonCatalogue;
   } = {},
 ) {
   await requireSourceAuthority(database, authority);

@@ -14,7 +14,13 @@ import {
   GLOBAL_SOURCE_LIMITS,
   MILLISECONDS_PER_DAY,
   IMPORT_EXECUTION_LIMITS,
+  SERVANT_CATALOGUE_LIMITS,
 } from "~/shared/global-reconciliation-config";
+import {
+  resolveGlobalSummonServants,
+  type GlobalSummonCatalogue,
+} from "./global-summon-servants";
+import { servantClassKey } from "~/shared/servant-class.mjs";
 import { loadPublisherAnnouncements } from "./global-announcement-source";
 import {
   assessAnnouncementArticle,
@@ -191,6 +197,7 @@ export async function collectAnnouncementsWithAuthority(
     progress?: ImportProgress;
     announcementBackfillDays?: number;
     asOf?: Date;
+    servantCatalogue?: GlobalSummonCatalogue;
   } = {},
 ) {
   collectAnnouncementsSchema.parse(rawInput);
@@ -471,9 +478,48 @@ export async function collectAnnouncementsWithAuthority(
             });
           });
         }
+        let assessedReport = report;
+        if (report.articles.some((article) => article.summonSections?.length)) {
+          const catalogue = await tx.servant.findMany({
+            select: {
+              id: true,
+              name: true,
+              className: true,
+              rarity: true,
+              atlasNaAvailable: true,
+            },
+            orderBy: { id: "asc" },
+            take: SERVANT_CATALOGUE_LIMITS.maxRecords + 1,
+          });
+          const identities = catalogue.map((servant) => {
+            const canonical = execution.servantCatalogue?.get(servant.id);
+            return canonical?.aliases?.length &&
+              canonical.name === servant.name &&
+              servantClassKey(canonical.className) ===
+                servantClassKey(servant.className) &&
+              canonical.rarity === servant.rarity &&
+              canonical.atlasNaAvailable === servant.atlasNaAvailable
+              ? { ...servant, aliases: canonical.aliases }
+              : servant;
+          });
+          assessedReport = {
+            ...report,
+            articles: report.articles.map((article) => ({
+              ...article,
+              ...(article.summonSections?.length
+                ? {
+                    summonSections: resolveGlobalSummonServants(
+                      article.summonSections,
+                      identities,
+                    ),
+                  }
+                : {}),
+            })),
+          };
+        }
         // Store the assessment privately. It is not an approved publication target.
         const assessedRecords = announcementCandidateRows(
-          report,
+          assessedReport,
           events,
           regionalProofs,
           missionSources,

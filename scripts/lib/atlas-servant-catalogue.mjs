@@ -1,4 +1,7 @@
-import { servantClassLabel } from "../../src/shared/servant-class.mjs";
+import {
+  servantClassKey,
+  servantClassLabel,
+} from "../../src/shared/servant-class.mjs";
 
 const MAX_DATABASE_INTEGER = 2_147_483_647;
 const MAX_NAME_CHARACTERS = 200;
@@ -9,7 +12,7 @@ export const atlasNaServantCatalogueUrl =
   "https://api.atlasacademy.io/export/NA/basic_servant.json";
 
 /**
- * @typedef {{ name: string, className: string, rarity: number, faceId: number | null }} AtlasServantSummary
+ * @typedef {{ name: string, className: string, rarity: number, faceId: number | null, aliases?: string[] }} AtlasServantSummary
  */
 
 /**
@@ -52,6 +55,25 @@ export function parseAtlasServantCatalogue(value) {
         `Atlas Servant ${collectionNo} has an invalid class.`,
       );
     const name = record.name.trim();
+    /** @type {Set<string>} */
+    const aliases = new Set();
+    for (const field of [
+      "originalName",
+      "overwriteName",
+      "originalOverwriteName",
+    ]) {
+      const alias = record[field];
+      if (alias === undefined) continue;
+      if (
+        typeof alias !== "string" ||
+        !alias.trim() ||
+        alias.length > MAX_NAME_CHARACTERS
+      )
+        throw new TypeError(
+          `Atlas Servant ${collectionNo} has an invalid alternate name.`,
+        );
+      if (alias.trim() !== name) aliases.add(alias.trim());
+    }
     const className = servantClassLabel(record.className);
     if (
       typeof rarity !== "number" ||
@@ -101,6 +123,13 @@ export function parseAtlasServantCatalogue(value) {
       name,
       className,
       rarity,
+      ...(aliases.size || existing?.aliases?.length
+        ? {
+            aliases: [
+              ...new Set([...(existing?.aliases ?? []), ...aliases]),
+            ].sort(),
+          }
+        : {}),
     });
   }
 
@@ -137,9 +166,33 @@ export async function downloadAtlasServantCatalogues(fetcher = fetch) {
   if (!jp.size || !na.size)
     throw new Error("Atlas returned an empty servant catalogue.");
   return new Map(
-    [...jp].map(([id, servant]) => [
-      id,
-      { ...servant, atlasNaAvailable: na.has(id) },
-    ]),
+    [...jp].map(([id, servant]) => {
+      const regional = na.get(id);
+      if (
+        regional &&
+        (regional.rarity !== servant.rarity ||
+          servantClassKey(regional.className) !==
+            servantClassKey(servant.className))
+      )
+        throw new Error(
+          `Atlas Servant ${id} has conflicting regional identity metadata.`,
+        );
+      const aliases = [
+        ...new Set([
+          ...(servant.aliases ?? []),
+          ...(regional ? [regional.name, ...(regional.aliases ?? [])] : []),
+        ]),
+      ]
+        .filter((name) => name !== servant.name)
+        .sort();
+      return [
+        id,
+        {
+          ...servant,
+          ...(aliases.length ? { aliases } : {}),
+          atlasNaAvailable: na.has(id),
+        },
+      ];
+    }),
   );
 }

@@ -9,6 +9,8 @@ import { collectGlobalSourcesWithAuthority } from "./global-source-cron";
 import { createImportProgress, type ImportProgress } from "./import-progress";
 import { validateAnnouncementBackfillDays } from "./global-announcement-source";
 import { syncServantCatalogue } from "./servant-catalogue-sync";
+import { downloadAtlasServantCatalogues } from "../../../scripts/lib/atlas-servant-catalogue.mjs";
+import type { GlobalSummonCatalogue } from "./global-summon-servants";
 import {
   syncMaintenanceCompensation,
   type MaintenanceReport,
@@ -31,6 +33,7 @@ type Dependencies = {
   runSync?: typeof runEventSchedulePipeline;
   collectGlobalSources?: typeof collectGlobalSourcesWithAuthority;
   syncServants?: typeof syncServantCatalogue;
+  downloadServants?: typeof downloadAtlasServantCatalogues;
   syncImages?: typeof syncServantImages;
   syncMaintenance?: typeof syncMaintenanceCompensation;
   syncBannerFamilies?: typeof syncBannerFamilyTiming;
@@ -46,6 +49,7 @@ export async function runCompleteEventSchedule(
   validateAnnouncementBackfillDays(options.announcementBackfillDays);
   await requireSourceAuthority(database, authority);
   const progress = dependencies.progress ?? createImportProgress();
+  let servantCatalogue: GlobalSummonCatalogue | undefined;
   let servants: {
     examined: number;
     updated: number;
@@ -57,6 +61,13 @@ export async function runCompleteEventSchedule(
         (dependencies.syncServants ?? syncServantCatalogue)(
           database,
           options.dryRun,
+          async () => {
+            const catalogue = await (
+              dependencies.downloadServants ?? downloadAtlasServantCatalogues
+            )();
+            servantCatalogue = catalogue;
+            return catalogue;
+          },
         ),
       )),
       status: "success",
@@ -107,6 +118,9 @@ export async function runCompleteEventSchedule(
         dryRun: options.dryRun,
         progress,
         announcementBackfillDays: options.announcementBackfillDays,
+        ...(servants.status === "success" && servantCatalogue
+          ? { servantCatalogue }
+          : {}),
       },
     );
   } catch (error) {

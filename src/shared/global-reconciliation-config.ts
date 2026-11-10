@@ -55,6 +55,10 @@ export const GLOBAL_SUMMON_SECTION_LIMITS = {
   maxScopeDepth: 24,
 } as const;
 
+export const SERVANT_CATALOGUE_LIMITS = {
+  maxRecords: 2_000,
+} as const;
+
 export const SERVANT_RARITY_BY_LABEL: Readonly<Record<string, number>> = {
   ssr: 5,
   sr: 4,
