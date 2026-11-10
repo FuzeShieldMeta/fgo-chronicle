@@ -1,5 +1,5 @@
-import { open, realpath } from "node:fs/promises";
-import { constants } from "node:fs";
+import { readBoundedFile } from "./file-input.mjs";
+import { realpath } from "node:fs/promises";
 import { resolve, relative, isAbsolute, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -24,34 +24,6 @@ const limits = {
 };
 /** @param {string | Uint8Array} value */
 const digest = (value) => createHash("sha256").update(value).digest("hex");
-/** @param {string} file @param {number} max */
-async function readBounded(file, max) {
-  const handle = await open(
-    file,
-    constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
-  );
-  try {
-    const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > max)
-      throw new Error("Cached JP input exceeds its file limit.");
-    const buffer = Buffer.alloc(max + 1);
-    let size = 0;
-    while (size < buffer.length) {
-      const result = await handle.read(
-        buffer,
-        size,
-        buffer.length - size,
-        size,
-      );
-      if (!result.bytesRead) break;
-      size += result.bytesRead;
-    }
-    if (size > max) throw new Error("Cached JP input exceeds its file limit.");
-    return buffer.subarray(0, size);
-  } finally {
-    await handle.close();
-  }
-}
 /**
  * Substitute saved HTTP responses; inspection, resolution and projection remain shared.
  * @param {string} cacheDir
@@ -80,7 +52,7 @@ export async function collectCachedJpBannerSources(cacheDir, catalogueFile) {
     .parse(
       JSON.parse(
         decode(
-          await readBounded(
+          await readBoundedFile(
             resolve(root, "manifest.json"),
             limits.manifestBytes,
           ),
@@ -97,7 +69,7 @@ export async function collectCachedJpBannerSources(cacheDir, catalogueFile) {
   for (const row of manifest.articles)
     if (jpBannerArticleUrl(row.url) !== row.url)
       throw new Error("Noncanonical cached JP notice.");
-  const catalogue = await readBounded(
+  const catalogue = await readBoundedFile(
     resolve(catalogueFile),
     limits.catalogueBytes,
   );
@@ -109,7 +81,7 @@ export async function collectCachedJpBannerSources(cacheDir, catalogueFile) {
     .parse(
       JSON.parse(
         decode(
-          await readBounded(
+          await readBoundedFile(
             resolve(catalogueFile.replace(/\.json$/u, ".meta.json")),
             64 * 1024,
           ),
@@ -138,7 +110,7 @@ export async function collectCachedJpBannerSources(cacheDir, catalogueFile) {
     const actual = await realpath(file),
       resolved = relative(root, actual);
     if (escapes(resolved)) throw new Error("Cached JP path escapes its root.");
-    const body = await readBounded(file, row.bytes);
+    const body = await readBoundedFile(file, row.bytes);
     readBytes += body.length;
     if (
       readBytes > limits.totalHtmlBytes ||

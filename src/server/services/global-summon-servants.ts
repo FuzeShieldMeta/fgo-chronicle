@@ -10,6 +10,7 @@ import {
   type ServantCatalogueEntry,
 } from "./servant-name-lookup";
 import type { parsePublisherAnnouncement } from "./global-announcement-parser";
+import { previewStandardBannerRoster } from "./banner-roster";
 
 type Article = ReturnType<typeof parsePublisherAnnouncement>;
 type Section = NonNullable<Article["summonSections"]>[number];
@@ -26,6 +27,23 @@ export type GlobalSummonCatalogue = ReadonlyMap<
   Omit<GlobalSummonCatalogueEntry, "id">
 >;
 
+export function bindGlobalSummonCatalogue(
+  stored: readonly GlobalSummonCatalogueEntry[],
+  source: GlobalSummonCatalogue | undefined,
+) {
+  return stored.map((servant) => {
+    const canonical = source?.get(servant.id);
+    return canonical?.aliases?.length &&
+      canonical.name === servant.name &&
+      servantClassKey(canonical.className) ===
+        servantClassKey(servant.className) &&
+      canonical.rarity === servant.rarity &&
+      canonical.atlasNaAvailable === servant.atlasNaAvailable
+      ? { ...servant, aliases: canonical.aliases }
+      : servant;
+  });
+}
+
 export function resolveGlobalSummonServants(
   sections: readonly Section[],
   catalogue: readonly GlobalSummonCatalogueEntry[],
@@ -38,7 +56,16 @@ export function resolveGlobalSummonServants(
     )
   )
     throw new Error("Global servant matching limit exceeded.");
-  const rows = [...catalogue].sort((a, b) => a.id - b.id);
+  const rows = catalogue
+    .map(({ id, name, className, rarity, atlasNaAvailable, aliases }) => ({
+      id,
+      name,
+      className,
+      rarity,
+      atlasNaAvailable,
+      ...(aliases?.length ? { aliases: [...new Set(aliases)].sort() } : {}),
+    }))
+    .sort((a, b) => a.id - b.id);
   const contentHash = createHash("sha256")
     .update(JSON.stringify(rows))
     .digest("hex");
@@ -104,6 +131,22 @@ export function resolveGlobalSummonServants(
       catalogueContentHash: contentHash,
       members,
     };
+    const roster = previewStandardBannerRoster(
+      members
+        .flatMap((member) =>
+          member.servantId === null
+            ? []
+            : [
+                {
+                  servantId: member.servantId,
+                  rarity: member.rarity,
+                  className: member.className,
+                },
+              ],
+        )
+        .sort((a, b) => a.servantId - b.servantId),
+    );
+    const rosterIssues = [...new Set([...issues, ...roster.issues])];
     return {
       ...section,
       catalogueResolution: {
@@ -113,6 +156,25 @@ export function resolveGlobalSummonServants(
           .digest("hex"),
         status: issues.length ? ("HELD" as const) : ("MATCHED" as const),
         issues: [...new Set(issues)],
+        publicationAllowed: false as const,
+      },
+      rosterProposal: {
+        ...roster,
+        issues: rosterIssues,
+        evidenceHash: createHash("sha256")
+          .update(
+            JSON.stringify({
+              version: 1,
+              sectionEvidenceHash: section.evidenceHash,
+              catalogueContentHash: contentHash,
+              rateRule: roster.rateRule,
+              featured: roster.featured,
+            }),
+          )
+          .digest("hex"),
+        status: rosterIssues.length
+          ? ("HELD" as const)
+          : ("REQUIRES_ROSTER_REVIEW" as const),
         publicationAllowed: false as const,
       },
     };

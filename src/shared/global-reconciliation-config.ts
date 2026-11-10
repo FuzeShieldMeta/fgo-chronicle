@@ -47,6 +47,7 @@ export const GLOBAL_ANNOUNCEMENT_LIMITS = {
   collectionTimeoutMs: 45_000,
   maxArticles: 30,
   maxIndexPages: 3,
+  maxRelatedArticles: 32,
 } as const;
 
 export const GLOBAL_SUMMON_SECTION_LIMITS = {
@@ -55,8 +56,22 @@ export const GLOBAL_SUMMON_SECTION_LIMITS = {
   maxScopeDepth: 24,
 } as const;
 
+export const GLOBAL_BANNER_PUBLICATION_LIMITS = {
+  maxBindings: 100,
+  maxTargets: 1_000,
+  maxIdentifierCharacters: 100,
+  maxReviewBytes: 1_024 * 1_024,
+  maxCatalogueBytes: 8 * 1_024 * 1_024,
+} as const;
+
 export const SERVANT_CATALOGUE_LIMITS = {
   maxRecords: 2_000,
+} as const;
+
+export const STANDARD_BANNER_ROSTER_LIMITS = {
+  requiredSsrCount: 1,
+  maxSrCount: 3,
+  maxRCount: 1,
 } as const;
 
 export const SERVANT_RARITY_BY_LABEL: Readonly<Record<string, number>> = {

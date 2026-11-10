@@ -107,7 +107,7 @@ export const bannerSourceAdoptionAcceptanceSchema = z
   })
   .strict();
 
-const snapshotInclude = {
+export const bannerIdentitySnapshotInclude = {
   sourcePublication: true,
   family: { include: { curation: true } },
   dateOverlay: true,
@@ -117,7 +117,9 @@ const snapshotInclude = {
     include: { featured: { orderBy: { servantId: "asc" } } },
   },
 } satisfies Prisma.BannerInclude;
-type Snapshot = Prisma.BannerGetPayload<{ include: typeof snapshotInclude }>;
+type Snapshot = Prisma.BannerGetPayload<{
+  include: typeof bannerIdentitySnapshotInclude;
+}>;
 
 // Deliberately separate from the local dataset fingerprint: this includes DB IDs,
 // curator visibility, family, overlays and lineup references used by saved plans.
@@ -172,7 +174,7 @@ export async function loadBannerIdentityTargets(
           },
         ],
       },
-      include: snapshotInclude,
+      include: bannerIdentitySnapshotInclude,
     }),
     database.bannerSourceIdentity.findMany({
       where: {

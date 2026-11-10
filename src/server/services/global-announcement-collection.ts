@@ -18,9 +18,9 @@ import {
 } from "~/shared/global-reconciliation-config";
 import {
   resolveGlobalSummonServants,
+  bindGlobalSummonCatalogue,
   type GlobalSummonCatalogue,
 } from "./global-summon-servants";
-import { servantClassKey } from "~/shared/servant-class.mjs";
 import { loadPublisherAnnouncements } from "./global-announcement-source";
 import {
   assessAnnouncementArticle,
@@ -491,17 +491,10 @@ export async function collectAnnouncementsWithAuthority(
             orderBy: { id: "asc" },
             take: SERVANT_CATALOGUE_LIMITS.maxRecords + 1,
           });
-          const identities = catalogue.map((servant) => {
-            const canonical = execution.servantCatalogue?.get(servant.id);
-            return canonical?.aliases?.length &&
-              canonical.name === servant.name &&
-              servantClassKey(canonical.className) ===
-                servantClassKey(servant.className) &&
-              canonical.rarity === servant.rarity &&
-              canonical.atlasNaAvailable === servant.atlasNaAvailable
-              ? { ...servant, aliases: canonical.aliases }
-              : servant;
-          });
+          const identities = bindGlobalSummonCatalogue(
+            catalogue,
+            execution.servantCatalogue,
+          );
           assessedReport = {
             ...report,
             articles: report.articles.map((article) => ({

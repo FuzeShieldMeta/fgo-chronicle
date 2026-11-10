@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { inventoryJpBannerAnnouncements } from "./jp-banner-inventory";
+import { previewStandardBannerRoster } from "./banner-roster";
 
 type Report = Awaited<ReturnType<typeof inventoryJpBannerAnnouncements>>;
 type Inspection = NonNullable<Report["articles"][number]["inspection"]>;
@@ -137,21 +138,9 @@ export function previewJpBannerRoster(
     window?.countedRosterReview.status !== "CONSISTENT_REVIEW_REQUIRED"
   )
     issues.push("COUNTED_ROSTER_EVIDENCE_CONFLICT");
-  const counts = new Map<number, number>();
-  for (const member of members)
-    counts.set(member.rarity, (counts.get(member.rarity) ?? 0) + 1);
-  // Only the ordinary one-SSR, up-to-three-SR, one-R format is supported here.
-  if (
-    (counts.get(5) ?? 0) !== 1 ||
-    (counts.get(4) ?? 0) > 3 ||
-    (counts.get(3) ?? 0) > 1 ||
-    members.some((member) => ![3, 4, 5].includes(member.rarity))
-  )
-    issues.push("ROSTER_RATE_FORMAT_UNSUPPORTED");
-  const featured = members.map((member) => ({
-    ...member,
-    soloRateUp: counts.get(member.rarity) === 1,
-  }));
+  const roster = previewStandardBannerRoster(members);
+  issues.push(...roster.issues);
+  const { featured, rateRule } = roster;
   const evidenceHash = createHash("sha256")
     .update(
       JSON.stringify({
@@ -160,7 +149,7 @@ export function previewJpBannerRoster(
         periodEvidenceHash,
         listEvidenceHash: list?.evidenceHash ?? null,
         catalogueContentHash: report.servantCatalogue?.contentHash ?? null,
-        rateRule: "STANDARD_RATE_UP",
+        rateRule,
         featured,
       }),
     )
@@ -174,7 +163,7 @@ export function previewJpBannerRoster(
     listEvidenceHash: list?.evidenceHash ?? null,
     catalogueContentHash: report.servantCatalogue?.contentHash ?? null,
     nonRosterPeriodEvidence,
-    rateRule: "STANDARD_RATE_UP" as const,
+    rateRule,
     featured,
     publicationAllowed: false as const,
   };

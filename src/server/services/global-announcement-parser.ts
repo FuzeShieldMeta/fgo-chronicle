@@ -79,6 +79,8 @@ export function publisherArticleUrl(value: string) {
     url.password ||
     url.search ||
     url.hash ||
+    value.includes("?") ||
+    value.includes("#") ||
     url.pathname.length > LIMITS.maxArticlePathCharacters ||
     !/^\/\d{4}\/[a-zA-Z0-9_-]+\/?$/.test(url.pathname)
   )
@@ -101,6 +103,8 @@ export function publisherIndexUrl(value: string) {
     url.password ||
     url.search ||
     url.hash ||
+    value.includes("?") ||
+    value.includes("#") ||
     url.pathname.length > LIMITS.maxArticlePathCharacters ||
     !/^\/(?:maintenance\/)?(?:page\/[1-9]\d*\/)?$/.test(url.pathname)
   )
@@ -678,6 +682,21 @@ export function parsePublisherAnnouncement(
   if (unsupportedDateContexts.length) issues.push("UNEXTRACTED_DATE_CONTEXT");
   const contentHash = `sha256:${createHash("sha256").update(body).digest("hex")}`;
   const pickups = summonSections(article, periods, url, contentHash);
+  const relatedArticleUrls = new Set<string>();
+  if (pickups.length && article)
+    for (const node of walk(article)) {
+      const href = attribute(node, "href");
+      if (node.nodeName !== "a" || !href) continue;
+      try {
+        const related = publisherArticleUrl(new URL(href, url).href);
+        if (related !== url) relatedArticleUrls.add(related);
+        if (relatedArticleUrls.size > LIMITS.maxRelatedArticles) break;
+      } catch {
+        continue;
+      }
+    }
+  if (relatedArticleUrls.size > LIMITS.maxRelatedArticles)
+    issues.push("RELATED_ARTICLE_LIMIT_EXCEEDED");
   return {
     sourceKind: "PUBLISHER_ANNOUNCEMENT" as const,
     sourceUrl: url,
@@ -685,7 +704,14 @@ export function parsePublisherAnnouncement(
     name,
     retrievedAt: retrievedAt.toISOString(),
     contentHash,
-    ...(pickups.length ? { summonSections: pickups } : {}),
+    ...(pickups.length
+      ? {
+          summonSections: pickups,
+          relatedArticleUrls: [...relatedArticleUrls]
+            .sort()
+            .slice(0, LIMITS.maxRelatedArticles),
+        }
+      : {}),
     periods,
     unsupportedDateContexts,
     issues,

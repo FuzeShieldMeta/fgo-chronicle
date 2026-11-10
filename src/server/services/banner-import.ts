@@ -6,11 +6,13 @@ import {
   bannerPublicationTiming,
 } from "./banner-dataset";
 import { GLOBAL_SOURCE_LIMITS } from "~/shared/global-reconciliation-config";
+import type { BannerPublicationTransactionReview } from "./banner-source-publication";
 
 export async function importBannerDataset(
   database: PrismaClient,
   input: unknown,
   authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
+  transactionReview?: BannerPublicationTransactionReview,
 ) {
   const { banners } = bannerDatasetSchema.parse(input);
   const servants = [
@@ -43,6 +45,7 @@ export async function importBannerDataset(
     async (tx) => {
       if (authorize) await authorize(tx);
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('global-source-candidates'))::text`;
+      await transactionReview?.beforeWrite(tx);
       const identities = await tx.bannerSourceIdentity.findMany({
         where: { sourceKey: { in: records.map((record) => record.sourceKey) } },
         select: { banner: { select: { sourceKey: true } }, sourceKey: true },
@@ -260,6 +263,7 @@ export async function importBannerDataset(
           },
         });
       }
+      await transactionReview?.afterWrite(tx);
       return {
         examined: banners.length,
         imported: banners.length,
